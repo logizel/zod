@@ -1,0 +1,25 @@
+{
+  "name": "@zod/scheduler-registry",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/registry.js",
+  "types": "./dist/registry.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/registry.d.ts",
+      "default": "./dist/registry.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "node-cron": "^4.6.0"
+  },
+  "devDependencies": {
+    "typescript": "~5.9",
+    "vitest": "^3.2.7"
+  }
+}

@@ -1,5 +1,5 @@
 {
   "extends": "./tsconfig.base.json",
   "files": [],
-  "references": [{ "path": "./packages/config" }, { "path": "./packages/logger" }, { "path": "./apps/scheduler" }]
+  "references": [{ "path": "./packages/config" }, { "path": "./packages/logger" }, { "path": "./packages/scheduler" }, { "path": "./apps/scheduler" }]
 }

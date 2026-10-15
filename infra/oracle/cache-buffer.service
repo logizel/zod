@@ -1,0 +1,26 @@
+# Reclaim-defense buffer supervision (D-25, T-1-08).
+#
+# Installed on the VM as /etc/systemd/system/zod-cache-buffer.service by the
+# plan-04 rebuild script (which also places cache-buffer.sh at /opt/zod/).
+# Restart=always: if the holder dies, the baseline drops and reclaim risk
+# spikes — the unit must come back on its own, plus the external watchdog
+# pages on VM silence either way.
+[Unit]
+Description=Zod reclaim-defense wired cache buffer (D-25)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/opt/zod/cache-buffer.sh
+Restart=always
+RestartSec=10
+User=zod
+NoNewPrivileges=true
+# The holder only allocates anonymous RAM: no filesystem writes, no network.
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
