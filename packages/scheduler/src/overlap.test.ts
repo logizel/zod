@@ -1,13 +1,20 @@
 // Scheduler tests: registry proof (Task 1) + forced-overlap/metrics/sizing (Task 2).
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import cron, { type ScheduledTask, type TaskFn } from 'node-cron';
 import {
   assertSchedulerGuards,
+  computeBufferHoldMiB,
   registerStubJobs,
+  runStubTick,
   SCHEDULER_TIMEZONE,
   STUB_JOBS,
+  type MetricsSink,
   type SchedulerModule,
   type TickLogger,
+  type TickRecord,
 } from './registry.js';
 
 /** In-memory TickLogger: records every call with its child bindings. */
@@ -148,8 +155,7 @@ describe('registry registers four guarded stub jobs', () => {
   });
 });
 
-describe('boot assertion', () => {
-  it('passes on the installed registry scheduler build', () => {
+describe('boot assertion', () => {  it('passes on the installed registry scheduler build', () => {
     expect(() => assertSchedulerGuards(cron)).not.toThrow();
   });
 
@@ -174,5 +180,102 @@ describe('boot assertion', () => {
     const { mod } = makeFakeScheduler();
     const rejecting = { ...mod, validate: () => false };
     expect(() => assertSchedulerGuards(rejecting)).toThrow(/scheduler-guard/);
+  });
+});
+
+describe('forced overlap proof (D-27)', () => {
+  it(
+    'a one-second job with a three-second handler emits overlap and completes exactly one run per window',
+    async () => {
+      let completions = 0;
+      let overlaps = 0;
+      const task = cron.schedule(
+        '* * * * * *',
+        async () => {
+          await new Promise((resolve) => setTimeout(resolve, 3000));
+          completions += 1;
+        },
+        { name: 'overlap-drill', timezone: 'Asia/Kolkata', noOverlap: true },
+      );
+      task.on('execution:overlap', () => {
+        overlaps += 1;
+      });
+      task.start();
+      try {
+        const deadline = Date.now() + 9000;
+        while (completions === 0 && Date.now() < deadline) {
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+        // Second tick skipped while the first was pending: exactly one
+        // completion, at least one overlap event.
+        expect(completions).toBe(1);
+        expect(overlaps).toBeGreaterThanOrEqual(1);
+      } finally {
+        await task.stop();
+        await task.destroy();
+      }
+    },
+    15000,
+  );
+});
+
+describe('stub tick metrics sink', () => {
+  it('writes start and done records with durationMs to the injected sink', async () => {
+    const { log } = makeFakeLogger();
+    const records: TickRecord[] = [];
+    const sink: MetricsSink = {
+      record: (record) => {
+        records.push(record);
+      },
+    };
+
+    const outcome = await runStubTick(STUB_JOBS[0] as (typeof STUB_JOBS)[number], log, { sink });
+
+    expect(records.map((r) => r.phase)).toEqual(['start', 'done']);
+    expect(records[0]?.job).toBe('events-stub');
+    const done = records[1] as TickRecord;
+    expect(done.job).toBe('events-stub');
+    expect(typeof done.durationMs).toBe('number');
+    expect(done.durationMs as number).toBeGreaterThanOrEqual(0);
+    expect(done.durationMs).toBe(outcome.durationMs);
+  });
+
+  it('writes a heartbeat file when a directory is configured', async () => {
+    const { log } = makeFakeLogger();
+    const dir = join(tmpdir(), `sched-heartbeat-${Date.now()}`);
+
+    await runStubTick(STUB_JOBS[0] as (typeof STUB_JOBS)[number], log, { heartbeatDir: dir });
+
+    const body = JSON.parse(
+      readFileSync(join(dir, 'events-stub.heartbeat'), 'utf8'),
+    ) as { job: string; at: string; durationMs: number };
+    expect(body.job).toBe('events-stub');
+    expect(typeof body.durationMs).toBe('number');
+    expect(Number.isNaN(Date.parse(body.at))).toBe(false);
+  });
+});
+
+describe('buffer sizing helper', () => {
+  it('computes a hold that keeps baseline inside the 22-30% band on the sizing fixtures', () => {
+    const fixtures: Array<[totalMiB: number, freeMiB: number]> = [
+      [10240, 9984],
+      [6144, 5632],
+      [4096, 3900],
+    ];
+    for (const [total, free] of fixtures) {
+      const hold = computeBufferHoldMiB(total, free);
+      expect(hold).toBeGreaterThan(0);
+      const baseline = (total - free + hold) / total;
+      expect(baseline).toBeGreaterThanOrEqual(0.22);
+      expect(baseline).toBeLessThanOrEqual(0.3);
+    }
+  });
+
+  it('holds nothing when memory is already tight', () => {
+    expect(computeBufferHoldMiB(4096, 100)).toBe(0);
+  });
+
+  it('rejects non-positive totals', () => {
+    expect(() => computeBufferHoldMiB(0, 0)).toThrow();
   });
 });
