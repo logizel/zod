@@ -9,6 +9,7 @@ const REQUIRED = {
   TURSO_AUTH_TOKEN: 't0ken',
   GROQ_API_KEY: 'groq-test-key',
   GITHUB_TOKEN: 'github-test-token',
+  DISCORD_TOKEN: 'discord-test-token',
 } as const;
 
 describe('parseEnv', () => {

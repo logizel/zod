@@ -9,6 +9,10 @@
     ".": {
       "types": "./dist/router-service.d.ts",
       "default": "./dist/router-service.js"
+    },
+    "./portals/*": {
+      "types": "./dist/portals/*.d.ts",
+      "default": "./dist/portals/*.js"
     }
   },
   "scripts": {
@@ -17,10 +21,12 @@
   },
   "dependencies": {
     "discord.js": "^14.25.1",
+    "cheerio": "^1.2.0",
     "@zod/config": "workspace:*",
     "@zod/db-hot": "workspace:*",
     "@zod/logger": "workspace:*",
-    "@zod/sanitize": "workspace:*"
+    "@zod/sanitize": "workspace:*",
+    "@zod/browser": "workspace:*"
   },
   "devDependencies": {
     "typescript": "~5.9",

@@ -25,7 +25,8 @@
     "@zod/dedup": "workspace:*",
     "@zod/scout": "workspace:*",
     "@zod/db-hot": "workspace:*",
-    "@zod/sanitize": "workspace:*"
+    "@zod/sanitize": "workspace:*",
+    "@zod/discord-router": "workspace:*"
   },
   "devDependencies": {
     "typescript": "~5.9",

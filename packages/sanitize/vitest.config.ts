@@ -17,6 +17,7 @@ export default defineConfig({
       JINA_API_KEY: 'test-jina-key',
       GROQ_API_KEY: 'test-groq-key',
       GITHUB_TOKEN: 'test-github-token',
+      DISCORD_TOKEN: 'test-discord-token',
     },
   },
   resolve: {

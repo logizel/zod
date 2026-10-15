@@ -94,18 +94,18 @@ function makeFakeScheduler(taskImpl: Partial<CapturedSchedule> = {}): {
   return { mod, calls };
 }
 
-describe('registry registers four guarded stub jobs', () => {
-  it('schedules exactly the four stub jobs with timezone, overlap guard, and jitter', () => {
+describe('registry registers stub + portal jobs', () => {
+  it('schedules all STUB_JOBS with timezone, overlap guard, and jitter', () => {
     const { log } = makeFakeLogger();
     const { mod, calls } = makeFakeScheduler();
 
     const handle = registerStubJobs(log, mod);
 
-    // The boot probe ('guard-probe') also flows through schedule() — the four
-    // stub jobs are the calls carrying stub names.
+    // The boot probe ('guard-probe') also flows through schedule() — all jobs
+    // in STUB_JOBS (4 stub + 7 portal) are the calls carrying job names.
     const jobCalls = calls.filter((c) => c.options['name'] !== 'guard-probe');
-    expect(handle.tasks).toHaveLength(4);
-    expect(jobCalls).toHaveLength(4);
+    expect(handle.tasks).toHaveLength(STUB_JOBS.length);
+    expect(jobCalls).toHaveLength(STUB_JOBS.length);
     expect(jobCalls.map((c) => c.options['name'])).toEqual(STUB_JOBS.map((j) => j.name));
     expect(jobCalls.map((c) => c.expression)).toEqual(STUB_JOBS.map((j) => j.expression));
     for (const [index, call] of jobCalls.entries()) {
@@ -136,7 +136,7 @@ describe('registry registers four guarded stub jobs', () => {
     }
 
     const warnings = records.filter((r) => r.level === 'warn');
-    expect(warnings).toHaveLength(4);
+    expect(warnings).toHaveLength(STUB_JOBS.length);
     expect(warnings.map((w) => w.bindings['job']).sort()).toEqual(
       [...STUB_JOBS.map((j) => j.name)].sort(),
     );
@@ -146,12 +146,41 @@ describe('registry registers four guarded stub jobs', () => {
   });
 
   it('registers the required per-job cadence and jitter table', () => {
-    expect(STUB_JOBS.map((j) => [j.name, j.expression, j.maxRandomDelayMs])).toEqual([
-      ['events-stub', '*/20 * * * *', 5 * 60_000],
-      ['jobs-stub', '*/45 * * * *', 10 * 60_000],
-      ['local-stub', '0 */3 * * *', 20 * 60_000],
-      ['social-stub', '0 * * * *', 25 * 60_000],
-    ]);
+    const table = STUB_JOBS.map((j) => [j.name, j.expression, j.maxRandomDelayMs]);
+    // 4 stub jobs + 7 portal jobs = 11 total
+    expect(table).toHaveLength(11);
+    // All portal jobs have maxRandomDelayMs = 5 minutes
+    for (const row of table) {
+      if (String(row[0]).startsWith('portal-')) {
+        expect(row[2]).toBe(5 * 60_000);
+      }
+    }
+    // Stub jobs retain their original cadence
+    const names = table.map((row) => row[0]);
+    expect(names).toContain('events-stub');
+    expect(names).toContain('jobs-stub');
+    expect(names).toContain('local-stub');
+    expect(names).toContain('social-stub');
+    expect(names).toContain('portal-ctftime');
+    expect(names).toContain('portal-clist');
+    expect(names).toContain('portal-unstop');
+    expect(names).toContain('portal-devfolio');
+    expect(names).toContain('portal-devpost');
+    expect(names).toContain('portal-luma');
+    expect(names).toContain('portal-meetup');
+    // Portal expressions staggered across 15-30m window
+    const portalExprs = table
+      .filter(([name]) => String(name).startsWith('portal-'))
+      .map(([, expr]) => expr);
+    expect(portalExprs.sort()).toEqual([
+      '*/15 * * * *',
+      '*/15 * * * *',
+      '*/20 * * * *',
+      '*/20 * * * *',
+      '*/25 * * * *',
+      '*/25 * * * *',
+      '*/30 * * * *',
+    ].sort());
   });
 });
 

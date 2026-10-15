@@ -18,6 +18,7 @@ export default defineConfig({
       GROQ_API_KEY: 'test-groq-key',
       GITHUB_TOKEN: 'test-github-token',
       DISCORD_TOKEN: 'test-discord-token',
+      SAMBANOVA_API_KEY: '',
     },
   },
   resolve: {
@@ -29,6 +30,14 @@ export default defineConfig({
       '@zod/sanitize$': resolve(here, '../sanitize/src/index.ts'),
       '@zod/sanitize/fetch': resolve(here, '../sanitize/src/fetch.ts'),
       '@zod/scheduler/jobs': resolve(here, '../scheduler/src/jobs.ts'),
+      '@zod/browser': resolve(here, '../browser/src/index.ts'),
+      '@zod/discord-router/portals/ctftime': resolve(here, './src/portals/ctftime.ts'),
+      '@zod/discord-router/portals/clist': resolve(here, './src/portals/clist.ts'),
+      '@zod/discord-router/portals/unstop': resolve(here, './src/portals/unstop.ts'),
+      '@zod/discord-router/portals/devfolio': resolve(here, './src/portals/devfolio.ts'),
+      '@zod/discord-router/portals/devpost': resolve(here, './src/portals/devpost.ts'),
+      '@zod/discord-router/portals/luma': resolve(here, './src/portals/luma.ts'),
+      '@zod/discord-router/portals/meetup': resolve(here, './src/portals/meetup.ts'),
     },
   },
 });

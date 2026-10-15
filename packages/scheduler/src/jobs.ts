@@ -15,6 +15,27 @@ import { hashUrl, normalizeUrl } from '@zod/dedup';
 import { prefilter } from '@zod/scout';
 import { resumeByUrl, advanceToStep2, recordFailure } from '@zod/db-hot/scratchpad';
 import { fetch as fetchFacade } from '@zod/sanitize';
+import {
+  list as listCtftime,
+} from '@zod/discord-router/portals/ctftime';
+import {
+  list as listClist,
+} from '@zod/discord-router/portals/clist';
+import {
+  list as listUnstop,
+} from '@zod/discord-router/portals/unstop';
+import {
+  list as listDevfolio,
+} from '@zod/discord-router/portals/devfolio';
+import {
+  list as listDevpost,
+} from '@zod/discord-router/portals/devpost';
+import {
+  list as listLuma,
+} from '@zod/discord-router/portals/luma';
+import {
+  list as listMeetup,
+} from '@zod/discord-router/portals/meetup';
 
 export const SCHEDULER_TIMEZONE = 'Asia/Kolkata';
 
@@ -70,6 +91,50 @@ export const STUB_JOBS: readonly StubJobDef[] = [
     maxRandomDelayMs: 25 * 60_000,
     description: 'social X/LI cadence stub (real polling lands Phase 2+)',
   },
+  // 7 portal-poll jobs (D-01, D-02): staggered across 15-30m window with
+  // 5-minute offsets in Asia/Kolkata timezone, noOverlap + jitter per job.
+  {
+    name: 'portal-ctftime',
+    expression: '*/15 * * * *',
+    maxRandomDelayMs: 5 * 60_000,
+    description: 'CTFtime portal poll — api mode, every 15m + 5m jitter',
+  },
+  {
+    name: 'portal-clist',
+    expression: '*/20 * * * *',
+    maxRandomDelayMs: 5 * 60_000,
+    description: 'CLIST.by portal poll — api mode, every 20m + 5m jitter',
+  },
+  {
+    name: 'portal-unstop',
+    expression: '*/25 * * * *',
+    maxRandomDelayMs: 5 * 60_000,
+    description: 'Unstop portal poll — scrape mode, every 25m + 5m jitter',
+  },
+  {
+    name: 'portal-devfolio',
+    expression: '*/15 * * * *',
+    maxRandomDelayMs: 5 * 60_000,
+    description: 'Devfolio portal poll — scrape mode, every 15m + 5m jitter',
+  },
+  {
+    name: 'portal-devpost',
+    expression: '*/20 * * * *',
+    maxRandomDelayMs: 5 * 60_000,
+    description: 'Devpost portal poll — scrape mode, every 20m + 5m jitter',
+  },
+  {
+    name: 'portal-luma',
+    expression: '*/25 * * * *',
+    maxRandomDelayMs: 5 * 60_000,
+    description: 'Luma portal poll — scrape mode, every 25m + 5m jitter',
+  },
+  {
+    name: 'portal-meetup',
+    expression: '*/30 * * * *',
+    maxRandomDelayMs: 5 * 60_000,
+    description: 'Meetup portal poll — scrape mode, every 30m + 5m jitter',
+  },
 ];
 
 /** Gateway bucket-timer jobs registered through the single scheduler registry (D-23).
@@ -106,12 +171,39 @@ export interface PollCandidate {
   snippet: string;
 }
 
-/** Static candidate list for Phase 2 (portal adapters land Phase 4+). */
+/** Portal adapter list functions (D-01: all 7 national portals wired).
+ * Each adapter emits title+snippet from its listing (zero full fetch).
+ */
+export const PORTAL_LIST_FNS: readonly (() => Promise<PollCandidate[]>)[] = [
+  listCtftime,
+  listClist,
+  listUnstop,
+  listDevfolio,
+  listDevpost,
+  listLuma,
+  listMeetup,
+];
+
+/** Static candidate list for Phase 2 (portal adapters land Phase 4+).
+ * Kept for backward compatibility; real polling uses PORTAL_LIST_FNS.
+ */
 export const POLL_CANDIDATES: readonly PollCandidate[] = [
   { url: 'https://unstop.com/competitions/sample-hackathon', title: 'Sample Hackathon 2026', snippet: 'cash prize Rs 1,00,000' },
   { url: 'https://devfolio.co/hackathons/sample', title: 'Devfolio Hackathon', snippet: 'register now prizes' },
   { url: 'https://lu.ma/sample-event', title: 'Luma Community Event', snippet: 'free workshop online' },
 ];
+
+/** Fetch candidates from all 7 portal adapters, merged and deduplicated by URL. */
+export async function getPortalCandidates(): Promise<PollCandidate[]> {
+  const results = await Promise.all(PORTAL_LIST_FNS.map((fn) => fn()));
+  const merged = results.flat();
+  const seen = new Set<string>();
+  return merged.filter((c) => {
+    if (seen.has(c.url)) return false;
+    seen.add(c.url);
+    return true;
+  });
+}
 
 export interface TickOutcome {
   job: string;
