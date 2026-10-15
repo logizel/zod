@@ -19,9 +19,9 @@
 - [x] **SWM-01**: Scout rejects expired items and obvious spam from titles/snippets before any scrape
 - [ ] **SWM-02**: Link-Hopper resolves aggregator/social cards to official event domain or direct ATS link within max 2 hops
 - [x] **SWM-03**: Every candidate URL gets a persistent Task_Scratchpad (STEP_1..STEP_4 + partial_stream_buffer) in local memory
-- [ ] **SWM-04**: On 429/413/timeout mid-audit, orchestrator cools the model 60s and hands step_1+step_2 outputs to the next 2D-ladder bucket with zero re-scraping
-- [ ] **SWM-05**: On finish_reason:length, partial output is stitched via continuation prompt into complete JSON/analysis
-- [ ] **SWM-06**: Key Router rotates Tier1 per-model buckets (Groq, GitHub Models, SambaNova; Cerebras disabled by default) then Tier2 pools (Mistral, Z.ai, NIM/Cohere/OpenRouter :free)
+- [x] **SWM-04**: On 429/413/timeout mid-audit, orchestrator cools the model 60s and hands step_1+step_2 outputs to the next 2D-ladder bucket with zero re-scraping
+- [x] **SWM-05**: On finish_reason:length, partial output is stitched via continuation prompt into complete JSON/analysis
+- [x] **SWM-06**: Key Router rotates Tier1 per-model buckets (Groq, GitHub Models, SambaNova; Cerebras disabled by default) then Tier2 pools (Mistral, Z.ai, NIM/Cohere/OpenRouter :free)
 
 ### Events Pipeline
 
@@ -108,9 +108,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SWM-01 | Phase 2 | Complete |
 | SWM-02 | Phase 4 | Pending |
 | SWM-03 | Phase 2 | Complete |
-| SWM-04 | Phase 3 | Pending |
-| SWM-05 | Phase 3 | Pending |
-| SWM-06 | Phase 3 | Pending |
+| SWM-04 | Phase 3 | Complete |
+| SWM-05 | Phase 3 | Complete |
+| SWM-06 | Phase 3 | Complete |
 | EVT-01 | Phase 4 | Pending |
 | EVT-02 | Phase 4 | Pending |
 | EVT-03 | Phase 6 | Pending |

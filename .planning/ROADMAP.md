@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [ ] **Phase 1: Foundation** - Oracle VM, hot/cold memory, tunnel, scheduler skeleton with reclaim defense
 - [x] **Phase 2: Scraper Foundation** - Shared browser queue, sanitizer, Scout filter, scratchpad state (completed 2026-10-15)
-- [ ] **Phase 3: LLM Swarm** - Gateway router with 2D buckets, baton-pass, length-stitch, chaos tests
+- [x] **Phase 3: LLM Swarm** - Gateway router with 2D buckets, baton-pass, length-stitch, chaos tests (completed 2026-10-15)
 - [ ] **Phase 4: Events Vertical Slice** - First end-to-end verified event alert in Discord
 - [ ] **Phase 5: Jobs + Loot Pipelines** - ATS polling, fresher/scam gates, loot verification, dedup hardening
 - [ ] **Phase 6: Delivery + Local/Social Coverage** - Full 10-channel routing, reminders, DK/Udupi, relay, X/LinkedIn
@@ -159,7 +159,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 |-------|----------------|--------|-----------|
 | 1. Foundation | 4/4 | Complete    | 2026-10-15 |
 | 2. Scraper Foundation | 3/3 | Complete    | 2026-10-15 |
-| 3. LLM Swarm | 3/3 | In Progress|  |
+| 3. LLM Swarm | 3/3 | Complete    | 2026-10-15 |
 | 4. Events Vertical Slice | 0/TBD | Not started | - |
 | 5. Jobs + Loot Pipelines | 0/TBD | Not started | - |
 | 6. Delivery + Local/Social Coverage | 0/TBD | Not started | - |
