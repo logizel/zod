@@ -1,0 +1,23 @@
+# Cloudflare Tunnel ingress (D-17/D-18/D-19; T-1-10/T-1-11/T-1-12).
+#
+# The tunnel is the ONLY ingress: the Oracle firewall keeps zero inbound
+# ports and the hot database stays loopback-only on the VM, so it never
+# appears in this route table. The dashboard hostname below points at the
+# future local stream origin (Phase 7 fills it); the Phase 1 static shell is
+# served from Cloudflare Pages, never from the VM origin (no shortcut).
+#
+# Provisioning fills in the real values (see infra/oracle/runbook.md Day-0):
+#   tunnel:           the UUID from `cloudflared tunnel create`
+#   credentials-file: the JSON written beside this file (owner-only 0600,
+#                     outside the repo; the token itself lives in env only)
+#   hostname:         $DASHBOARD_HOSTNAME (the DNS record routed to the tunnel)
+#
+# Edge gate (T-1-10): the owner-only Access rule (Allow + owner-email
+# include, deny-by-default, zero bypass rules) rejects unauthenticated shell
+# and stream requests before anything renders. Proven by drills/edge-reject.sh.
+tunnel: TUNNEL-UUID-PLACEHOLDER
+credentials-file: /home/zod/.cloudflared/TUNNEL-UUID-PLACEHOLDER.json
+ingress:
+  - hostname: dash.example.com
+    service: http://localhost:3000
+  - service: http_status:404

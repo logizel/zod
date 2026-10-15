@@ -1,0 +1,27 @@
+# Hot-database supervision (D-10; T-1-12).
+#
+# Installed on the VM as /etc/systemd/system/zod-pocketbase.service by
+# infra/oracle/rebuild.sh (which also places the ARM64 binary at
+# /opt/zod/pocketbase and keeps the data directory on the block volume at
+# /vol/pb_data). Restart=always: hot ops are localhost-latency only, so a
+# dead server stalls every pipeline — the unit must come back on its own.
+#
+# Loopback ONLY: --http binds 127.0.0.1:8090, never 0.0.0.0. Combined with the
+# zero-inbound firewall and a tunnel route table that never fronts this port,
+# the admin UI and data stay unreachable from the internet even if a security
+# rule slips. Proven by infra/oracle/drills/port-scan.sh.
+[Unit]
+Description=Zod hot database (loopback-only)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/opt/zod/pocketbase serve --http=127.0.0.1:8090 --dir /vol/pb_data
+Restart=always
+RestartSec=10
+User=zod
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

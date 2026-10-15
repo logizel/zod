@@ -1,0 +1,26 @@
+# cloudflared supervision (D-19; T-1-11).
+#
+# Installed on the VM as /etc/systemd/system/cloudflared.service by
+# infra/oracle/rebuild.sh (which also places config.yml at
+# /home/zod/.cloudflared/config.yml). Restart=always: the tunnel is the only
+# ingress, so a dead daemon means a dark dashboard — the unit must come back
+# on its own, and the plan-03 watchdog pages on tunnel silence either way.
+#
+# The --config path is explicit: installing the service under sudo resolves
+# $HOME to /root, so a bare `service install` would look for the tunnel UUID
+# in the wrong home and crash-loop (RESEARCH Pitfall 5).
+[Unit]
+Description=Zod Cloudflare Tunnel daemon (only ingress)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/cloudflared tunnel --config /home/zod/.cloudflared/config.yml run
+Restart=always
+RestartSec=10
+User=zod
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
