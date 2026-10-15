@@ -9,7 +9,7 @@ last_activity_desc: Phase 02 complete
 state_head: e7292ff26dac9011099fbea810c1883f84815cc0
 progress:
   total_phases: 7
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 7
   completed_plans: 7
   percent: 14
