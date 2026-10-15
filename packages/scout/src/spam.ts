@@ -1,7 +1,7 @@
 // Precision-biased keyword blocklist per D-17. Matched case-insensitively
 // against `title + ' ' + snippet`. No appeal path in Phase 2 (D-17).
 
-const BLOCKLIST: readonly string[] = [
+export const BLOCKLIST = [
   // crypto-giveaway
   'airdrop',
   '2x returns',
@@ -22,9 +22,13 @@ const BLOCKLIST: readonly string[] = [
   'work from home earn ₹',
   'telegram-only',
   'whatsapp-only',
-];
+] as const;
+
+// Aliases for tests/compatibility.
+export const SPAM_BLOCKLIST = BLOCKLIST;
+export const spamBlocklist = BLOCKLIST;
 
 export function isSpam(title: string, snippet: string): boolean {
   const haystack = `${title} ${snippet}`.toLowerCase();
-  return BLOCKLIST.some((kw) => haystack.includes(kw.toLowerCase()));
+  return (BLOCKLIST as readonly string[]).some((kw) => haystack.includes(kw.toLowerCase()));
 }

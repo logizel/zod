@@ -10,11 +10,12 @@ const MONTHS =
   'January|February|March|April|May|June|July|August|September|October|November|December|' +
   'Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec';
 
-const FORMAT_LIST = ['dd MMM yyyy', 'MMM dd, yyyy', 'dd/MM/yyyy', 'yyyy-MM-dd'] as const;
+const FORMATS = ['dd MMM yyyy', 'MMM dd, yyyy', 'dd-MM-yyyy', 'yyyy-MM-dd'] as const;
+export const EXPIRY_FORMATS = [...FORMATS];
 
 const DATE_PATTERNS: RegExp[] = [
-  /\b\d{4}-\d{2}-\d{2}\b/g,
-  /\b\d{1,2}\/\d{1,2}\/\d{4}\b/g,
+  /\b\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2})?(?:\.\d+)?)?\b/g,
+  /\b\d{1,2}-\d{1,2}-\d{4}\b/g,
   /\b\d{1,2}\s+(?:MONTHS)\s+\d{4}\b/gi,
   /\b(?:MONTHS)\s+\d{1,2},?\s+\d{4}\b/gi,
 ];
@@ -41,14 +42,17 @@ function candidates(text: string): string[] {
 }
 
 function tryParse(raw: string): Date | null {
-  // ISO path.
   const iso = parseISO(raw);
   if (isValid(iso)) return iso;
-  for (const fmt of FORMAT_LIST) {
+  for (const fmt of FORMATS) {
     const parsed = parseDate(raw, fmt, new Date());
     if (isValid(parsed)) return parsed;
   }
   return null;
+}
+
+export function formatRejectedDateIST(date: Date): string {
+  return formatInTimeZone(date, 'Asia/Kolkata', 'yyyy-MM-dd HH:mm zzz');
 }
 
 /**
@@ -57,13 +61,11 @@ function tryParse(raw: string): Date | null {
  * cannot prove expired). Future dates never trigger expiry.
  */
 export function extractPastDate(text: string): Date | null {
-  const ist = (d: Date) => formatInTimeZone(d, 'Asia/Kolkata', 'yyyy-MM-dd HH:mm');
-  void ist;
   for (const raw of candidates(text)) {
     const d = tryParse(raw);
-    if (d && isPast(d)) {
-      return d;
-    }
+    if (d && isPast(d)) return d;
   }
   return null;
 }
+
+export { MONTHS, buildPatterns };
