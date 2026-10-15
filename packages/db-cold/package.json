@@ -1,0 +1,26 @@
+{
+  "name": "@zod/db-cold",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/client.js",
+  "types": "./dist/client.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/client.d.ts",
+      "default": "./dist/client.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@zod/config": "workspace:*",
+    "@libsql/client": "^0.18.0"
+  },
+  "devDependencies": {
+    "typescript": "~5.9",
+    "vitest": "^3.2.7"
+  }
+}

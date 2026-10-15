@@ -1,0 +1,29 @@
+{
+  "name": "@zod/dedup",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/fingerprint.js",
+  "types": "./dist/fingerprint.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/fingerprint.d.ts",
+      "default": "./dist/fingerprint.js"
+    },
+    "./precheck": {
+      "types": "./dist/precheck.d.ts",
+      "default": "./dist/precheck.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "typescript": "~5.9",
+    "vitest": "^3.2.7"
+  }
+}
