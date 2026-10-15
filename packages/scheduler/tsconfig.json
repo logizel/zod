@@ -12,6 +12,7 @@
     { "path": "../dedup" },
     { "path": "../scout" },
     { "path": "../db-hot" },
-    { "path": "../sanitize" }
+    { "path": "../sanitize" },
+    { "path": "../discord-router" }
   ]
 }

@@ -143,6 +143,9 @@ importers:
 
   packages/discord-router:
     dependencies:
+      '@zod/browser':
+        specifier: workspace:*
+        version: link:../browser
       '@zod/config':
         specifier: workspace:*
         version: link:../config
@@ -155,6 +158,9 @@ importers:
       '@zod/sanitize':
         specifier: workspace:*
         version: link:../sanitize
+      cheerio:
+        specifier: ^1.2.0
+        version: 1.2.0
       discord.js:
         specifier: ^14.25.1
         version: 14.27.0
@@ -252,6 +258,9 @@ importers:
       '@zod/dedup':
         specifier: workspace:*
         version: link:../dedup
+      '@zod/discord-router':
+        specifier: workspace:*
+        version: link:../discord-router
       '@zod/sanitize':
         specifier: workspace:*
         version: link:../sanitize

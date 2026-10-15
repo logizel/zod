@@ -17,6 +17,8 @@ export default defineConfig({
       JINA_API_KEY: 'test-jina-key',
       GROQ_API_KEY: 'test-groq-key',
       GITHUB_TOKEN: 'test-github-token',
+      DISCORD_TOKEN: 'test-discord-token',
+      SAMBANOVA_API_KEY: '',
     },
   },
   resolve: {
@@ -28,6 +30,13 @@ export default defineConfig({
       '@zod/db-hot$': resolve(here, '../db-hot/src/client.ts'),
       '@zod/db-hot/scratchpad': resolve(here, '../db-hot/src/scratchpad.ts'),
       '@zod/sanitize$': resolve(here, '../sanitize/src/index.ts'),
+      '@zod/discord-router/portals/ctftime': resolve(here, '../discord-router/src/portals/ctftime.ts'),
+      '@zod/discord-router/portals/clist': resolve(here, '../discord-router/src/portals/clist.ts'),
+      '@zod/discord-router/portals/unstop': resolve(here, '../discord-router/src/portals/unstop.ts'),
+      '@zod/discord-router/portals/devfolio': resolve(here, '../discord-router/src/portals/devfolio.ts'),
+      '@zod/discord-router/portals/devpost': resolve(here, '../discord-router/src/portals/devpost.ts'),
+      '@zod/discord-router/portals/luma': resolve(here, '../discord-router/src/portals/luma.ts'),
+      '@zod/discord-router/portals/meetup': resolve(here, '../discord-router/src/portals/meetup.ts'),
     },
   },
 });

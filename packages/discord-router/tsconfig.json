@@ -11,7 +11,6 @@
     { "path": "../config" },
     { "path": "../db-hot" },
     { "path": "../logger" },
-    { "path": "../sanitize" },
-    { "path": "../scheduler" }
+    { "path": "../sanitize" }
   ]
 }
