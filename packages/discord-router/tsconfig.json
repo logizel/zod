@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "outDir": "dist",
+    "rootDir": "src",
+    "types": []
+  },
+  "include": ["src"],
+  "references": [
+    { "path": "../config" },
+    { "path": "../db-hot" },
+    { "path": "../logger" },
+    { "path": "../sanitize" },
+    { "path": "../scheduler" }
+  ]
+}
