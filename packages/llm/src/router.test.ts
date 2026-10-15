@@ -389,8 +389,7 @@ describe('LlmRouter.complete', () => {
     const ladder = new LadderConfig({ includePaidOptIn: false });
     (ladder as any).tier1 = [{ provider: 'groq', model: 'llama-3.1-8b-instant', tier: 'tier1', capability: { supportsJSON: true, maxOutputTokens: 4096, costTier: 'zero' } }];
     (ladder as any).tier2 = [];
-    (ladder as any).all = (ladder as any).tier1;
-    const telemetry = makeTelemetrySink();
+    (ladder as any).all = (ladder as any).tier1;    const telemetry = makeTelemetrySink();
     const router = new LlmRouter(telemetry, { ladder, queue });
     const internals = router as unknown as RouterInternals;
     internals.adapters.set('groq:llama-3.1-8b-instant', makeMockAdapter(makeChatResult('{"verdict":"ok"}')) as never);
@@ -399,5 +398,33 @@ describe('LlmRouter.complete', () => {
 
     expect(result.verdict).toBe('POOL_SATURATED');
     expect(result.reason).toContain('in-flight cap');
+  });
+
+  it('full-ladder fallback matrix: every Tier1 unavailable → Tier2 engaged → valid JSON verdict', async () => {
+    const tier1 = DEFAULT_LADDER.tier1; // 5 models without SambaNova key in test env
+    const tier2 = DEFAULT_LADDER.tier2;
+    expect(tier1.length).toBeGreaterThan(0);
+    expect(tier2.length).toBeGreaterThan(0);
+
+    const outcomes: Record<string, ChatOutcome> = {};
+    for (const d of tier1) outcomes[`${d.provider}:${d.model}`] = makeRateLimited(60);
+    const lastTier2 = tier2[tier2.length - 1];
+    outcomes[`${lastTier2.provider}:${lastTier2.model}`] = makeChatResult(
+      '{"verdict":"overflow-matrix","score":91}',
+    );
+
+    const { router } = buildRouterWithLadder(tier1, tier2, outcomes);
+    // Mark every Tier1 bucket unavailable so Tier2 is the only path.
+    const internals = router as unknown as RouterInternals;
+    for (const d of tier1) internals.registry.markDailyCap(d.provider, d.model);
+
+    const result = await router.complete(OPTIONS);
+
+    expect(result.verdict).toEqual({ verdict: 'overflow-matrix', score: 91 });
+    expect(result.bucket).toBe(`tier2/${lastTier2.provider}:${lastTier2.model}`);
+    // Path walked every Tier1 bucket then the Tier2 bucket.
+    for (const d of tier1) expect(result.path).toContain(`tier1/${d.provider}:${d.model}`);
+    expect(result.path).toContain(`tier2/${lastTier2.provider}:${lastTier2.model}`);
+    expect(result.path.some((p) => p.includes('cerebras'))).toBe(false);
   });
 });
