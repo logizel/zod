@@ -10,6 +10,7 @@
   "references": [
     { "path": "../config" },
     { "path": "../db-hot" },
-    { "path": "../logger" }
+    { "path": "../logger" },
+    { "path": "../scheduler" }
   ]
 }

@@ -72,6 +72,34 @@ export const STUB_JOBS: readonly StubJobDef[] = [
   },
 ];
 
+/** Gateway bucket-timer jobs registered through the single scheduler registry (D-23).
+ *
+ * These run alongside the stub jobs — one registry, no scattered setInterval.
+ * - gateway-bucket-cooldown: every minute + 30s jitter, recovers COOLDOWN buckets → READY.
+ * - gateway-daily-cap-reset: daily at UTC midnight + 5m jitter, resets DAILY-CAP buckets.
+ * - gateway-warmup: every minute + 10s jitter, idempotent ladder + env key validation at boot.
+ */
+export const GATEWAY_JOBS: readonly StubJobDef[] = [
+  {
+    name: 'gateway-bucket-cooldown',
+    expression: '* * * * *',
+    maxRandomDelayMs: 30 * 1000,
+    description: 'recovers 60s-COOLDOWN buckets → READY when cooldownUntil elapses',
+  },
+  {
+    name: 'gateway-daily-cap-reset',
+    expression: '0 0 * * *',
+    maxRandomDelayMs: 5 * 60_000,
+    description: 'resets DAILY-CAP buckets at UTC midnight',
+  },
+  {
+    name: 'gateway-warmup',
+    expression: '* * * * *',
+    maxRandomDelayMs: 10 * 1000,
+    description: 'validates ladder + env keys at gateway boot (idempotent)',
+  },
+];
+
 export interface PollCandidate {
   url: string;
   title: string;
@@ -315,3 +343,32 @@ export function computeBufferHoldMiB(totalMiB: number, freeMiB: number): number 
 }
 
 export const runPollTick = runStubTick;
+
+/** Options for runGatewayTick: extends TickOptions with an injected tick handler. */
+export interface GatewayTickOptions extends TickOptions {
+  /** Injected by the gateway layer (registry-integration.ts); scheduler never imports llm. */
+  tickHandler?: (def: StubJobDef, log: TickLogger) => Promise<void> | void;
+}
+
+/** One gateway bucket-timer tick: logs start/done, delegates real work to tickHandler.
+ * The scheduler stays agnostic of gateway internals — all bucket logic lives in llm. */
+export async function runGatewayTick(
+  def: StubJobDef,
+  log: TickLogger,
+  opts: GatewayTickOptions = {},
+): Promise<void> {
+  const startedAt = Date.now();
+  const jobLog = log.child({ job: def.name });
+  jobLog.info('tick start');
+  opts.sink?.record({ job: def.name, phase: 'start', at: new Date(startedAt).toISOString() });
+
+  try {
+    await opts.tickHandler?.(def, jobLog);
+  } catch (err) {
+    jobLog.warn({ job: def.name, error: String(err) }, 'gateway tick handler threw');
+  }
+
+  const durationMs = Date.now() - startedAt;
+  jobLog.info({ durationMs }, 'tick done');
+  opts.sink?.record({ job: def.name, phase: 'done', durationMs, at: new Date().toISOString() });
+}

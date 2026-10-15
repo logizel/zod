@@ -12,6 +12,9 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "isolatedModules": true
+    "isolatedModules": true,
+    "paths": {
+      "@zod/scheduler-registry": ["./packages/scheduler/src/registry.ts"]
+    }
   }
 }
