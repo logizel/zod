@@ -1,0 +1,48 @@
+{
+  "contract": "1.0.0",
+  "flavor": "core",
+  "milestone": null,
+  "phases": [
+    {
+      "number": "1",
+      "name": "Foundation",
+      "status": "in_progress"
+    },
+    {
+      "number": "2",
+      "name": "Scraper Foundation",
+      "status": "complete"
+    },
+    {
+      "number": "3",
+      "name": "LLM Swarm",
+      "status": "pending"
+    },
+    {
+      "number": "4",
+      "name": "Events Vertical Slice",
+      "status": "pending"
+    },
+    {
+      "number": "5",
+      "name": "Jobs + Loot Pipelines",
+      "status": "pending"
+    },
+    {
+      "number": "6",
+      "name": "Delivery + Local/Social Coverage",
+      "status": "pending"
+    },
+    {
+      "number": "7",
+      "name": "Telemetry Dashboard + Ops Hardening",
+      "status": "pending"
+    }
+  ],
+  "next": {
+    "command": "/gsd:progress --next",
+    "label": "Advance to the next step (plan phase 1)",
+    "reason": "Phase 1 of 7 — needs a plan"
+  },
+  "updated_at": "2026-10-15T16:23:47.154Z"
+}

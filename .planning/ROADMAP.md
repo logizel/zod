@@ -13,7 +13,7 @@ Zod builds as MVP vertical slices over a load-bearing foundation: provision the 
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [ ] **Phase 1: Foundation** - Oracle VM, hot/cold memory, tunnel, scheduler skeleton with reclaim defense
-- [ ] **Phase 2: Scraper Foundation** - Shared browser queue, sanitizer, Scout filter, scratchpad state
+- [x] **Phase 2: Scraper Foundation** - Shared browser queue, sanitizer, Scout filter, scratchpad state (completed 2026-10-15)
 - [ ] **Phase 3: LLM Swarm** - Gateway router with 2D buckets, baton-pass, length-stitch, chaos tests
 - [ ] **Phase 4: Events Vertical Slice** - First end-to-end verified event alert in Discord
 - [ ] **Phase 5: Jobs + Loot Pipelines** - ATS polling, fresher/scam gates, loot verification, dedup hardening
@@ -59,17 +59,17 @@ Plans:
   3. Expired and obvious-spam items are rejected from titles/snippets before any scrape happens
   4. Every candidate URL carries a persistent Task_Scratchpad that resumes its STEP_1..STEP_4 position after a crash
 
-**Plans**: 3 plans
+**Plans**: 3/3 plans complete
 
 Plans:
 **Wave 1**
-- [ ] 02-01-PLAN.md — Tracer: end-to-end Jina-first fetch-and-filter slice (Scout → STEP_1 → Jina → sanitize → STEP_2)
+- [x] 02-01-PLAN.md — Tracer: end-to-end Jina-first fetch-and-filter slice (Scout → STEP_1 → Jina → sanitize → STEP_2)
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 02-02-PLAN.md — Expansion: browser queue + fail-signal routing + byte-proof + Scout depth + scratchpad resilience
+- [x] 02-02-PLAN.md — Expansion: browser queue + fail-signal routing + byte-proof + Scout depth + scratchpad resilience
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 02-03-PLAN.md — Integration: scheduler poll wiring + 24h browser soak + full suite verification
+- [x] 02-03-PLAN.md — Integration: scheduler poll wiring + 24h browser soak + full suite verification
 
 ### Phase 3: LLM Swarm
 
@@ -155,7 +155,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation | 4/4 | In Progress|  |
-| 2. Scraper Foundation | 0/3 | Not started | - |
+| 2. Scraper Foundation | 3/3 | Complete    | 2026-10-15 |
 | 3. LLM Swarm | 0/TBD | Not started | - |
 | 4. Events Vertical Slice | 0/TBD | Not started | - |
 | 5. Jobs + Loot Pipelines | 0/TBD | Not started | - |
