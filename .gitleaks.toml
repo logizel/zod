@@ -1,0 +1,7 @@
+title = "zod gitleaks config"
+
+# Global allowlist for DOCUMENTED false positives only.
+# Nothing allowlisted yet: every finding must be triaged, never blanket-ignored.
+[allowlist]
+description = "global allowlist — add documented false positives here with a reason"
+paths = [".gitleaks.toml"]
