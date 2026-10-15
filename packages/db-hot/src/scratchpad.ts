@@ -106,3 +106,14 @@ export async function recordFailure(
   }
   return { attempts, tombstoned };
 }
+
+
+export async function resumeByUrl(
+  pb: PocketBase,
+  url: string,
+): Promise<{ row: TaskScratchpadRow; shouldFetch: boolean }> {
+  const row = await getOrCreateScratchpad(pb, url);
+  // StepPosition schema validation — loud on drift.
+  StepPosition.parse(row.step_position);
+  return { row, shouldFetch: row.step_position === 'STEP_1' };
+}
