@@ -23,6 +23,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 ## Phase Details
 
 ### Phase 1: Foundation
+
 **Goal**: The system has a surviving home — provisioned VM, live databases, closed network, and a scheduler that cannot stampede
 **Mode:** mvp
 **Depends on**: Nothing (first phase)
@@ -32,15 +33,22 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. Opportunities and telemetry records written locally also survive a simulated VM wipe via the off-server cold ledger
   3. No inbound firewall port is open, yet the operator reaches the locked dashboard shell through Zero Trust
   4. Scheduler polls run without overlapping executions and every secret lives in env, never in git history
+
 **Plans**: 4 plans
 
 Plans:
+**Wave 1**
 - [ ] 01-01-PLAN.md — Tracer boot slice: monorepo scaffold, env gate, redacting logger, hygiene
+
+**Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 01-02-PLAN.md — Memory contract: hot schemas plus cold ledger plus fingerprint precheck
 - [ ] 01-03-PLAN.md — Scheduler plus reclaim defense: guarded stub jobs, overlap proof, buffer plus watchdog
+
+**Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 01-04-PLAN.md — Closed network plus rebuild proof: locked shell, tunnel units, rebuild plus drills
 
 ### Phase 2: Scraper Foundation
+
 **Goal**: Any candidate URL becomes cheap, clean markdown with spam filtered and work-state tracked before any LLM is spent
 **Mode:** mvp
 **Depends on**: Phase 1
@@ -50,9 +58,11 @@ Plans:
   2. Sanitized payloads measure ≥85% smaller than raw HTML on representative sources
   3. Expired and obvious-spam items are rejected from titles/snippets before any scrape happens
   4. Every candidate URL carries a persistent Task_Scratchpad that resumes its STEP_1..STEP_4 position after a crash
+
 **Plans**: TBD
 
 ### Phase 3: LLM Swarm
+
 **Goal**: Auditors get reliable model answers despite free-tier quota walls — failures hand off, never re-scrape
 **Mode:** mvp
 **Depends on**: Phase 2
@@ -62,9 +72,11 @@ Plans:
   2. A forced length-cutoff audit is stitched via continuation into one complete JSON verdict
   3. No autonomous traffic reaches Cerebras (disabled by default) and Tier2 overflow engages only after Tier1 buckets exhaust
   4. Operator can see per-bucket state (READY / 60s-COOLDOWN / DAILY-CAP) from gateway telemetry
+
 **Plans**: TBD
 
 ### Phase 4: Events Vertical Slice
+
 **Goal**: The first verified, deduplicated high-signal event alert lands in Discord with an official source link
 **Mode:** mvp
 **Depends on**: Phase 3
@@ -75,10 +87,12 @@ Plans:
   3. A Sys/CP/Sec event fast-tracks to #🔥-priority-sys-cp-sec after its legitimacy check
   4. An aggregator link resolves through to the official event domain within 2 hops before any verdict is posted
   5. A non-technical business event is rejected by the 80/20 domain filter and never reaches a channel
+
 **Plans**: TBD
 **UI hint**: yes
 
 ### Phase 5: Jobs + Loot Pipelines
+
 **Goal**: Users get fresher-true job alerts and verified free-perk diversions with duplicates merged and scams rejected
 **Mode:** mvp
 **Depends on**: Phase 4
@@ -89,9 +103,11 @@ Plans:
   3. A Sys/Cloud/DevOps role lands in #⚙️-jobs-sys-cloud-devops while other verified SWE roles land in #💼-jobs-general-swe
   4. An online event failing the ₹1L rule but carrying a real free perk diverts to #🎁-free-swag-and-credits with India-shipping verified; a US-only drop is rejected
   5. The same event seen on two portals arrives as one merged alert with unified registration links
+
 **Plans**: TBD
 
 ### Phase 6: Delivery + Local/Social Coverage
+
 **Goal**: All 10 channels route correctly with reminders and bookmarks, fed by local, relay, and social sources
 **Mode:** mvp
 **Depends on**: Phase 5
@@ -102,10 +118,12 @@ Plans:
   3. User reacts 📌 to an opportunity and receives its 48h/24h deadline reminders
   4. An external Discord #announcements post appears in #raw-incoming-feeds via the official Gateway relay
   5. Feedback posted in #🧠-bot-training-chat produces a confirmation reply and changes subsequent Auditor/Curator verdicts
+
 **Plans**: TBD
 **UI hint**: yes
 
 ### Phase 7: Telemetry Dashboard + Ops Hardening
+
 **Goal**: The owner watches the whole swarm live on a locked read-only dashboard that survives tunnel and VM failures
 **Mode:** mvp
 **Depends on**: Phase 6
@@ -115,6 +133,7 @@ Plans:
   2. Owner sees the 2D pool health grid (READY/ACTIVE/60s-COOLDOWN/DAILY-CAP) and filterable read-only opportunity, TBA, and audit/rejection boards
   3. An unauthenticated request to the dashboard or its SSE stream is rejected before anything renders
   4. Killing cloudflared leaves pipelines running with alerts queued, and heavy text is purged on schedule while tombstones and taste rules survive
+
 **Plans**: TBD
 **UI hint**: yes
 
