@@ -51,7 +51,7 @@
 ### Memory
 
 - [x] **MEM-01**: Hot PocketBase `opportunities` collection stores fingerprint_hash, pipeline, bucket_channel, status, prize, links, deadlines, reminders, bookmark, audit_summary
-- [ ] **MEM-02**: Hot `agent_telemetry` ring streams slot/provider/model/step/url/status over SSE with 24h retention
+- [x] **MEM-02**: Hot `agent_telemetry` ring streams slot/provider/model/step/url/status over SSE with 24h retention
 - [x] **MEM-03**: Cold Turso `tombstone_ledger` (url_hash PK, fingerprint, terminal status) is checked pre-scrape in <5ms and never deleted
 - [ ] **MEM-04**: Cold `taste_rules` (BLOCK/BOOST/WEIGHT/CUSTOM) inject into Auditor/Curator prompts from #🧠-bot-training-chat feedback with confirmation reply
 - [ ] **MEM-05**: Midnight garbage collector purges heavy text 24h after end_date (48h after rejection), retaining tombstones + taste rules
@@ -128,7 +128,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | LOT-03 | Phase 5 | Pending |
 | LOT-04 | Phase 5 | Pending |
 | MEM-01 | Phase 1 | Complete |
-| MEM-02 | Phase 1 | Pending |
+| MEM-02 | Phase 1 | Complete |
 | MEM-03 | Phase 1 | Complete |
 | MEM-04 | Phase 6 | Pending |
 | MEM-05 | Phase 7 | Pending |
