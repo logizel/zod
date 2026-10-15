@@ -1,5 +1,39 @@
 {
   "extends": "./tsconfig.base.json",
   "files": [],
-  "references": [{ "path": "./packages/config" }, { "path": "./packages/logger" }, { "path": "./packages/scheduler" }, { "path": "./packages/db-hot" }, { "path": "./packages/db-cold" }, { "path": "./packages/dedup" }, { "path": "./apps/scheduler" }, { "path": "./apps/bot" }]
+  "references": [
+    {
+      "path": "./packages/config"
+    },
+    {
+      "path": "./packages/logger"
+    },
+    {
+      "path": "./packages/scheduler"
+    },
+    {
+      "path": "./packages/db-hot"
+    },
+    {
+      "path": "./packages/db-cold"
+    },
+    {
+      "path": "./packages/dedup"
+    },
+    {
+      "path": "./apps/scheduler"
+    },
+    {
+      "path": "./apps/bot"
+    },
+    {
+      "path": "./packages/scout"
+    },
+    {
+      "path": "./packages/sanitize"
+    },
+    {
+      "path": "./packages/browser"
+    }
+  ]
 }

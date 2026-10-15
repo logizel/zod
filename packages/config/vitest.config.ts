@@ -8,6 +8,7 @@ export default defineConfig({
     // Dummy secrets so importing the env singleton (parsed at module top)
     // succeeds under test; missing-secret behavior is asserted via parseEnv({}).
     env: {
+      JINA_API_KEY: 'test-jina-key',
       PB_SERVICE_EMAIL: 'test@example.com',
       PB_SERVICE_PASSWORD: 'test-password',
       TURSO_DATABASE_URL: 'libsql://test.turso.io',

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { parseEnv } from './env.js';
 
 const REQUIRED = {
+  JINA_API_KEY: 'jina-test',
   PB_SERVICE_EMAIL: 'owner@example.com',
   PB_SERVICE_PASSWORD: 's3cret',
   TURSO_DATABASE_URL: 'libsql://zod-turso.turso.io',

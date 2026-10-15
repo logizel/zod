@@ -19,6 +19,7 @@ export const REDACT_PATHS: string[] = [
   '*.authToken',
   'TURSO_AUTH_TOKEN',
   'PB_SERVICE_PASSWORD',
+  'JINA_API_KEY',
   'headers.authorization',
   'headers.cookie',
 ];
