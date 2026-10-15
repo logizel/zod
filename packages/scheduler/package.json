@@ -16,7 +16,12 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "node-cron": "^4.6.0"
+    "node-cron": "^4.6.0",
+    "@zod/config": "workspace:*",
+    "@zod/dedup": "workspace:*",
+    "@zod/scout": "workspace:*",
+    "@zod/db-hot": "workspace:*",
+    "@zod/sanitize": "workspace:*"
   },
   "devDependencies": {
     "typescript": "~5.9",

@@ -10,6 +10,12 @@
 import { mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { precheck as runPrecheck, type HotStore, type ColdStore } from '@zod/dedup/precheck';
+import { hashUrl, normalizeUrl } from '@zod/dedup';
+import { prefilter } from '@zod/scout';
+import { resumeByUrl, advanceToStep2, recordFailure } from '@zod/db-hot/scratchpad';
+import { fetch as fetchFacade } from '@zod/sanitize';
+
 export const SCHEDULER_TIMEZONE = 'Asia/Kolkata';
 
 /** Minimal logger shape a job tick needs: info/warn plus child bindings. */
@@ -66,6 +72,19 @@ export const STUB_JOBS: readonly StubJobDef[] = [
   },
 ];
 
+export interface PollCandidate {
+  url: string;
+  title: string;
+  snippet: string;
+}
+
+/** Static candidate list for Phase 2 (portal adapters land Phase 4+). */
+export const POLL_CANDIDATES: readonly PollCandidate[] = [
+  { url: 'https://unstop.com/competitions/sample-hackathon', title: 'Sample Hackathon 2026', snippet: 'cash prize Rs 1,00,000' },
+  { url: 'https://devfolio.co/hackathons/sample', title: 'Devfolio Hackathon', snippet: 'register now prizes' },
+  { url: 'https://lu.ma/sample-event', title: 'Luma Community Event', snippet: 'free workshop online' },
+];
+
 export interface TickOutcome {
   job: string;
   durationMs: number;
@@ -94,6 +113,21 @@ export interface TickOptions {
    * Best-effort: a failed write warns but never fails the tick.
    */
   heartbeatDir?: string;
+  /** Injected hot store (PB fingerprint gate). */
+  hot?: any;
+  /** Injected cold store (Turso tombstone gate). */
+  cold?: any;
+  /** Injected PocketBase handle for scratchpad/tombstone writes. */
+  pb?: any;
+  /** Injected fetch facade override (tests). */
+  fetch?: (url: string, opts?: unknown) => Promise<{ markdown: string; capped: boolean; source: 'jina' | 'browser' }>;
+  /** Candidate list override. */
+  candidates?: readonly PollCandidate[];
+  /** Nested bag of stores/deps (convenience for tests). */
+  stores?: Record<string, any>;
+  deps?: Record<string, any>;
+  context?: Record<string, any>;
+  clients?: Record<string, any>;
 }
 
 function writeHeartbeat(
@@ -132,7 +166,116 @@ export async function runStubTick(
   const jobLog = log.child({ job: def.name });
   jobLog.info('tick start');
   opts.sink?.record({ job: def.name, phase: 'start', at: new Date(startedAt).toISOString() });
-  // Phase 1 stub: no polling, no I/O. Real poll logic replaces this body.
+
+  // Resolve injected dependencies (nested bags supported for test ergonomics).
+  const bag: Record<string, any> = {
+    ...(opts as any),
+    ...(opts.stores ?? {}),
+    ...(opts.deps ?? {}),
+    ...(opts.context ?? {}),
+    ...(opts.clients ?? {}),
+  };
+  const pb = bag.pb ?? bag.pocketbase ?? bag.hotClient?.pb ?? bag.db;
+  const hot = bag.hot ?? bag.hotStore ?? bag.hotDb;
+  const cold = bag.cold ?? bag.coldStore ?? bag.coldDb ?? bag.tombstoneStore;
+  const fetchFn =
+    (typeof bag.fetch === 'function' ? bag.fetch : undefined) ??
+    (typeof opts.fetch === 'function' ? opts.fetch : undefined) ??
+    fetchFacade;
+  const candidates = (opts.candidates ?? bag.candidates ?? POLL_CANDIDATES) as readonly PollCandidate[];
+
+  const runPrecheckSafe = async (cand: PollCandidate): Promise<string> => {
+    if (typeof hot?.hasFingerprint !== 'function' && typeof cold?.findTombstone !== 'function') {
+      return 'fresh';
+    }
+    const verdict = await runPrecheck(
+      { url: cand.url, title: cand.title, snippet: cand.snippet } as any,
+      hot as HotStore,
+      cold as ColdStore,
+    );
+    return String(verdict);
+  };
+
+  if (pb === undefined || hot === undefined || cold === undefined) {
+    jobLog.warn({ job: def.name }, 'poll deps not provided; skipping candidate processing');
+  } else {
+    for (const cand of candidates) {
+      const cLog = jobLog.child({ candidate: cand.url });
+      // 1. dedup gate first
+      let verdict: string;
+      try {
+        verdict = await runPrecheckSafe(cand);
+      } catch (err) {
+        cLog.warn({ stage: 'precheck', error: String(err) }, 'precheck failed');
+        continue;
+      }
+      cLog.info({ stage: 'precheck', verdict }, 'precheck result');
+      if (verdict === 'hot-hit' || verdict === 'tombstoned') {
+        cLog.info({ stage: 'precheck', verdict }, 'skip: candidate gated by dedup');
+        continue;
+      }
+
+      // 2. scout prefilter (zero fetch)
+      const pf = prefilter({ title: cand.title, snippet: cand.snippet } as any) as any;
+      if (pf?.verdict === 'reject') {
+        // write tombstone_ledger row terminal_status scout_rejected
+        try {
+          const urlHash = hashUrl(normalizeUrl(cand.url));
+          const row = {
+            url_hash: urlHash,
+            fingerprint: urlHash,
+            terminal_status: 'scout_rejected',
+            source: 'scout',
+            decided_at: new Date().toISOString(),
+          };
+          if (typeof cold?.create === 'function') {
+            await cold.create(row);
+          } else if (pb?.collection) {
+            const coll = pb.collection('tombstone_ledger');
+            if (typeof coll?.create === 'function') await coll.create(row);
+          }
+        } catch (err) {
+          cLog.warn({ stage: 'scout', error: String(err) }, 'scout tombstone write failed');
+        }
+        cLog.info({ stage: 'scout', reason: pf.reason, detail: pf.detail }, 'skip: scout rejected');
+        continue;
+      }
+
+      // 3. scratchpad resume
+      let resume: { row: any; shouldFetch: boolean };
+      try {
+        resume = await resumeByUrl(pb, cand.url);
+      } catch (err) {
+        cLog.warn({ stage: 'scratchpad', error: String(err) }, 'scratchpad resume failed');
+        continue;
+      }
+      if (!resume.shouldFetch) {
+        cLog.info({ stage: 'scratchpad', step: resume.row?.step_position }, 'skip: already STEP_2');
+        continue;
+      }
+
+      // 4. fetch -> STEP_2
+      try {
+        const result = await fetchFn(cand.url);
+        await advanceToStep2(pb, resume.row.id, result.markdown);
+        cLog.info(
+          { stage: 'fetch', source: result.source, capped: result.capped },
+          'candidate advanced to STEP_2',
+        );
+      } catch (err) {
+        try {
+          const { attempts, tombstoned } = await recordFailure(pb, resume.row.id, String(err));
+          cLog.warn({ stage: 'fetch', attempts, tombstoned, error: String(err) }, 'fetch failed');
+          if (tombstoned) {
+            cLog.info({ stage: 'fetch' }, 'candidate tombstoned after retries');
+          }
+        } catch (inner) {
+          cLog.warn({ stage: 'fetch', error: String(inner) }, 'recordFailure failed');
+        }
+      }
+    }
+  }
+
   const durationMs = Date.now() - startedAt;
   const outcome: TickOutcome = { job: def.name, durationMs };
   jobLog.info({ durationMs }, 'tick done');
@@ -170,3 +313,5 @@ export function computeBufferHoldMiB(totalMiB: number, freeMiB: number): number 
   const toCeiling = Math.max(0, RECLAIM_CEILING * totalMiB - used);
   return Math.floor(Math.min(DEFAULT_HOLD_MIB, affordable, toCeiling));
 }
+
+export const runPollTick = runStubTick;
