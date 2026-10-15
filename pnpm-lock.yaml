@@ -184,6 +184,21 @@ importers:
 
   packages/scheduler:
     dependencies:
+      '@zod/config':
+        specifier: workspace:*
+        version: link:../config
+      '@zod/db-hot':
+        specifier: workspace:*
+        version: link:../db-hot
+      '@zod/dedup':
+        specifier: workspace:*
+        version: link:../dedup
+      '@zod/sanitize':
+        specifier: workspace:*
+        version: link:../sanitize
+      '@zod/scout':
+        specifier: workspace:*
+        version: link:../scout
       node-cron:
         specifier: ^4.6.0
         version: 4.6.0
