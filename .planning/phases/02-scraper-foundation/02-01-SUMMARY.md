@@ -20,7 +20,7 @@ affects: [scraper pipelines, audit flow, phase 03 expansion]
 actuals:
   tokens: 8300
   tasks: 1
-  commits: 1
+  commits: 2
   plan_head_before: dfa30d40798912eee7a3109c65db06c8a7ab9dfb
   plan_head_after: 391bbd57053b880db798a9464aabe8481f7f6fd1
 
