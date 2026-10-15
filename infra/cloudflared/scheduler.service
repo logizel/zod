@@ -1,0 +1,29 @@
+# Scheduler supervision (D-23/D-24; T-1-08).
+#
+# Installed on the VM as /etc/systemd/system/zod-scheduler.service by
+# infra/oracle/rebuild.sh (which also places the compiled emit at
+# /opt/zod/scheduler/ and the secrets at /etc/zod/env, owner-only 0600).
+# Restart=always: poll ticks must survive crashes without operator action.
+# Production runs the compiled tsc emit (D-03), never tsx watch.
+#
+# Heartbeat wiring (plan 03 watchdog): ticks write per-tick heartbeat files
+# into SCHEDULER_HEARTBEAT_DIR, and the watchdog pings the dead-man URL while
+# heartbeats stay fresh — silence pages. The tunnel channel falls back to the
+# cloudflared unit state (see infra/oracle/watchdog.sh).
+[Unit]
+Description=Zod poll scheduler (single registry, noOverlap)
+After=network-online.target zod-pocketbase.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/node /opt/zod/scheduler/dist/index.js
+Environment=SCHEDULER_HEARTBEAT_DIR=/var/lib/zod/heartbeats
+EnvironmentFile=/etc/zod/env
+Restart=always
+RestartSec=10
+User=zod
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
