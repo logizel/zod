@@ -28,6 +28,19 @@ yarn-error.log*
 .env*.local
 .env
 
+# zod secrets hygiene (01-01): never commit real env or credential material
+.env*
+!.env.example
+**/*credentials*.json
+**/*token*.json
+**/.cloudflared/*.json
+pb_data/
+.pnpm-store/
+
+# build output
+dist/
+node_modules/
+
 # vercel
 .vercel
 
