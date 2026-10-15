@@ -4,10 +4,10 @@ current_phase: 01
 current_phase_name: Foundation
 status: executing
 stopped_at: Completed 01-01-PLAN.md, Wave 2 dispatch pending
-last_updated: "2026-10-15T09:17:24.593Z"
+last_updated: "2026-10-15T09:17:40.563Z"
 last_activity: 2026-10-15
 last_activity_desc: Phase 01 execution started
-state_head: 1a1097dbdcc75ff48bca6d2c6fe2810e40378791
+state_head: 10f498003e95622c9f1cc25c6e529e0c9cf3b249
 progress:
   total_phases: 7
   completed_phases: 0
@@ -68,6 +68,7 @@ Recent decisions affecting current work:
 - [Roadmap]: MVP vertical slices — first verified Discord alert in Phase 4, local/social coverage deferred to Phase 6
 - [Roadmap]: Cerebras disabled by default (billing trap) — enforced in Phase 3 gateway
 - [Roadmap]: Dedup merger (EVT-07) ships with Jobs/Loot phase, not scraper foundation — needs live multi-source volume
+- [Phase 01]: Approved all seven recency-flagged packages; installed six, eventsource deferred to 01-02 — Wave 1 merge verified: build + vitest 5/5 green
 
 ### Pending Todos
 
