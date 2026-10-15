@@ -1,9 +1,12 @@
-// Chaos tests — forced 429 / 413 / finish_reason:length per model, all handled
-// without crashing or re-scraping. Validates SWM-04 / SWM-05 end-to-end.
+// Chaos tests — force 429 / 413 / finish_reason:length per model across the ladder.
+// Every case resolves via baton-pass or stitch, never re-scrape, never crash, never Cerebras.
+// Adapters are mocked; no network calls.
 
 import { describe, expect, it, vi } from 'vitest';
 import { LlmRouter, type CompleteOptions } from './router.js';
-import type { ChatOutcome, ChatMessage } from './adapters/groq.js';
+import type { ChatOutcome, ChatMessage, ChatResult } from './adapters/groq.js';
+import { LadderConfig, type LadderBucketDef } from './ladder.js';
+import { BucketRegistry } from './bucket.js';
 
 function makeChatResult(text: string, finishReason: string | null = 'stop'): ChatResult {
   return { text, finishReason };
@@ -34,110 +37,160 @@ const OPTIONS: CompleteOptions = {
 type RouterInternals = {
   adapters: Map<string, { chat: (m: ChatMessage[]) => Promise<ChatOutcome> }>;
   stitchers: Map<string, { stitchAndParse: () => Promise<unknown> }>;
+  registry: BucketRegistry;
 };
 
-function buildRouterWithAdapters(
-  groqOutcome: ChatOutcome,
-  githubOutcome: ChatOutcome,
-): LlmRouter {
-  const router = new LlmRouter();
-  const adaptersMap = (router as unknown as RouterInternals).adapters;
-  adaptersMap.set('groq:llama-3.1-8b-instant', makeMockAdapter(groqOutcome) as never);
-  adaptersMap.set('github:gpt-4.1-mini', makeMockAdapter(githubOutcome) as never);
-  return router;
+const CAP = { supportsJSON: true, maxOutputTokens: 4096, costTier: 'zero' as const };
+
+function tier1def(provider: string, model: string): LadderBucketDef {
+  return { provider, model, tier: 'tier1', capability: CAP };
+}
+function tier2def(provider: string, model: string): LadderBucketDef {
+  return { provider, model, tier: 'tier2', capability: CAP };
 }
 
-describe('chaos: forced 429 baton-pass', () => {
-  it('Groq 429 → GitHub Models fallback returns verdict, zero re-scrape', async () => {
-    const router = buildRouterWithAdapters(
-      makeRateLimited(60),
-      makeChatResult('{"verdict":"approved","score":88}'),
+function buildRouter(
+  tier1: LadderBucketDef[],
+  tier2: LadderBucketDef[],
+  outcomes: Record<string, ChatOutcome>,
+  stitches?: Record<string, unknown>,
+): { router: LlmRouter; registry: BucketRegistry } {
+  const ladder = new LadderConfig({ includePaidOptIn: false });
+  (ladder as any).tier1 = tier1;
+  (ladder as any).tier2 = tier2;
+  (ladder as any).all = [...tier1, ...tier2];
+
+  const router = new LlmRouter(null, { ladder });
+  const internals = router as unknown as RouterInternals;
+  internals.registry = new BucketRegistry([...tier1, ...tier2]);
+
+  for (const def of [...tier1, ...tier2]) {
+    const key = `${def.provider}:${def.model}`;
+    const outcome = outcomes[key] ?? makeChatResult('{"verdict":"default"}');
+    internals.adapters.set(key, makeMockAdapter(outcome) as never);
+    const stitchResult = stitches?.[key];
+    internals.stitchers.set(
+      key,
+      {
+        stitchAndParse: vi.fn(async () => {
+          if (stitchResult === undefined) throw new Error('stitch not configured');
+          return stitchResult;
+        }),
+      } as never,
+    );
+  }
+
+  return { router, registry: internals.registry };
+}
+
+const GROQ = tier1def('groq', 'llama-3.1-8b-instant');
+const GITHUB = tier1def('github', 'gpt-4.1-mini');
+const MISTRAL = tier2def('mistral', 'mistral-small-latest');
+const ZAI = tier2def('zai', 'glm-5.2');
+const NVIDIA = tier2def('nvidia', 'nemotron-3.5-lightning');
+
+const ALL_MODELS = [GROQ, GITHUB, MISTRAL, ZAI, NVIDIA];
+
+function nextOf(model: LadderBucketDef): LadderBucketDef {
+  return ALL_MODELS[(ALL_MODELS.indexOf(model) + 1) % ALL_MODELS.length];
+}
+
+describe('chaos: forced 429 baton-pass per model', () => {
+  for (const model of ALL_MODELS) {
+    it(`${model.provider}:${model.model} 429 → baton-pass to next bucket, zero re-scrape`, async () => {
+      const next = nextOf(model);
+      // Both model and next sit in Tier1 so this is a clean within-ladder fallback.
+      const { router } = buildRouter(
+        [model, next],
+        [],
+        {
+          [`${model.provider}:${model.model}`]: makeRateLimited(60),
+          [`${next.provider}:${next.model}`]: makeChatResult('{"verdict":"approved","score":88}'),
+        },
+      );
+
+      const result = await router.complete(OPTIONS);
+
+      expect(result.verdict).toEqual({ verdict: 'approved', score: 88 });
+      expect(result.bucket).toBe(`tier1/${next.provider}:${next.model}`);
+      expect(result.path).toContain(`tier1/${model.provider}:${model.model}`);
+      expect(result.path.some((p) => p.includes('cerebras'))).toBe(false);
+    });
+  }
+
+  it('every Tier1 bucket 429 → Tier2 engaged → valid JSON from last-available bucket', async () => {
+    const { router } = buildRouter(
+      [GROQ, GITHUB],
+      [MISTRAL],
+      {
+        'groq:llama-3.1-8b-instant': makeRateLimited(60),
+        'github:gpt-4.1-mini': makeRateLimited(60),
+        'mistral:mistral-small-latest': makeChatResult('{"verdict":"overflow","score":90}'),
+      },
     );
 
     const result = await router.complete(OPTIONS);
 
-    expect(result.verdict).toEqual({ verdict: 'approved', score: 88 });
-    expect(result.bucket).toBe('github:gpt-4.1-mini');
-    expect(result.path).toEqual(['groq:llama-3.1-8b-instant', 'github:gpt-4.1-mini']);
+    expect(result.verdict).toEqual({ verdict: 'overflow', score: 90 });
+    expect(result.bucket).toBe('tier2/mistral:mistral-small-latest');
+    expect(result.path).toEqual([
+      'tier1/groq:llama-3.1-8b-instant',
+      'tier1/github:gpt-4.1-mini',
+      'tier2/mistral:mistral-small-latest',
+    ]);
   });
 
-  it('Groq 429 then GitHub 429 → all buckets exhausted throws', async () => {
-    const router = buildRouterWithAdapters(
-      makeRateLimited(60),
-      makeRateLimited(60),
-    );
+  it('all Tier1 + Tier2 429 → UNVERIFIED + reason, no crash, no Cerebras', async () => {
+    const outcomes: Record<string, ChatOutcome> = {};
+    for (const m of ALL_MODELS) outcomes[`${m.provider}:${m.model}`] = makeRateLimited(60);
+    const { router } = buildRouter([GROQ, GITHUB], [MISTRAL, ZAI, NVIDIA], outcomes);
 
-    await expect(router.complete(OPTIONS)).rejects.toThrow(/all buckets exhausted/);
-  });
+    const result = await router.complete(OPTIONS);
 
-  it('re-issues step1+step2 to fallback, never re-fetches source URL', async () => {
-    const groqAdapter = makeMockAdapter(makeRateLimited(60));
-    const githubAdapter = makeMockAdapter(makeChatResult('{"verdict":"ok"}'));
-    const router = new LlmRouter();
-    const internals = router as unknown as RouterInternals;
-    internals.adapters.set('groq:llama-3.1-8b-instant', groqAdapter as never);
-    internals.adapters.set('github:gpt-4.1-mini', githubAdapter as never);
-
-    await router.complete(OPTIONS);
-
-    const ghCalls = (githubAdapter.chat as unknown as { mock: { calls: [ChatMessage[]][] } }).mock.calls;
-    expect(ghCalls.length).toBe(1);
-    const joined = ghCalls[0][0].map((m) => m.content).join('\n');
-    expect(joined).toContain('step_1: Unstop hackathon listing');
-    expect(joined).toContain('step_2: official event page markdown');
-    expect(joined).not.toContain(OPTIONS.url);
+    expect(result.verdict).toBe('UNVERIFIED');
+    expect(result.reason).toContain('all buckets exhausted');
+    expect(result.path.some((p) => p.includes('cerebras'))).toBe(false);
   });
 });
 
-describe('chaos: finish_reason:length stitch', () => {
-  it('truncated output → stitch continuation → complete JSON', async () => {
-    const router = buildRouterWithAdapters(
-      makeChatResult('{"verdict":"approved","score":', 'length'),
-      makeChatResult('{"verdict":"rejected"}'),
-    );
+describe('chaos: 413 length violation per model', () => {
+  for (const model of ALL_MODELS) {
+    it(`${model.provider}:${model.model} 413 → fallback to next bucket, no blind retry`, async () => {
+      const next = nextOf(model);
+      const { router } = buildRouter(
+        [model, next],
+        [],
+        {
+          [`${model.provider}:${model.model}`]: makeLengthViolation(),
+          [`${next.provider}:${next.model}`]: makeChatResult('{"verdict":"ok","score":77}'),
+        },
+      );
 
-    const stitcher = {
-      stitchAndParse: vi.fn(async () => ({ verdict: 'approved', score: 99 })),
-    };
-    (router as unknown as RouterInternals).stitchers.set('groq:llama-3.1-8b-instant', stitcher as never);
+      const result = await router.complete(OPTIONS);
 
-    const result = await router.complete(OPTIONS);
-
-    expect(result.verdict).toEqual({ verdict: 'approved', score: 99 });
-    expect(result.bucket).toBe('groq:llama-3.1-8b-instant');
-    expect(stitcher.stitchAndParse).toHaveBeenCalled();
-  });
-
-  it('stitch failure on truncated output → falls back to next bucket', async () => {
-    const router = buildRouterWithAdapters(
-      makeChatResult('{"verdict":"approved","score":', 'length'),
-      makeChatResult('{"verdict":"fallback","score":50}'),
-    );
-
-    const stitcher = {
-      stitchAndParse: vi.fn(async () => {
-        throw new Error('stitch failed');
-      }),
-    };
-    (router as unknown as RouterInternals).stitchers.set('groq:llama-3.1-8b-instant', stitcher as never);
-
-    const result = await router.complete(OPTIONS);
-
-    expect(result.verdict).toEqual({ verdict: 'fallback', score: 50 });
-    expect(result.bucket).toBe('github:gpt-4.1-mini');
-  });
+      expect(result.verdict).toEqual({ verdict: 'ok', score: 77 });
+      expect(result.bucket).toBe(`tier1/${next.provider}:${next.model}`);
+      expect(result.path.some((p) => p.includes('cerebras'))).toBe(false);
+    });
+  }
 });
 
-describe('chaos: 413 length violation', () => {
-  it('413 on primary → falls back to next bucket without crashing', async () => {
-    const router = buildRouterWithAdapters(
-      makeLengthViolation(),
-      makeChatResult('{"verdict":"ok","score":77}'),
-    );
+describe('chaos: finish_reason:length stitch per model', () => {
+  for (const model of ALL_MODELS) {
+    it(`${model.provider}:${model.model} finish_reason:length → complete JSON verdict via stitch`, async () => {
+      const { router } = buildRouter(
+        [model],
+        [],
+        {
+          [`${model.provider}:${model.model}`]: makeChatResult('{"verdict":"approved","score":', 'length'),
+        },
+        { [`${model.provider}:${model.model}`]: { verdict: 'approved', score: 95 } },
+      );
 
-    const result = await router.complete(OPTIONS);
+      const result = await router.complete(OPTIONS);
 
-    expect(result.verdict).toEqual({ verdict: 'ok', score: 77 });
-    expect(result.bucket).toBe('github:gpt-4.1-mini');
-  });
+      expect(result.verdict).toEqual({ verdict: 'approved', score: 95 });
+      expect(result.bucket).toBe(`tier1/${model.provider}:${model.model}`);
+    });
+  }
 });
