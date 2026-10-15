@@ -7,7 +7,7 @@
 
 ### Ingestion
 
-- [ ] **ING-01**: System polls structured event portals (Unstop, Devfolio, Devpost, Luma, Meetup, CTFtime, CLIST.by) via JSON APIs/RSS first every 15–30 minutes
+- [x] **ING-01**: System polls structured event portals (Unstop, Devfolio, Devpost, Luma, Meetup, CTFtime, CLIST.by) via JSON APIs/RSS first every 15–30 minutes
 - [ ] **ING-02**: System crawls DK & Udupi college/community watchlist domains and bio-link pages every 2–4 hours
 - [ ] **ING-03**: System polls job/fellowship portals (Greenhouse, Lever, Ashby, YC, Wellfound, Cutshort, Cuvette, LFX/GSoC/MLH) via search-index + direct polling every 30–60 minutes
 - [ ] **ING-04**: Bot relays external Discord #announcements into private #raw-incoming-feeds via official Bot Gateway (no self-bot)
@@ -17,7 +17,7 @@
 ### Swarm
 
 - [x] **SWM-01**: Scout rejects expired items and obvious spam from titles/snippets before any scrape
-- [ ] **SWM-02**: Link-Hopper resolves aggregator/social cards to official event domain or direct ATS link within max 2 hops
+- [x] **SWM-02**: Link-Hopper resolves aggregator/social cards to official event domain or direct ATS link within max 2 hops
 - [x] **SWM-03**: Every candidate URL gets a persistent Task_Scratchpad (STEP_1..STEP_4 + partial_stream_buffer) in local memory
 - [x] **SWM-04**: On 429/413/timeout mid-audit, orchestrator cools the model 60s and hands step_1+step_2 outputs to the next 2D-ladder bucket with zero re-scraping
 - [x] **SWM-05**: On finish_reason:length, partial output is stitched via continuation prompt into complete JSON/analysis
@@ -25,11 +25,11 @@
 
 ### Events Pipeline
 
-- [ ] **EVT-01**: Sys/CP/Sec (systems, competitive programming, CTF/InfoSec) events fast-track to #🔥-priority-sys-cp-sec after legitimacy check
-- [ ] **EVT-02**: 80/20 domain filter admits all SWE domains, adjacent deep-tech only at organizer≥9 and agenda≥9, rejects non-technical business events
+- [x] **EVT-01**: Sys/CP/Sec (systems, competitive programming, CTF/InfoSec) events fast-track to #🔥-priority-sys-cp-sec after legitimacy check
+- [x] **EVT-02**: 80/20 domain filter admits all SWE domains, adjacent deep-tech only at organizer≥9 and agenda≥9, rejects non-technical business events
 - [ ] **EVT-03**: Local DK/Udupi offline events route to #📍-local-dk-udupi regardless of prize size
 - [ ] **EVT-04**: Out-of-town offline events require verified selection round + quality to reach #✈️-travel-curated; walk-in low-effort rejected
-- [ ] **EVT-05**: Online events require verified liquid cash ≥₹1,00,000 INR (credits/vouchers/certificates stripped) to reach #💻-online-1lakh-plus
+- [x] **EVT-05**: Online events require verified liquid cash ≥₹1,00,000 INR (credits/vouchers/certificates stripped) to reach #💻-online-1lakh-plus
 - [ ] **EVT-06**: Legit TBA prize/agenda events fire Ping #1 to #⏳-early-tba-radar with WATCHING_TBA status and re-audit every 48h until Ping #2
 - [ ] **EVT-07**: Cross-platform duplicates merge on normalized title + ±3d date window + organizer into one master record with unified registration_links[]
 
@@ -58,7 +58,7 @@
 
 ### Delivery & Dashboard
 
-- [ ] **UI-01**: Discord router posts audit cards (title, organizer, dates, mode, prize breakdown, merged links, 1-line audit) to the 10-channel matrix with 48h/24h deadline reminders for bookmarked/priority items
+- [x] **UI-01**: Discord router posts audit cards (title, organizer, dates, mode, prize breakdown, merged links, 1-line audit) to the 10-channel matrix with 48h/24h deadline reminders for bookmarked/priority items
 - [ ] **UI-02**: 📌 reaction bookmarks an opportunity and arms its deadline reminders
 - [ ] **DSH-01**: Cloudflare Zero Trust gate rejects unauthenticated requests before any UI or SSE stream renders; dashboard is read-only v1
 - [ ] **DSH-02**: Top panel shows rolling agent slots (provider/model reel + micro-step ticker incl. 429 baton-pass) live from PocketBase SSE
@@ -99,23 +99,23 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ING-01 | Phase 4 | Pending |
+| ING-01 | Phase 4 | Complete |
 | ING-02 | Phase 6 | Pending |
 | ING-03 | Phase 5 | Pending |
 | ING-04 | Phase 6 | Pending |
 | ING-05 | Phase 6 | Pending |
 | ING-06 | Phase 2 | Complete |
 | SWM-01 | Phase 2 | Complete |
-| SWM-02 | Phase 4 | Pending |
+| SWM-02 | Phase 4 | Complete |
 | SWM-03 | Phase 2 | Complete |
 | SWM-04 | Phase 3 | Complete |
 | SWM-05 | Phase 3 | Complete |
 | SWM-06 | Phase 3 | Complete |
-| EVT-01 | Phase 4 | Pending |
-| EVT-02 | Phase 4 | Pending |
+| EVT-01 | Phase 4 | Complete |
+| EVT-02 | Phase 4 | Complete |
 | EVT-03 | Phase 6 | Pending |
 | EVT-04 | Phase 6 | Pending |
-| EVT-05 | Phase 4 | Pending |
+| EVT-05 | Phase 4 | Complete |
 | EVT-06 | Phase 6 | Pending |
 | EVT-07 | Phase 5 | Pending |
 | JOB-01 | Phase 5 | Pending |
@@ -132,7 +132,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MEM-03 | Phase 1 | Complete |
 | MEM-04 | Phase 6 | Pending |
 | MEM-05 | Phase 7 | Pending |
-| UI-01 | Phase 4 | Pending |
+| UI-01 | Phase 4 | Complete |
 | UI-02 | Phase 6 | Pending |
 | DSH-01 | Phase 7 | Pending |
 | DSH-02 | Phase 7 | Pending |
