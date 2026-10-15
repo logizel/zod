@@ -101,7 +101,17 @@ Plans:
   4. An aggregator link resolves through to the official event domain within 2 hops before any verdict is posted
   5. A non-technical business event is rejected by the 80/20 domain filter and never reaches a channel
 
-**Plans**: TBD
+**Plans**: 3/3
+
+**Wave 1**
+- [ ] 04-01-PLAN.md — Tracer: discord-router package + CTFtime → Scout → Link-Hopper → 80/20 → prize gate → auditor → Discord embed → routed (all 6 requirements covered in tracer path)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 04-02-PLAN.md — Six remaining portal adapters (unstop, devfolio, devpost, luma, meetup, clist) + staggered 7-portal cron via single scheduler registry
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 04-03-PLAN.md — Live Discord gateway login + channel resolution + router service poll loop (audited→routed) + router-service tests + .env.example
+
 **UI hint**: yes
 
 ### Phase 5: Jobs + Loot Pipelines
