@@ -8,6 +8,7 @@ const EnvSchema = z.object({
   PB_URL: z.string().default('http://127.0.0.1:8090'),
   PB_SERVICE_EMAIL: z.email(),
   PB_SERVICE_PASSWORD: z.string().min(1),
+  JINA_API_KEY: z.string().min(1),
   TURSO_DATABASE_URL: z.string(),
   TURSO_AUTH_TOKEN: z.string().min(1),
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),

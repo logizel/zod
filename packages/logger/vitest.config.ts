@@ -12,6 +12,7 @@ export default defineConfig({
     // Dummy secrets so the logger singleton (built from env at module top)
     // constructs under test; redaction itself is asserted on literal values.
     env: {
+      JINA_API_KEY: 'test-jina-key',
       PB_SERVICE_EMAIL: 'test@example.com',
       PB_SERVICE_PASSWORD: 'test-password',
       TURSO_DATABASE_URL: 'libsql://test.turso.io',

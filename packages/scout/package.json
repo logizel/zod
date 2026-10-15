@@ -1,0 +1,36 @@
+{
+  "name": "@zod/scout",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./expiry": {
+      "types": "./dist/expiry.d.ts",
+      "default": "./dist/expiry.js"
+    },
+    "./spam": {
+      "types": "./dist/spam.d.ts",
+      "default": "./dist/spam.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@zod/config": "workspace:*",
+    "date-fns": "^4.4.0",
+    "date-fns-tz": "^3.2.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "typescript": "~5.9",
+    "vitest": "^3.2.7"
+  }
+}
