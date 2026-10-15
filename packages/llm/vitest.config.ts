@@ -29,6 +29,7 @@ export default defineConfig({
       '@zod/db-hot/scratchpad': resolve(here, '../db-hot/src/scratchpad.ts'),
       '@zod/db-hot/telemetry': resolve(here, '../db-hot/src/telemetry.ts'),
       '@zod/logger': resolve(here, '../logger/src/index.ts'),
+      '@zod/scheduler-registry': resolve(here, '../scheduler/src/registry.ts'),
     },
   },
 });

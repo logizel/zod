@@ -381,6 +381,17 @@ export class LlmRouter {
     return this.registry.getStates();
   }
 
+  /** Scheduler-invoked: recover a COOLDOWN bucket when its cooldownUntil has elapsed.
+   * Flips COOLDOWN → READY via recordSuccess. Returns true if recovered, false otherwise.
+   * Called by the gateway-bucket-cooldown cron job (single scheduler registry, D-23). */
+  recoverBucket(provider: string, model: string): boolean {
+    const entry = this.registry.getStates().find((b) => b.provider === provider && b.model === model);
+    if (!entry || entry.state !== BucketState.COOLDOWN) return false;
+    if (Date.now() < entry.cooldownUntil) return false;
+    this.registry.recordSuccess(provider, model);
+    return true;
+  }
+
   /** Ladder config in use (for introspection / tests). */
   getLadderConfig(): LadderConfig {
     return this.ladder;
