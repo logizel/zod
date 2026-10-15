@@ -1,0 +1,6 @@
+{
+  "name": "@zod/dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Phase 1 locked static shell (apps/dashboard/index.html), deployed to Cloudflare Pages behind the owner-only Zero Trust Access rule. No build step: the shell is static by design (D-22); live telemetry UI arrives in Phase 7."
+}
