@@ -8,6 +8,8 @@ import type { AgentTelemetryRow } from '@zod/db-hot/schema';
 
 interface TelemetryCollection {
   getFirstListItem(filter: string, options?: unknown): Promise<AgentTelemetryRow>;
+  /** Paginated list for bucket status history (operator visibility). */
+  getList(page: number, perPage: number, options?: unknown): Promise<{ items: AgentTelemetryRow[]; totalItems: number }>;
   create(data: Record<string, unknown>): Promise<AgentTelemetryRow>;
   update(id: string, data: Record<string, unknown>): Promise<AgentTelemetryRow | void>;
 }
@@ -72,4 +74,45 @@ export async function writeBucketState(
     url,
     updated: new Date().toISOString(),
   });
+}
+
+/** Read the latest agent_telemetry row status for a bucket (operator display).
+ * Returns the most recently updated row's status, or null when no row exists. */
+export async function readBucketState(
+  pb: PbLike,
+  provider: string,
+  model: string,
+): Promise<BucketStateInput['status'] | null> {
+  const escapedProvider = provider.replace(/'/g, "''");
+  const escapedModel = model.replace(/'/g, "''");
+  const filter = `provider = '${escapedProvider}' && model = '${escapedModel}'`;
+  try {
+    const row = await telemetry(pb).getFirstListItem(filter, { sort: '-updated' });
+    return row.status;
+  } catch {
+    return null;
+  }
+}
+
+/** Return the bucket status transition history for operator visibility.
+ * Most recent first, up to `limit` rows (default 50). */
+export async function bucketStatusHistory(
+  pb: PbLike,
+  provider: string,
+  model: string,
+  limit = 50,
+): Promise<Array<{ status: string; updated: string; detail: string }>> {
+  const escapedProvider = provider.replace(/'/g, "''");
+  const escapedModel = model.replace(/'/g, "''");
+  const filter = `provider = '${escapedProvider}' && model = '${escapedModel}'`;
+  try {
+    const result = await telemetry(pb).getList(1, limit, { filter, sort: '-updated' });
+    return result.items.map((row) => ({
+      status: row.status,
+      updated: row.updated,
+      detail: row.detail,
+    }));
+  } catch {
+    return [];
+  }
 }
