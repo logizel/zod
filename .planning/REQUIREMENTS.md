@@ -50,9 +50,9 @@
 
 ### Memory
 
-- [ ] **MEM-01**: Hot PocketBase `opportunities` collection stores fingerprint_hash, pipeline, bucket_channel, status, prize, links, deadlines, reminders, bookmark, audit_summary
+- [x] **MEM-01**: Hot PocketBase `opportunities` collection stores fingerprint_hash, pipeline, bucket_channel, status, prize, links, deadlines, reminders, bookmark, audit_summary
 - [ ] **MEM-02**: Hot `agent_telemetry` ring streams slot/provider/model/step/url/status over SSE with 24h retention
-- [ ] **MEM-03**: Cold Turso `tombstone_ledger` (url_hash PK, fingerprint, terminal status) is checked pre-scrape in <5ms and never deleted
+- [x] **MEM-03**: Cold Turso `tombstone_ledger` (url_hash PK, fingerprint, terminal status) is checked pre-scrape in <5ms and never deleted
 - [ ] **MEM-04**: Cold `taste_rules` (BLOCK/BOOST/WEIGHT/CUSTOM) inject into Auditor/Curator prompts from #🧠-bot-training-chat feedback with confirmation reply
 - [ ] **MEM-05**: Midnight garbage collector purges heavy text 24h after end_date (48h after rejection), retaining tombstones + taste rules
 
@@ -64,7 +64,7 @@
 - [ ] **DSH-02**: Top panel shows rolling agent slots (provider/model reel + micro-step ticker incl. 429 baton-pass) live from PocketBase SSE
 - [ ] **DSH-03**: Middle panel shows 2D pool health grid (READY/ACTIVE/60s-COOLDOWN/DAILY-CAP per provider-model bucket)
 - [ ] **DSH-04**: Bottom panel shows filterable read-only boards (Events Local/Travel/Online, TBA queue, Jobs Sys vs General, Loot, live audit & rejection log) served via cloudflared tunnel with zero open inbound ports
-- [ ] **OPS-01**: Oracle VM holds 22–30% baseline RAM via 2.5GB cache buffer to avoid 7-day idle reclaim; single shared browser capped at 2–3 tabs with media loading disabled
+- [x] **OPS-01**: Oracle VM holds 22–30% baseline RAM via 2.5GB cache buffer to avoid 7-day idle reclaim; single shared browser capped at 2–3 tabs with media loading disabled
 
 ## v2 Requirements
 
@@ -127,9 +127,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | LOT-02 | Phase 5 | Pending |
 | LOT-03 | Phase 5 | Pending |
 | LOT-04 | Phase 5 | Pending |
-| MEM-01 | Phase 1 | Pending |
+| MEM-01 | Phase 1 | Complete |
 | MEM-02 | Phase 1 | Pending |
-| MEM-03 | Phase 1 | Pending |
+| MEM-03 | Phase 1 | Complete |
 | MEM-04 | Phase 6 | Pending |
 | MEM-05 | Phase 7 | Pending |
 | UI-01 | Phase 4 | Pending |
@@ -138,7 +138,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DSH-02 | Phase 7 | Pending |
 | DSH-03 | Phase 7 | Pending |
 | DSH-04 | Phase 7 | Pending |
-| OPS-01 | Phase 1 | Pending |
+| OPS-01 | Phase 1 | Complete |
 
 **Coverage:**
 - v1 requirements: 40 total
