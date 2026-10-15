@@ -5,12 +5,13 @@
   "type": "module",
   "scripts": {
     "build": "tsc -b",
-    "dev": "tsx src/index.ts",
+    "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js"
   },
   "dependencies": {
     "@zod/config": "workspace:*",
-    "@zod/logger": "workspace:*"
+    "@zod/logger": "workspace:*",
+    "@zod/scheduler-registry": "workspace:*"
   },
   "devDependencies": {
     "tsx": "^4.23.15",
