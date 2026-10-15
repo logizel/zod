@@ -12,8 +12,10 @@ import cron, { type ScheduledTask, type TaskFn } from 'node-cron';
 import {
   SCHEDULER_TIMEZONE,
   STUB_JOBS,
+  GATEWAY_JOBS,
   computeBufferHoldMiB,
   runStubTick,
+  runGatewayTick,
   type MetricsSink,
   type StubJobDef,
   type TickLogger,
@@ -24,8 +26,10 @@ import {
 export {
   SCHEDULER_TIMEZONE,
   STUB_JOBS,
+  GATEWAY_JOBS,
   computeBufferHoldMiB,
   runStubTick,
+  runGatewayTick,
 };
 export type { MetricsSink, TickLogger, TickOptions, TickRecord };
 
@@ -73,10 +77,10 @@ export function assertSchedulerGuards(mod: SchedulerModule = cron): void {
         'expected registry node-cron@^4 on the 4.6 line (never the kelektiv/* git shorthand)',
     );
   }
-  for (const def of STUB_JOBS) {
+  for (const def of [...STUB_JOBS, ...GATEWAY_JOBS]) {
     if (!mod.validate(def.expression)) {
       throw new Error(
-        `${GUARD_PREFIX} scheduler build rejects stub expression '${def.expression}' (${def.name})`,
+        `${GUARD_PREFIX} scheduler build rejects expression '${def.expression}' (${def.name})`,
       );
     }
   }
@@ -129,6 +133,47 @@ export function registerStubJobs(
     const task = mod.schedule(
       def.expression,
       () => runStubTick(def, log, { sink: opts.sink, heartbeatDir }),
+      {
+        name: def.name,
+        timezone: SCHEDULER_TIMEZONE,
+        noOverlap: true,
+        maxRandomDelay: def.maxRandomDelayMs,
+      },
+    );
+    task.on('execution:overlap', () => {
+      log.child({ job: def.name }).warn('tick skipped: previous run pending');
+      opts.sink?.record({ job: def.name, phase: 'skip', at: new Date().toISOString() });
+    });
+    void task.start();
+    return task;
+  });
+  return {
+    tasks,
+    stop: () => {
+      for (const task of tasks) {
+        void task.stop();
+      }
+    },
+  };
+}
+
+/** Register gateway bucket-timer jobs alongside stub jobs via the same single
+ * registry path (no setInterval scatter). Accepts an injected tickHandler so
+ * the scheduler stays agnostic of gateway internals (llm provides the handler
+ * via registry-integration.ts). */
+export function registerGatewayJobs(
+  log: TickLogger,
+  mod: SchedulerModule = cron,
+  opts: RegisterOptions & {
+    tickHandler?: (def: StubJobDef, log: TickLogger) => Promise<void> | void;
+  } = {},
+): RegistryHandle {
+  assertSchedulerGuards(mod);
+  const heartbeatDir = opts.heartbeatDir ?? process.env['SCHEDULER_HEARTBEAT_DIR'];
+  const tasks = GATEWAY_JOBS.map((def) => {
+    const task = mod.schedule(
+      def.expression,
+      () => runGatewayTick(def, log, { sink: opts.sink, heartbeatDir, tickHandler: opts.tickHandler }),
       {
         name: def.name,
         timezone: SCHEDULER_TIMEZONE,
