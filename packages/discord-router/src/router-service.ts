@@ -1,5 +1,5 @@
 import type { Env } from '@zod/config';
-import { createLogger } from '@zod/logger';
+import { createLogger, type Logger } from '@zod/logger';
 import type { OpportunityRow } from '@zod/db-hot/schema';
 import { buildAuditCard } from './embed.js';
 import { getClient } from './gateway.js';
@@ -9,17 +9,69 @@ import { createPbClient } from '@zod/db-hot';
 export interface RouterServiceDeps {
   env: Env;
   log: ReturnType<typeof createLogger>;
+  /** Injected PocketBase client (tests inject a mock). */
+  pb?: any;
+  /** Injected discord.js Client (tests inject a mock). */
+  client?: any;
 }
 
-export function startRouterService({ env, log }: RouterServiceDeps): void {
+export interface RouterService {
+  stop(): void;
+}
+
+/**
+ * Process a single audited opportunity: build embed, send to Discord channel,
+ * then mark status='routed'. Returns true on success, false on failure.
+ * Tests call this directly with mocked pb + client.
+ */
+export async function processOpportunity(
+  pb: any,
+  client: any,
+  opportunity: OpportunityRow,
+  log: Pick<Logger, 'warn' | 'info' | 'error'>,
+): Promise<boolean> {
+  const embed = buildAuditCard(opportunity);
+  const channel = await resolveChannel(client, opportunity.bucket_channel);
+  if (!channel) {
+    log.warn({ channel: opportunity.bucket_channel, id: opportunity.id }, 'channel not found; skipping post');
+    return false;
+  }
+  try {
+    await channel.send({ embeds: [embed] });
+    await pb.collection('opportunities').update(opportunity.id, { status: 'routed' });
+    return true;
+  } catch (err) {
+    try {
+      const { attempts, tombstoned } = await recordFailure(pb, opportunity.id, String(err));
+      log.warn(
+        { id: opportunity.id, attempts, tombstoned, error: String(err) },
+        'discord post failed; recordFailure applied',
+      );
+    } catch (inner) {
+      log.warn({ id: opportunity.id, error: String(inner) }, 'recordFailure itself failed');
+    }
+    return false;
+  }
+}
+
+/** Create a router service with injected dependencies (testable). */
+export function createRouterService(deps: RouterServiceDeps): RouterService {
+  const { env, log, pb: pbDeps, client: clientDeps } = deps;
   const pbLog = log.child({ component: 'discord-router/router-service' });
   const pollIntervalMs = 60_000;
 
-  const pollLoop = async (): Promise<void> => {
-    const pb = await createPbClient(env);
+  let pbPromise: Promise<any> | null = null;
+  const getPb = async () => {
+    if (!pbPromise) {
+      pbPromise = createPbClient(env);
+    }
+    return pbPromise;
+  };
 
+  const pollLoop = async (): Promise<void> => {
     while (true) {
       try {
+        const pb = pbDeps ?? (await getPb());
         const page = await pb.collection('opportunities').getList(1, 50, {
           sort: '-created',
           filter: "status = 'audited' && bucket_channel != ''",
@@ -28,29 +80,20 @@ export function startRouterService({ env, log }: RouterServiceDeps): void {
         for (const opp of page.items) {
           try {
             const opportunity = opp as unknown as OpportunityRow;
-            const client = getClient();
+            const client = clientDeps ?? getClient();
             if (!client) {
               pbLog.warn({ id: opportunity.id }, 'discord client not ready; deferring post');
               continue;
             }
-            const embed = buildAuditCard(opportunity);
-            const channel = await resolveChannel(client, opportunity.bucket_channel);
-            if (!channel) {
-              pbLog.warn(
-                { channel: opportunity.bucket_channel, id: opportunity.id },
-                'channel not found; skipping post',
-              );
+            const ok = await processOpportunity(pb, client, opportunity, pbLog);
+            if (!ok) {
               continue;
             }
-            await channel.send({ embeds: [embed] });
-            await pb.collection('opportunities').update(opportunity.id, {
-              status: 'routed',
-            });
-            pbLog.info({ id: opportunity.id, channel: opportunity.bucket_channel }, 'audit card routed');
           } catch (err) {
             const id = (opp as { id?: string }).id ?? 'unknown';
+            const pbForFailure = pbDeps ?? (await getPb());
             try {
-              const { attempts, tombstoned } = await recordFailure(pb, id, String(err));
+              const { attempts, tombstoned } = await recordFailure(pbForFailure, id, String(err));
               pbLog.warn(
                 { id, attempts, tombstoned, error: String(err) },
                 'discord post failed; recordFailure applied',
@@ -71,27 +114,41 @@ export function startRouterService({ env, log }: RouterServiceDeps): void {
   void pollLoop().catch((err) => {
     pbLog.error({ err: String(err) }, 'router service poll loop exited');
   });
+
+  return {
+    stop: () => {
+      // no-op: loop runs until process exit
+    },
+  };
+}
+
+/** Start the router service (entrypoint usage: creates deps from env + log). */
+export function startRouterService({ env, log }: { env: Env; log: Logger }): void {
+  void createRouterService({ env, log });
 }
 
 /** Resolve a text channel by ID or by name match across guilds. */
 async function resolveChannel(
-  client: import('discord.js').Client,
+  client: any,
   bucketChannelId: string,
-): Promise<import('discord.js').TextChannel | null> {
+): Promise<any | null> {
+  if (!client) return null;
   try {
     const channel = await client.channels.fetch(bucketChannelId);
-    if (channel && channel.isTextBased() && !channel.isDMBased()) {
-      return channel as import('discord.js').TextChannel;
+    if (channel && typeof channel.isTextBased === 'function' && channel.isTextBased() && !channel.isDMBased()) {
+      return channel;
     }
   } catch {
     // fall through to name-based resolution
   }
-  for (const guild of client.guilds.cache.values()) {
-    const named = guild.channels.cache.find(
-      (c) => c.isTextBased() && !c.isDMBased() && c.name === bucketChannelId,
+  const guilds = client.guilds?.caches?.values?.() ?? [];
+  for (const guild of guilds) {
+    const channels = guild.channels?.cache?.values?.() ?? [];
+    const named = channels.find(
+      (c: any) => typeof c.isTextBased === 'function' && c.isTextBased() && !c.isDMBased() && c.name === bucketChannelId,
     );
-    if (named && named.isTextBased() && !named.isDMBased()) {
-      return named as import('discord.js').TextChannel;
+    if (named) {
+      return named;
     }
   }
   return null;
