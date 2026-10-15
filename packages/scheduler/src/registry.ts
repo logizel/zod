@@ -12,12 +12,22 @@ import cron, { type ScheduledTask, type TaskFn } from 'node-cron';
 import {
   SCHEDULER_TIMEZONE,
   STUB_JOBS,
+  computeBufferHoldMiB,
   runStubTick,
+  type MetricsSink,
+  type StubJobDef,
   type TickLogger,
+  type TickOptions,
+  type TickRecord,
 } from './jobs.js';
 
-export { SCHEDULER_TIMEZONE, STUB_JOBS };
-export type { TickLogger };
+export {
+  SCHEDULER_TIMEZONE,
+  STUB_JOBS,
+  computeBufferHoldMiB,
+  runStubTick,
+};
+export type { MetricsSink, TickLogger, TickOptions, TickRecord };
 
 /**
  * Structural scheduler surface the registry needs. `typeof cron` satisfies it;
@@ -31,6 +41,16 @@ export interface SchedulerModule {
 export interface RegistryHandle {
   tasks: ScheduledTask[];
   stop(): void;
+}
+
+export interface RegisterOptions {
+  /** Metrics destination for start/done/skip tick records. */
+  sink?: MetricsSink;
+  /**
+   * Heartbeat directory for tick-done files the watchdog reads. Defaults to
+   * SCHEDULER_HEARTBEAT_DIR; unset skips heartbeat writes (dev/test).
+   */
+  heartbeatDir?: string;
 }
 
 const GUARD_PREFIX = '[scheduler-guard]';
@@ -98,12 +118,17 @@ export function assertSchedulerGuards(mod: SchedulerModule = cron): void {
  * Register all four stub jobs with timezone + overlap guard + jitter, attach
  * the skip warning on the same child logger, and start every task.
  */
-export function registerStubJobs(log: TickLogger, mod: SchedulerModule = cron): RegistryHandle {
+export function registerStubJobs(
+  log: TickLogger,
+  mod: SchedulerModule = cron,
+  opts: RegisterOptions = {},
+): RegistryHandle {
   assertSchedulerGuards(mod);
+  const heartbeatDir = opts.heartbeatDir ?? process.env['SCHEDULER_HEARTBEAT_DIR'];
   const tasks = STUB_JOBS.map((def) => {
     const task = mod.schedule(
       def.expression,
-      () => runStubTick(def, log),
+      () => runStubTick(def, log, { sink: opts.sink, heartbeatDir }),
       {
         name: def.name,
         timezone: SCHEDULER_TIMEZONE,
@@ -113,6 +138,7 @@ export function registerStubJobs(log: TickLogger, mod: SchedulerModule = cron): 
     );
     task.on('execution:overlap', () => {
       log.child({ job: def.name }).warn('tick skipped: previous run pending');
+      opts.sink?.record({ job: def.name, phase: 'skip', at: new Date().toISOString() });
     });
     void task.start();
     return task;
@@ -128,6 +154,10 @@ export function registerStubJobs(log: TickLogger, mod: SchedulerModule = cron): 
 }
 
 /** Single registry start the scheduler entry calls (env parse -> logger -> this). */
-export function startRegistry(log: TickLogger, mod: SchedulerModule = cron): RegistryHandle {
-  return registerStubJobs(log, mod);
+export function startRegistry(
+  log: TickLogger,
+  mod: SchedulerModule = cron,
+  opts: RegisterOptions = {},
+): RegistryHandle {
+  return registerStubJobs(log, mod, opts);
 }
