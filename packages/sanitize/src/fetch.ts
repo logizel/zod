@@ -31,7 +31,7 @@ function isPrivateHost(host: string): boolean {
   return false;
 }
 
-function validateUrl(raw: string): URL {
+export function validateUrl(raw: string): URL {
   let u: URL;
   try {
     u = new URL(raw);

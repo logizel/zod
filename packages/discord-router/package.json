@@ -1,0 +1,29 @@
+{
+  "name": "@zod/discord-router",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/router-service.js",
+  "types": "./dist/router-service.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/router-service.d.ts",
+      "default": "./dist/router-service.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "discord.js": "^14.25.1",
+    "@zod/config": "workspace:*",
+    "@zod/db-hot": "workspace:*",
+    "@zod/logger": "workspace:*",
+    "@zod/sanitize": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "~5.9",
+    "vitest": "^3.2.7"
+  }
+}

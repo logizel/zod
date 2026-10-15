@@ -25,6 +25,7 @@ export const REDACT_PATHS: string[] = [
   'GROQ_API_KEY',
   'GITHUB_TOKEN',
   'SAMBANOVA_API_KEY',
+  'DISCORD_TOKEN',
 ];
 
 export const REDACT_CENSOR = '[Redacted]';

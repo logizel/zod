@@ -14,6 +14,7 @@ const EnvSchema = z.object({
   GROQ_API_KEY: z.string().min(1),
   GITHUB_TOKEN: z.string().min(1),
   SAMBANOVA_API_KEY: z.string().default(''),
+  DISCORD_TOKEN: z.string().min(1),
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
 });
 
