@@ -13,6 +13,9 @@ import { createLogger } from '@zod/logger';
 
 const log = createLogger('info').child({ component: 'llm/registry-integration' });
 
+/** Input to the internal writeTelemetry wrapper: slot/step/url are added by the wrapper. */
+type TelemetryWriteInput = Omit<BucketStateInput, 'slot' | 'step' | 'url'>;
+
 export interface GatewaySchedulerOpts {
   router: LlmRouter;
   /** PocketBase handle for telemetry writes (injected; tests use fakes). */
@@ -37,7 +40,7 @@ export class GatewayScheduler {
   /** Register + start gateway bucket-timer jobs via registerGatewayJobs. */
   start(log: TickLogger): void {
     const { router, pb, slot, pipeline, url = '', mod } = this.opts;
-    const writeTelemetry = async (input: BucketStateInput): Promise<void> => {
+    const writeTelemetry = async (input: TelemetryWriteInput): Promise<void> => {
       await writeBucketState(pb as unknown as Parameters<typeof writeBucketState>[0], {
         ...input,
         slot,
@@ -66,7 +69,7 @@ export class GatewayScheduler {
   /** Recover every COOLDOWN bucket whose cooldownUntil has elapsed (60s → READY).
    * Clock integrity: buckets never recover before cooldownUntil. */
   private recoverAllCooldownBuckets(
-    writeTelemetry: (input: BucketStateInput) => Promise<void>,
+    writeTelemetry: (input: TelemetryWriteInput) => Promise<void>,
   ): void {
     for (const b of this.opts.router.getBucketStates()) {
       if (b.state === BucketState.COOLDOWN && Date.now() >= b.cooldownUntil) {
@@ -85,7 +88,7 @@ export class GatewayScheduler {
 
   /** Reset every DAILY-CAP bucket at UTC midnight (time-driven, scheduler-owned). */
   private resetAllDailyCaps(
-    writeTelemetry: (input: BucketStateInput) => Promise<void>,
+    writeTelemetry: (input: TelemetryWriteInput) => Promise<void>,
   ): void {
     for (const b of this.opts.router.getBucketStates()) {
       if (b.state === BucketState.DAILY_CAP) {
