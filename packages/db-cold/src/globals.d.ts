@@ -4,3 +4,7 @@ declare const process: {
   exitCode: number | undefined;
   cwd(): string;
 };
+
+declare module 'node:fs' {
+  export function readFileSync(path: string, encoding: string): string;
+}
