@@ -34,7 +34,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. No inbound firewall port is open, yet the operator reaches the locked dashboard shell through Zero Trust
   4. Scheduler polls run without overlapping executions and every secret lives in env, never in git history
 
-**Plans**: 1/4 plans executed
+**Plans**: 2/4 plans executed
 
 Plans:
 **Wave 1**
@@ -42,7 +42,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 01-02-PLAN.md — Memory contract: hot schemas plus cold ledger plus fingerprint precheck
-- [ ] 01-03-PLAN.md — Scheduler plus reclaim defense: guarded stub jobs, overlap proof, buffer plus watchdog
+- [x] 01-03-PLAN.md — Scheduler plus reclaim defense: guarded stub jobs, overlap proof, buffer plus watchdog
 
 **Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 01-04-PLAN.md — Closed network plus rebuild proof: locked shell, tunnel units, rebuild plus drills
@@ -144,7 +144,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 1/4 | In Progress|  |
+| 1. Foundation | 2/4 | In Progress|  |
 | 2. Scraper Foundation | 0/TBD | Not started | - |
 | 3. LLM Swarm | 0/TBD | Not started | - |
 | 4. Events Vertical Slice | 0/TBD | Not started | - |
