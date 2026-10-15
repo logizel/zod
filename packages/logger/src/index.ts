@@ -22,6 +22,9 @@ export const REDACT_PATHS: string[] = [
   'JINA_API_KEY',
   'headers.authorization',
   'headers.cookie',
+  'GROQ_API_KEY',
+  'GITHUB_TOKEN',
+  'SAMBANOVA_API_KEY',
 ];
 
 export const REDACT_CENSOR = '[Redacted]';
