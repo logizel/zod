@@ -40,3 +40,28 @@ describe('byte-proof drill (ING-06)', () => {
     expect(res.markdown.length).toBeLessThanOrEqual(8000);
   });
 });
+
+const LIVE_URLS = [
+  'https://unstop.com',
+  'https://devfolio.co',
+  'https://lu.ma',
+  'https://boards.greenhouse.io',
+  'https://linktr.ee',
+];
+
+if (process.env.LIVE_BYTEPROOF === '1') {
+  describe('byte-proof drill (ING-06) — live', () => {
+    for (const url of LIVE_URLS) {
+      it(`live byte-proof ${url}`, async () => {
+        const { fetchViaBrowser } = await import('@zod/browser');
+        const html = await fetchViaBrowser(url);
+        const res = sanitizeHtml(html);
+        const rawBytes = Buffer.byteLength(html, 'utf8');
+        const capBytes = Buffer.byteLength(res.markdown, 'utf8');
+        // eslint-disable-next-line no-console
+        console.log(`byte-proof-live: url=${url} raw=${rawBytes} capped=${capBytes} ratio=${(capBytes / rawBytes).toFixed(4)}`);
+        expect(capBytes).toBeLessThanOrEqual(0.15 * rawBytes);
+      }, 60_000);
+    }
+  });
+}
