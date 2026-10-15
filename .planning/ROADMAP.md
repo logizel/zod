@@ -32,7 +32,13 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. Opportunities and telemetry records written locally also survive a simulated VM wipe via the off-server cold ledger
   3. No inbound firewall port is open, yet the operator reaches the locked dashboard shell through Zero Trust
   4. Scheduler polls run without overlapping executions and every secret lives in env, never in git history
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+- [ ] 01-01-PLAN.md — Tracer boot slice: monorepo scaffold, env gate, redacting logger, hygiene
+- [ ] 01-02-PLAN.md — Memory contract: hot schemas plus cold ledger plus fingerprint precheck
+- [ ] 01-03-PLAN.md — Scheduler plus reclaim defense: guarded stub jobs, overlap proof, buffer plus watchdog
+- [ ] 01-04-PLAN.md — Closed network plus rebuild proof: locked shell, tunnel units, rebuild plus drills
 
 ### Phase 2: Scraper Foundation
 **Goal**: Any candidate URL becomes cheap, clean markdown with spam filtered and work-state tracked before any LLM is spent
