@@ -12,13 +12,13 @@
 - [ ] **ING-03**: System polls job/fellowship portals (Greenhouse, Lever, Ashby, YC, Wellfound, Cutshort, Cuvette, LFX/GSoC/MLH) via search-index + direct polling every 30–60 minutes
 - [ ] **ING-04**: Bot relays external Discord #announcements into private #raw-incoming-feeds via official Bot Gateway (no self-bot)
 - [ ] **ING-05**: System polls X/LinkedIn via exported session cookies on randomized 45–90 minute jitter plus search-index fallback
-- [ ] **ING-06**: Sanitizer strips scripts/styles/SVG/nav via Jina-first + shared headless browser fallback, cutting token payload ≥85%
+- [x] **ING-06**: Sanitizer strips scripts/styles/SVG/nav via Jina-first + shared headless browser fallback, cutting token payload ≥85%
 
 ### Swarm
 
-- [ ] **SWM-01**: Scout rejects expired items and obvious spam from titles/snippets before any scrape
+- [x] **SWM-01**: Scout rejects expired items and obvious spam from titles/snippets before any scrape
 - [ ] **SWM-02**: Link-Hopper resolves aggregator/social cards to official event domain or direct ATS link within max 2 hops
-- [ ] **SWM-03**: Every candidate URL gets a persistent Task_Scratchpad (STEP_1..STEP_4 + partial_stream_buffer) in local memory
+- [x] **SWM-03**: Every candidate URL gets a persistent Task_Scratchpad (STEP_1..STEP_4 + partial_stream_buffer) in local memory
 - [ ] **SWM-04**: On 429/413/timeout mid-audit, orchestrator cools the model 60s and hands step_1+step_2 outputs to the next 2D-ladder bucket with zero re-scraping
 - [ ] **SWM-05**: On finish_reason:length, partial output is stitched via continuation prompt into complete JSON/analysis
 - [ ] **SWM-06**: Key Router rotates Tier1 per-model buckets (Groq, GitHub Models, SambaNova; Cerebras disabled by default) then Tier2 pools (Mistral, Z.ai, NIM/Cohere/OpenRouter :free)
@@ -104,10 +104,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ING-03 | Phase 5 | Pending |
 | ING-04 | Phase 6 | Pending |
 | ING-05 | Phase 6 | Pending |
-| ING-06 | Phase 2 | Pending |
-| SWM-01 | Phase 2 | Pending |
+| ING-06 | Phase 2 | Complete |
+| SWM-01 | Phase 2 | Complete |
 | SWM-02 | Phase 4 | Pending |
-| SWM-03 | Phase 2 | Pending |
+| SWM-03 | Phase 2 | Complete |
 | SWM-04 | Phase 3 | Pending |
 | SWM-05 | Phase 3 | Pending |
 | SWM-06 | Phase 3 | Pending |
