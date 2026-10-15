@@ -1,0 +1,26 @@
+{
+  "name": "@zod/config",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/env.js",
+  "types": "./dist/env.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/env.d.ts",
+      "default": "./dist/env.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "dotenv": "^16.6.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "typescript": "~5.9",
+    "vitest": "^3.2.7"
+  }
+}

@@ -1,0 +1,17 @@
+import { defineConfig } from 'vitest/config';
+
+export default defineConfig({
+  test: {
+    name: 'config',
+    environment: 'node',
+    include: ['src/**/*.test.ts'],
+    // Dummy secrets so importing the env singleton (parsed at module top)
+    // succeeds under test; missing-secret behavior is asserted via parseEnv({}).
+    env: {
+      PB_SERVICE_EMAIL: 'test@example.com',
+      PB_SERVICE_PASSWORD: 'test-password',
+      TURSO_DATABASE_URL: 'libsql://test.turso.io',
+      TURSO_AUTH_TOKEN: 'test-token',
+    },
+  },
+});
