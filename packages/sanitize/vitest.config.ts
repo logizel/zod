@@ -15,6 +15,8 @@ export default defineConfig({
       TURSO_DATABASE_URL: 'libsql://test.turso.io',
       TURSO_AUTH_TOKEN: 'test-token',
       JINA_API_KEY: 'test-jina-key',
+      GROQ_API_KEY: 'test-groq-key',
+      GITHUB_TOKEN: 'test-github-token',
     },
   },
   resolve: {

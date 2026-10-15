@@ -13,6 +13,8 @@ export default defineConfig({
       PB_SERVICE_PASSWORD: 'test-password',
       TURSO_DATABASE_URL: 'libsql://test.turso.io',
       TURSO_AUTH_TOKEN: 'test-token',
+      GROQ_API_KEY: 'test-groq-key',
+      GITHUB_TOKEN: 'test-github-token',
     },
   },
 });
