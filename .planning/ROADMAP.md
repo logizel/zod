@@ -107,7 +107,7 @@ Plans:
 - [x] 04-01-PLAN.md — Tracer: discord-router package + CTFtime → Scout → Link-Hopper → 80/20 → prize gate → auditor → Discord embed → routed (all 6 requirements covered in tracer path)
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 04-02-PLAN.md — Six remaining portal adapters (unstop, devfolio, devpost, luma, meetup, clist) + staggered 7-portal cron via single scheduler registry
+- [x] 04-02-PLAN.md — Six remaining portal adapters (unstop, devfolio, devpost, luma, meetup, clist) + staggered 7-portal cron via single scheduler registry
 
 **Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 04-03-PLAN.md — Live Discord gateway login + channel resolution + router service poll loop (audited→routed) + router-service tests + .env.example
@@ -170,7 +170,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 1. Foundation | 4/4 | Complete    | 2026-10-15 |
 | 2. Scraper Foundation | 3/3 | Complete    | 2026-10-15 |
 | 3. LLM Swarm | 3/3 | Complete    | 2026-10-15 |
-| 4. Events Vertical Slice | 1/3 | In Progress|  |
+| 4. Events Vertical Slice | 2/3 | In Progress|  |
 | 5. Jobs + Loot Pipelines | 0/TBD | Not started | - |
 | 6. Delivery + Local/Social Coverage | 0/TBD | Not started | - |
 | 7. Telemetry Dashboard + Ops Hardening | 0/TBD | Not started | - |
