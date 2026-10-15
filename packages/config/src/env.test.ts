@@ -7,6 +7,8 @@ const REQUIRED = {
   PB_SERVICE_PASSWORD: 's3cret',
   TURSO_DATABASE_URL: 'libsql://zod-turso.turso.io',
   TURSO_AUTH_TOKEN: 't0ken',
+  GROQ_API_KEY: 'groq-test-key',
+  GITHUB_TOKEN: 'github-test-token',
 } as const;
 
 describe('parseEnv', () => {

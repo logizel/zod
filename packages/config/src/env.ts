@@ -11,6 +11,9 @@ const EnvSchema = z.object({
   JINA_API_KEY: z.string().min(1),
   TURSO_DATABASE_URL: z.string(),
   TURSO_AUTH_TOKEN: z.string().min(1),
+  GROQ_API_KEY: z.string().min(1),
+  GITHUB_TOKEN: z.string().min(1),
+  SAMBANOVA_API_KEY: z.string().default(''),
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
 });
 
