@@ -29,4 +29,4 @@ export function prefilter(input: ScoutInput | unknown): PrefilterResult {
 }
 
 export { extractPastDate } from './expiry.js';
-export { isSpam } from './spam.js';
+export { isSpam, BLOCKLIST, SPAM_BLOCKLIST, spamBlocklist } from './spam.js';
