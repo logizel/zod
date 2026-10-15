@@ -508,18 +508,18 @@ sqlite3 /vol/pb_data/data.db ".backup main /vol/backups/pb-$(date +%F).db"
 | A4 | `turso` CLI + apt `cloudflare-main` repo support `linux/arm64` | Env availability | LOW — both publish ARM artifacts, but planner must assert arch in rebuild script rather than assume |
 | A5 | External watchdog (UptimeRobot-style) free tier suffices for dual-heartbeat | Open Q3 | LOW — planner's discretion; any dead-man-switch ping service works |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **PB server `v0.35.x` (locked D-14) vs `v0.40.5` latest?**
+1. **PB server `v0.35.x` (locked D-14) vs `v0.40.5` latest? — RESOLVED:** default honors the D-14 lock (`v0.35.x`); the upgrade choice is delegated to the 01-04 `checkpoint:human-verify` gate, which presents the `v0.40.5` Go `net/http` DoS-fix security delta and records the operator's explicit pick in the SUMMARY before rebuild.sh downloads any release asset.
    - What we know: `v0.35.0` tag + `linux_arm64` asset verified [CITED: release assets API]; `v0.40.5` (2026-10-08) includes a Go `net/http` DoS fix upstream advises applying [CITED: release notes]; SDK `0.28.x` supports server `v0.29+`.
    - What's unclear: whether any Phase 1–7 dependency needs `>0.35` APIs; whether the owner accepts a newer-than-locked server.
    - Recommendation: planner keeps `v0.35.x` as default (honors the lock) but adds a `checkpoint:human-verify` presenting the `v0.40.5` security delta; executor asserts the chosen version's checksum in rebuild.sh either way.
 
-2. **D-24 says "`kelektiv/node-cron` (never `node-cron`)" but the locked API is `node-cron` v4's — which to honor?**
+2. **D-24 says "`kelektiv/node-cron` (never `node-cron`)" but the locked API is `node-cron` v4's — which to honor? — RESOLVED:** the *API + behavior* (`schedule` with `noOverlap` + `maxRandomDelay` + `timezone`, per D-24 intent) stays locked; only the *specifier* is corrected to registry `node-cron@^4.6.0`, which is the package that implements that exact API (the `kelektiv/*` GitHub shorthand names a different package family and is refused under git-fetch restrictions). Plans 01-03 and 01-04 install from the registry specifier.
    - What we know: registry `node-cron@4.6.0` (repo `node-cron/node-cron`) implements exactly `schedule(expr, fn, {timezone, noOverlap, maxRandomDelay})` [VERIFIED: Context7 + npm]; the `kelektiv/*` GitHub path names the `cron`-family `CronJob` API and is uninstallable under git-fetch restrictions (observed `EALLOWGIT`).
    - Recommendation: planner treats the *API + behavior* (noOverlap + jitter + named jobs) as the locked intent and the *specifier* as corrected to registry `node-cron@^4.6.0`. Flag in plan review, not a user re-discuss — the intent is unambiguous.
 
-3. **Watchdog provider + backup object-storage target (agent's discretion)?**
+3. **Watchdog provider + backup object-storage target (agent's discretion)? — RESOLVED:** planner/executor picks defaults under agent's discretion (dead-man-switch ping service + S3-compatible bucket) with env-plumbed URLs/keys so either swaps without code changes, and records the chosen provider plus target in the plan SUMMARY. No user decision required unless the owner has existing accounts to reuse.
    - What we know: needs are a dead-man-switch ping service (free) and an S3-compatible bucket for nightly `.backup` files.
    - Recommendation: planner picks defaults (e.g., UptimeRobot cron + Cloudflare R2 free tier) with env-plumbed URLs/keys so either can be swapped without code changes. No user decision required unless the owner has existing accounts to reuse.
 
