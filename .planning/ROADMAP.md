@@ -86,7 +86,7 @@ Plans:
 **Plans**: TBD
 - [x] 03-01-PLAN.md
 - [x] 03-02-PLAN.md
-- [ ] 03-03-PLAN.md
+- [x] 03-03-PLAN.md
 
 ### Phase 4: Events Vertical Slice
 
@@ -159,7 +159,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 |-------|----------------|--------|-----------|
 | 1. Foundation | 4/4 | Complete    | 2026-10-15 |
 | 2. Scraper Foundation | 3/3 | Complete    | 2026-10-15 |
-| 3. LLM Swarm | 2/3 | In Progress|  |
+| 3. LLM Swarm | 3/3 | In Progress|  |
 | 4. Events Vertical Slice | 0/TBD | Not started | - |
 | 5. Jobs + Loot Pipelines | 0/TBD | Not started | - |
 | 6. Delivery + Local/Social Coverage | 0/TBD | Not started | - |
