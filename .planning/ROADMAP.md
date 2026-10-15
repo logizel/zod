@@ -1,0 +1,128 @@
+# Roadmap: Zod
+
+## Overview
+
+Zod builds as MVP vertical slices over a load-bearing foundation: provision the Oracle VM with hot/cold memory and reclaim defense (Phase 1), establish the fetch-and-filter contract (Phase 2), harden the LLM gateway (Phase 3), then prove the first end-to-end verified Discord alert on national event portals (Phase 4) before multiplying into jobs/loot pipelines (Phase 5), local/social coverage plus full routing polish (Phase 6), and the locked telemetry dashboard with ops hardening (Phase 7).
+
+## Phases
+
+**Phase Numbering:**
+- Integer phases (1, 2, 3): Planned milestone work
+- Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
+
+Decimal phases appear between their surrounding integers in numeric order.
+
+- [ ] **Phase 1: Foundation** - Oracle VM, hot/cold memory, tunnel, scheduler skeleton with reclaim defense
+- [ ] **Phase 2: Scraper Foundation** - Shared browser queue, sanitizer, Scout filter, scratchpad state
+- [ ] **Phase 3: LLM Swarm** - Gateway router with 2D buckets, baton-pass, length-stitch, chaos tests
+- [ ] **Phase 4: Events Vertical Slice** - First end-to-end verified event alert in Discord
+- [ ] **Phase 5: Jobs + Loot Pipelines** - ATS polling, fresher/scam gates, loot verification, dedup hardening
+- [ ] **Phase 6: Delivery + Local/Social Coverage** - Full 10-channel routing, reminders, DK/Udupi, relay, X/LinkedIn
+- [ ] **Phase 7: Telemetry Dashboard + Ops Hardening** - Locked SSE dashboard, health grid, GC verification, kill-tests
+
+## Phase Details
+
+### Phase 1: Foundation
+**Goal**: The system has a surviving home — provisioned VM, live databases, closed network, and a scheduler that cannot stampede
+**Mode:** mvp
+**Depends on**: Nothing (first phase)
+**Requirements**: MEM-01, MEM-02, MEM-03, OPS-01
+**Success Criteria** (what must be TRUE):
+  1. Operator runs one documented rebuild command and gets a working VM with PocketBase and Turso schemas back
+  2. Opportunities and telemetry records written locally also survive a simulated VM wipe via the off-server cold ledger
+  3. No inbound firewall port is open, yet the operator reaches the locked dashboard shell through Zero Trust
+  4. Scheduler polls run without overlapping executions and every secret lives in env, never in git history
+**Plans**: TBD
+
+### Phase 2: Scraper Foundation
+**Goal**: Any candidate URL becomes cheap, clean markdown with spam filtered and work-state tracked before any LLM is spent
+**Mode:** mvp
+**Depends on**: Phase 1
+**Requirements**: ING-06, SWM-01, SWM-03
+**Success Criteria** (what must be TRUE):
+  1. A JS-gated event page resolves to capped markdown through the shared browser without opening more than 3 tabs
+  2. Sanitized payloads measure ≥85% smaller than raw HTML on representative sources
+  3. Expired and obvious-spam items are rejected from titles/snippets before any scrape happens
+  4. Every candidate URL carries a persistent Task_Scratchpad that resumes its STEP_1..STEP_4 position after a crash
+**Plans**: TBD
+
+### Phase 3: LLM Swarm
+**Goal**: Auditors get reliable model answers despite free-tier quota walls — failures hand off, never re-scrape
+**Mode:** mvp
+**Depends on**: Phase 2
+**Requirements**: SWM-04, SWM-05, SWM-06
+**Success Criteria** (what must be TRUE):
+  1. A forced 429 mid-audit cools that model bucket for 60s and completes the audit on the next bucket with zero re-scraping
+  2. A forced length-cutoff audit is stitched via continuation into one complete JSON verdict
+  3. No autonomous traffic reaches Cerebras (disabled by default) and Tier2 overflow engages only after Tier1 buckets exhaust
+  4. Operator can see per-bucket state (READY / 60s-COOLDOWN / DAILY-CAP) from gateway telemetry
+**Plans**: TBD
+
+### Phase 4: Events Vertical Slice
+**Goal**: The first verified, deduplicated high-signal event alert lands in Discord with an official source link
+**Mode:** mvp
+**Depends on**: Phase 3
+**Requirements**: ING-01, SWM-02, EVT-01, EVT-02, EVT-05, UI-01
+**Success Criteria** (what must be TRUE):
+  1. User sees audit cards for national-portal events in Discord with title, organizer, dates, prize breakdown, merged links, and a 1-line audit
+  2. An online event with verified liquid cash ≥₹1,00,000 appears in #💻-online-1lakh-plus while a credit-inflated "₹5L prize" does not
+  3. A Sys/CP/Sec event fast-tracks to #🔥-priority-sys-cp-sec after its legitimacy check
+  4. An aggregator link resolves through to the official event domain within 2 hops before any verdict is posted
+  5. A non-technical business event is rejected by the 80/20 domain filter and never reaches a channel
+**Plans**: TBD
+**UI hint**: yes
+
+### Phase 5: Jobs + Loot Pipelines
+**Goal**: Users get fresher-true job alerts and verified free-perk diversions with duplicates merged and scams rejected
+**Mode:** mvp
+**Depends on**: Phase 4
+**Requirements**: ING-03, EVT-07, JOB-01, JOB-02, JOB-03, JOB-04, JOB-05, LOT-01, LOT-02, LOT-03, LOT-04
+**Success Criteria** (what must be TRUE):
+  1. User sees a true 0–1yr/intern India role in the correct jobs channel with eligibility and a direct apply link
+  2. A 2+yr role, an unpaid non-fellowship, and a pay-for-training listing are all rejected and never alerted
+  3. A Sys/Cloud/DevOps role lands in #⚙️-jobs-sys-cloud-devops while other verified SWE roles land in #💼-jobs-general-swe
+  4. An online event failing the ₹1L rule but carrying a real free perk diverts to #🎁-free-swag-and-credits with India-shipping verified; a US-only drop is rejected
+  5. The same event seen on two portals arrives as one merged alert with unified registration links
+**Plans**: TBD
+
+### Phase 6: Delivery + Local/Social Coverage
+**Goal**: All 10 channels route correctly with reminders and bookmarks, fed by local, relay, and social sources
+**Mode:** mvp
+**Depends on**: Phase 5
+**Requirements**: ING-02, ING-04, ING-05, EVT-03, EVT-04, EVT-06, UI-02, MEM-04
+**Success Criteria** (what must be TRUE):
+  1. User sees local DK/Udupi offline events in #📍-local-dk-udupi regardless of prize size, and quality out-of-town events with a selection round in #✈️-travel-curated
+  2. A legit TBA-prize event fires Ping #1 to #⏳-early-tba-radar and gets re-audited on the 48h loop
+  3. User reacts 📌 to an opportunity and receives its 48h/24h deadline reminders
+  4. An external Discord #announcements post appears in #raw-incoming-feeds via the official Gateway relay
+  5. Feedback posted in #🧠-bot-training-chat produces a confirmation reply and changes subsequent Auditor/Curator verdicts
+**Plans**: TBD
+**UI hint**: yes
+
+### Phase 7: Telemetry Dashboard + Ops Hardening
+**Goal**: The owner watches the whole swarm live on a locked read-only dashboard that survives tunnel and VM failures
+**Mode:** mvp
+**Depends on**: Phase 6
+**Requirements**: DSH-01, DSH-02, DSH-03, DSH-04, MEM-05
+**Success Criteria** (what must be TRUE):
+  1. Owner opens the dashboard and sees rolling agent slots with live micro-step tickers including 429 baton-passes
+  2. Owner sees the 2D pool health grid (READY/ACTIVE/60s-COOLDOWN/DAILY-CAP) and filterable read-only opportunity, TBA, and audit/rejection boards
+  3. An unauthenticated request to the dashboard or its SSE stream is rejected before anything renders
+  4. Killing cloudflared leaves pipelines running with alerts queued, and heavy text is purged on schedule while tombstones and taste rules survive
+**Plans**: TBD
+**UI hint**: yes
+
+## Progress
+
+**Execution Order:**
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
+
+| Phase | Plans Complete | Status | Completed |
+|-------|----------------|--------|-----------|
+| 1. Foundation | 0/TBD | Not started | - |
+| 2. Scraper Foundation | 0/TBD | Not started | - |
+| 3. LLM Swarm | 0/TBD | Not started | - |
+| 4. Events Vertical Slice | 0/TBD | Not started | - |
+| 5. Jobs + Loot Pipelines | 0/TBD | Not started | - |
+| 6. Delivery + Local/Social Coverage | 0/TBD | Not started | - |
+| 7. Telemetry Dashboard + Ops Hardening | 0/TBD | Not started | - |

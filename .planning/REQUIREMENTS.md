@@ -99,51 +99,51 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ING-01 | Phase TBD | Pending |
-| ING-02 | Phase TBD | Pending |
-| ING-03 | Phase TBD | Pending |
-| ING-04 | Phase TBD | Pending |
-| ING-05 | Phase TBD | Pending |
-| ING-06 | Phase TBD | Pending |
-| SWM-01 | Phase TBD | Pending |
-| SWM-02 | Phase TBD | Pending |
-| SWM-03 | Phase TBD | Pending |
-| SWM-04 | Phase TBD | Pending |
-| SWM-05 | Phase TBD | Pending |
-| SWM-06 | Phase TBD | Pending |
-| EVT-01 | Phase TBD | Pending |
-| EVT-02 | Phase TBD | Pending |
-| EVT-03 | Phase TBD | Pending |
-| EVT-04 | Phase TBD | Pending |
-| EVT-05 | Phase TBD | Pending |
-| EVT-06 | Phase TBD | Pending |
-| EVT-07 | Phase TBD | Pending |
-| JOB-01 | Phase TBD | Pending |
-| JOB-02 | Phase TBD | Pending |
-| JOB-03 | Phase TBD | Pending |
-| JOB-04 | Phase TBD | Pending |
-| JOB-05 | Phase TBD | Pending |
-| LOT-01 | Phase TBD | Pending |
-| LOT-02 | Phase TBD | Pending |
-| LOT-03 | Phase TBD | Pending |
-| LOT-04 | Phase TBD | Pending |
-| MEM-01 | Phase TBD | Pending |
-| MEM-02 | Phase TBD | Pending |
-| MEM-03 | Phase TBD | Pending |
-| MEM-04 | Phase TBD | Pending |
-| MEM-05 | Phase TBD | Pending |
-| UI-01 | Phase TBD | Pending |
-| UI-02 | Phase TBD | Pending |
-| DSH-01 | Phase TBD | Pending |
-| DSH-02 | Phase TBD | Pending |
-| DSH-03 | Phase TBD | Pending |
-| DSH-04 | Phase TBD | Pending |
-| OPS-01 | Phase TBD | Pending |
+| ING-01 | Phase 4 | Pending |
+| ING-02 | Phase 6 | Pending |
+| ING-03 | Phase 5 | Pending |
+| ING-04 | Phase 6 | Pending |
+| ING-05 | Phase 6 | Pending |
+| ING-06 | Phase 2 | Pending |
+| SWM-01 | Phase 2 | Pending |
+| SWM-02 | Phase 4 | Pending |
+| SWM-03 | Phase 2 | Pending |
+| SWM-04 | Phase 3 | Pending |
+| SWM-05 | Phase 3 | Pending |
+| SWM-06 | Phase 3 | Pending |
+| EVT-01 | Phase 4 | Pending |
+| EVT-02 | Phase 4 | Pending |
+| EVT-03 | Phase 6 | Pending |
+| EVT-04 | Phase 6 | Pending |
+| EVT-05 | Phase 4 | Pending |
+| EVT-06 | Phase 6 | Pending |
+| EVT-07 | Phase 5 | Pending |
+| JOB-01 | Phase 5 | Pending |
+| JOB-02 | Phase 5 | Pending |
+| JOB-03 | Phase 5 | Pending |
+| JOB-04 | Phase 5 | Pending |
+| JOB-05 | Phase 5 | Pending |
+| LOT-01 | Phase 5 | Pending |
+| LOT-02 | Phase 5 | Pending |
+| LOT-03 | Phase 5 | Pending |
+| LOT-04 | Phase 5 | Pending |
+| MEM-01 | Phase 1 | Pending |
+| MEM-02 | Phase 1 | Pending |
+| MEM-03 | Phase 1 | Pending |
+| MEM-04 | Phase 6 | Pending |
+| MEM-05 | Phase 7 | Pending |
+| UI-01 | Phase 4 | Pending |
+| UI-02 | Phase 6 | Pending |
+| DSH-01 | Phase 7 | Pending |
+| DSH-02 | Phase 7 | Pending |
+| DSH-03 | Phase 7 | Pending |
+| DSH-04 | Phase 7 | Pending |
+| OPS-01 | Phase 1 | Pending |
 
 **Coverage:**
 - v1 requirements: 40 total
-- Mapped to phases: 0
-- Unmapped: 40 ⚠️
+- Mapped to phases: 40
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-10-15*
