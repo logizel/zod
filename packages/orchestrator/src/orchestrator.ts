@@ -24,6 +24,11 @@ import {
   parseEventsVerdict,
   type EventsVerdict,
 } from './rule-packs/events.js';
+import {
+  buildLocalMessages,
+  parseLocalVerdict,
+  type LocalVerdict,
+} from './rule-packs/local.js';
 import { evaluateLootGates, BUCKET_LOOT, type LootGateResult } from './gates/loot.js';
 import { readLootRules } from './loot-faq.js';
 import { passesPrizeGate } from '@zod/discord-router/prize-gate';
@@ -128,6 +133,8 @@ async function processRow(
       return await drainLootRow(pb, router, rowLog, row);
     case 'events':
       return await processEventsRow(pb, router, rowLog, row);
+    case 'local':
+      return await drainLocalRow(pb, router, rowLog, row);
     case 'jobs':
     default:
       return await processJobsRow(pb, router, rowLog, row);
@@ -534,4 +541,118 @@ async function processEventsRow(
   await writeTombstone(pb, candidateUrl, 'prize_below_threshold', 'auditor');
   await scratchpadColl(pb).update(row.id, { step_position: 'STEP_3' });
   rowLog.info({ reasonCode: 'prize_below_threshold' }, 'tombstone written (prize below threshold)');
+}
+
+/**
+ * Local audit flow (D-02): rule pack → router → geo classification → bucket
+ * routing → opportunities write | tombstone.
+ *
+ * Geo classification is location-primary: event location text / venue city is
+ * the primary signal; organizer city is secondary. "Selection round" /
+ * "registration" keyword distinguishes travel-curated (has selection) from
+ * walk-in-reject (no selection round).
+ *
+ *   - DK/Udupi offline → #📍-local-dk-udupi regardless of prize size
+ *   - Out-of-town offline + hasSelectionRound → #✈️-travel-curated
+ *   - Out-of-town offline + !hasSelectionRound → tombstone walk_in_rejected
+ *   - Online → standard prize gate (>= ₹1L), else perk divert / tombstone
+ *
+ * Follows the same buildMessages → router.complete → parseVerdict → gates →
+ * write/tombstone pattern as processEventsRow.
+ */
+async function drainLocalRow(
+  pb: PbLike,
+  router: LlmRouter,
+  rowLog: Logger,
+  row: TaskScratchpadRow,
+): Promise<void> {
+  const candidateUrl = row.candidate_url;
+  const candidateTitle = row.candidate_title ?? '';
+  const fetchedText = row.partial_buffer ?? '';
+
+  // Step 1: build local messages + call LlmRouter (auditor-local-1).
+  const messages = buildLocalMessages({
+    pipeline: 'local',
+    candidateUrl,
+    candidateTitle,
+    fetchedText,
+  });
+
+  const result = await router.complete({
+    messages,
+    step1: '',
+    step2: fetchedText,
+    slot: 'auditor-local-1',
+    pipeline: 'local',
+    url: candidateUrl,
+    priority: 2,
+  });
+
+  // UNVERIFIED / POOL_SATURATED: leave at STEP_2, never write, never crash.
+  if (result.verdict === 'UNVERIFIED' || result.verdict === 'POOL_SATURATED') {
+    rowLog.info({ verdict: result.verdict, reason: result.reason }, 'no verdict; leaving at STEP_2');
+    return;
+  }
+
+  // Step 2: parse the verdict through the zod boundary.
+  const verdict = parseLocalVerdict(result.verdict);
+  if (!verdict) {
+    rowLog.warn({ stage: 'verdict_parse' }, 'verdict parse failed; tombstoning');
+    await writeTombstone(pb, candidateUrl, 'verdict_parse_failed', 'auditor');
+    await scratchpadColl(pb).update(row.id, { step_position: 'STEP_3' });
+    return;
+  }
+
+  // Geo classification (D-02): location-primary.
+  const isDkUdupi = /DK|Udupi/i.test(verdict.location);
+
+  let bucketChannel: string;
+  if (verdict.isOffline && isDkUdupi) {
+    // DK/Udupi offline → #📍-local-dk-udupi regardless of prize size.
+    bucketChannel = '#📍-local-dk-udupi';
+  } else if (verdict.isOffline && verdict.hasSelectionRound) {
+    // Out-of-town offline + verified selection round → #✈️-travel-curated.
+    bucketChannel = '#✈️-travel-curated';
+  } else if (verdict.isOffline && !verdict.hasSelectionRound) {
+    // Walk-in low-effort out-of-town → tombstone walk_in_rejected.
+    await writeTombstone(pb, candidateUrl, 'walk_in_rejected', 'auditor');
+    await scratchpadColl(pb).update(row.id, { step_position: 'STEP_3' });
+    rowLog.info({ reasonCode: 'walk_in_rejected' }, 'tombstone written (walk-in rejected)');
+    return;
+  } else {
+    // Online events → standard prize gate (>= ₹1L liquid cash).
+    const prizeGatePasses = passesPrizeGate(verdict.prize_text, verdict.prize_cash_inr);
+    if (prizeGatePasses) {
+      bucketChannel = verdict.category === 'sys-cp-sec' ? '#🔥-priority-sys-cp-sec' : '#-online-1lakh-plus';
+    } else if (verdict.perk_hint) {
+      // Perk-carrying online event → divert to loot branch on the same row.
+      await drainLootRow(pb, router, rowLog, row);
+      return;
+    } else {
+      await writeTombstone(pb, candidateUrl, 'prize_below_threshold', 'auditor');
+      await scratchpadColl(pb).update(row.id, { step_position: 'STEP_3' });
+      rowLog.info({ reasonCode: 'prize_below_threshold' }, 'tombstone written (prize below threshold)');
+      return;
+    }
+  }
+
+  // Admit → createOpportunityIfAbsent with pipeline: 'local' (idempotent drain).
+  const urlHash = hashUrl(normalizeUrl(candidateUrl));
+  await createOpportunityIfAbsent(pb, {
+    url_hash: urlHash,
+    fingerprint_hash: urlHash,
+    pipeline: 'local',
+    bucket_channel: bucketChannel,
+    status: 'audited',
+    title: candidateTitle,
+    organizer: verdict.organizer,
+    links: { official: candidateUrl },
+    prize_cash_inr: verdict.prize_cash_inr ?? null,
+    prize_text: verdict.prize_text,
+    audit_summary: verdict.audit_summary,
+    deadlines: { tba: verdict.prize_cash_inr === null || verdict.dates === null },
+    description_raw: fetchedText.slice(0, 8000),
+  });
+  await scratchpadColl(pb).update(row.id, { step_position: 'STEP_3' });
+  rowLog.info({ bucketChannel }, 'local opportunity written (audited)');
 }

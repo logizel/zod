@@ -845,3 +845,322 @@ describe('orchestrator drain backstop (D-10)', () => {
     expect(collections.scratchpad.update).toHaveBeenCalledWith('scratch-jobs-1', { step_position: 'STEP_3' });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Local scratch row helper
+// ---------------------------------------------------------------------------
+
+function makeLocalScratchRow(overrides: Partial<TaskScratchpadRow> = {}): TaskScratchpadRow {
+  return {
+    id: 'scratch-local-1',
+    created: '2026-10-16T08:00:00Z',
+    updated: '2026-10-16T08:00:00Z',
+    candidate_url: 'https://nitk.edu.in/event/hackathon-2026',
+    step_position: 'STEP_2',
+    pipeline: 'local',
+    candidate_title: 'NITK Hackathon 2026',
+    partial_buffer: '',
+    attempts: 0,
+    last_error: null,
+    ...overrides,
+  } as TaskScratchpadRow;
+}
+
+// ---------------------------------------------------------------------------
+// Local pipeline tests
+// ---------------------------------------------------------------------------
+
+describe('orchestrator drainStep2Rows local branch', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('DK/Udupi offline event routes to #📍-local-dk-udupi regardless of prize size', async () => {
+    const { pb, collections } = makePb({
+      scratchpadRows: [makeLocalScratchRow()],
+      existingOpportunities: [],
+    });
+
+    const router = makeRouter(() => ({
+      title: 'NITK Hackathon 2026',
+      organizer: 'NITK Surathkal',
+      location: 'Surathkal, DK',
+      isOffline: true,
+      hasSelectionRound: false,
+      category: 'general',
+      prize_cash_inr: 50000,
+      prize_text: '₹50,000 cash',
+      perk_hint: null,
+      dates: null,
+      audit_summary: 'Local hackathon at NITK DK, below ₹1L prize',
+    }));
+
+    await drainStep2Rows({
+      pb,
+      router: router as any,
+      pageSize: 25,
+    });
+
+    expect(collections.opportunities.create).toHaveBeenCalledTimes(1);
+    const opp = (collections.opportunities.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(opp.status).toBe('audited');
+    expect(opp.pipeline).toBe('local');
+    expect(opp.bucket_channel).toBe('#📍-local-dk-udupi');
+    expect(opp.deadlines.tba).toBe(true);
+    expect(collections.scratchpad.update).toHaveBeenCalledWith('scratch-local-1', { step_position: 'STEP_3' });
+    expect(collections.tombstone_ledger.create).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it('DK/Udupi offline event with high prize still routes to #📍-local-dk-udupi (prize gate bypassed)', async () => {
+    const { pb, collections } = makePb({
+      scratchpadRows: [makeLocalScratchRow({ candidate_url: 'https://nitk.edu.in/event/ctf-2026' })],
+      existingOpportunities: [],
+    });
+
+    const router = makeRouter(() => ({
+      title: 'NITK CTF 2026',
+      organizer: 'NITK Surathkal',
+      location: 'DK',
+      isOffline: true,
+      hasSelectionRound: false,
+      category: 'sys-cp-sec',
+      prize_cash_inr: 500000,
+      prize_text: '₹5,00,000 cash',
+      perk_hint: null,
+      dates: { start: '2026-12-15T09:00:00Z', end: '2026-12-16T18:00:00Z' },
+      audit_summary: 'NITK CTF, ₹5L cash prize, DK-local',
+    }));
+
+    await drainStep2Rows({
+      pb,
+      router: router as any,
+      pageSize: 25,
+    });
+
+    expect(collections.opportunities.create).toHaveBeenCalledTimes(1);
+    const opp = (collections.opportunities.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(opp.bucket_channel).toBe('#📍-local-dk-udupi');
+    expect(opp.deadlines.tba).toBe(false);
+    vi.unstubAllGlobals();
+  });
+
+  it('Udupi offline event routes to #📍-local-dk-udupi (case-insensitive location match)', async () => {
+    const { pb, collections } = makePb({
+      scratchpadRows: [makeLocalScratchRow({ candidate_url: 'https://manipal.edu.in/event/fest-2026' })],
+      existingOpportunities: [],
+    });
+
+    const router = makeRouter(() => ({
+      title: 'Manipal Fest 2026',
+      organizer: 'MIT Manipal',
+      location: 'Udupi, Karnataka',
+      isOffline: true,
+      hasSelectionRound: false,
+      category: 'general',
+      prize_cash_inr: null,
+      prize_text: 'TBA',
+      perk_hint: null,
+      dates: null,
+      audit_summary: 'Manipal fest, Udupi, TBA prize',
+    }));
+
+    await drainStep2Rows({
+      pb,
+      router: router as any,
+      pageSize: 25,
+    });
+
+    expect(collections.opportunities.create).toHaveBeenCalledTimes(1);
+    const opp = (collections.opportunities.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(opp.bucket_channel).toBe('#📍-local-dk-udupi');
+    vi.unstubAllGlobals();
+  });
+
+  it('out-of-town offline with selection round routes to #✈️-travel-curated', async () => {
+    const { pb, collections } = makePb({
+      scratchpadRows: [makeLocalScratchRow({ candidate_url: 'https://iitbombay.edu.in/event/hackathon-2026' })],
+      existingOpportunities: [],
+    });
+
+    const router = makeRouter(() => ({
+      title: 'IIT Bombay Hackathon',
+      organizer: 'IIT Bombay',
+      location: 'Mumbai',
+      isOffline: true,
+      hasSelectionRound: true,
+      category: 'general',
+      prize_cash_inr: null,
+      prize_text: 'TBA',
+      perk_hint: null,
+      dates: null,
+      audit_summary: 'IIT Bombay hackathon, selection round, travel-curated',
+    }));
+
+    await drainStep2Rows({
+      pb,
+      router: router as any,
+      pageSize: 25,
+    });
+
+    expect(collections.opportunities.create).toHaveBeenCalledTimes(1);
+    const opp = (collections.opportunities.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(opp.bucket_channel).toBe('#✈️-travel-curated');
+    expect(opp.pipeline).toBe('local');
+    vi.unstubAllGlobals();
+  });
+
+  it('out-of-town offline without selection round → tombstone walk_in_rejected', async () => {
+    const { pb, collections } = makePb({
+      scratchpadRows: [makeLocalScratchRow({ candidate_url: 'https://bangalore.edu.in/event/workshop-2026' })],
+      existingOpportunities: [],
+    });
+
+    const router = makeRouter(() => ({
+      title: 'Bangalore Workshop',
+      organizer: 'Some College',
+      location: 'Bangalore',
+      isOffline: true,
+      hasSelectionRound: false,
+      category: 'general',
+      prize_cash_inr: null,
+      prize_text: 'TBA',
+      perk_hint: null,
+      dates: null,
+      audit_summary: 'Bangalore workshop, walk-in, no selection round',
+    }));
+
+    await drainStep2Rows({
+      pb,
+      router: router as any,
+      pageSize: 25,
+    });
+
+    expect(collections.opportunities.create).not.toHaveBeenCalled();
+    expect(collections.tombstone_ledger.create).toHaveBeenCalledTimes(1);
+    const tsCall = (collections.tombstone_ledger.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(tsCall.terminal_status).toBe('walk_in_rejected');
+    expect(collections.scratchpad.update).toHaveBeenCalledWith('scratch-local-1', { step_position: 'STEP_3' });
+    vi.unstubAllGlobals();
+  });
+
+  it('online event with prize gate pass → routes to category bucket', async () => {
+    const { pb, collections } = makePb({
+      scratchpadRows: [makeLocalScratchRow({ candidate_url: 'https://example.com/event/online-ctf-2026' })],
+      existingOpportunities: [],
+    });
+
+    const router = makeRouter(() => ({
+      title: 'Online CTF 2026',
+      organizer: 'CyberSec India',
+      location: 'Online',
+      isOffline: false,
+      hasSelectionRound: false,
+      category: 'sys-cp-sec',
+      prize_cash_inr: 150000,
+      prize_text: '₹1,50,000 cash',
+      perk_hint: null,
+      dates: { start: '2026-12-15T09:00:00Z', end: '2026-12-16T18:00:00Z' },
+      audit_summary: 'Online CTF, ₹1.5L cash prize',
+    }));
+
+    await drainStep2Rows({
+      pb,
+      router: router as any,
+      pageSize: 25,
+    });
+
+    expect(collections.opportunities.create).toHaveBeenCalledTimes(1);
+    const opp = (collections.opportunities.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(opp.bucket_channel).toBe('#🔥-priority-sys-cp-sec');
+    expect(opp.pipeline).toBe('local');
+    vi.unstubAllGlobals();
+  });
+
+  it('online event with prize gate fail → tombstone prize_below_threshold', async () => {
+    const { pb, collections } = makePb({
+      scratchpadRows: [makeLocalScratchRow({ candidate_url: 'https://example.com/event/online-meetup-2026' })],
+      existingOpportunities: [],
+    });
+
+    const router = makeRouter(() => ({
+      title: 'Online Meetup',
+      organizer: 'Some Org',
+      location: 'Online',
+      isOffline: false,
+      hasSelectionRound: false,
+      category: 'general',
+      prize_cash_inr: 50000,
+      prize_text: '₹50,000 cash',
+      perk_hint: null,
+      dates: null,
+      audit_summary: 'Online meetup, below ₹1L',
+    }));
+
+    await drainStep2Rows({
+      pb,
+      router: router as any,
+      pageSize: 25,
+    });
+
+    expect(collections.opportunities.create).not.toHaveBeenCalled();
+    expect(collections.tombstone_ledger.create).toHaveBeenCalledTimes(1);
+    const tsCall = (collections.tombstone_ledger.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(tsCall.terminal_status).toBe('prize_below_threshold');
+    vi.unstubAllGlobals();
+  });
+
+  it('UNVERIFIED verdict writes nothing and leaves row at STEP_2', async () => {
+    const { pb, collections } = makePb({
+      scratchpadRows: [makeLocalScratchRow()],
+      existingOpportunities: [],
+    });
+
+    const router = makeRouter(() => 'UNVERIFIED');
+
+    await drainStep2Rows({
+      pb,
+      router: router as any,
+      pageSize: 25,
+    });
+
+    expect(collections.opportunities.create).not.toHaveBeenCalled();
+    expect(collections.tombstone_ledger.create).not.toHaveBeenCalled();
+    expect(collections.scratchpad.update).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it('verdict parse failure → tombstone verdict_parse_failed', async () => {
+    const { pb, collections } = makePb({
+      scratchpadRows: [makeLocalScratchRow()],
+      existingOpportunities: [],
+    });
+
+    // Missing required location field → zod parse failure
+    const router = makeRouter(() => ({
+      title: 'Test',
+      organizer: 'Org',
+      // location missing → parse fails
+      isOffline: true,
+      hasSelectionRound: false,
+      prize_cash_inr: null,
+      prize_text: 'TBA',
+      dates: null,
+      audit_summary: 'Test',
+    }));
+
+    await drainStep2Rows({
+      pb,
+      router: router as any,
+      pageSize: 25,
+    });
+
+    expect(collections.opportunities.create).not.toHaveBeenCalled();
+    expect(collections.tombstone_ledger.create).toHaveBeenCalledTimes(1);
+    const tsCall = (collections.tombstone_ledger.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(tsCall.terminal_status).toBe('verdict_parse_failed');
+    expect(collections.scratchpad.update).toHaveBeenCalledWith('scratch-local-1', { step_position: 'STEP_3' });
+    vi.unstubAllGlobals();
+  });
+});
