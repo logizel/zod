@@ -9,7 +9,7 @@
 
 - [x] **ING-01**: System polls structured event portals (Unstop, Devfolio, Devpost, Luma, Meetup, CTFtime, CLIST.by) via JSON APIs/RSS first every 15–30 minutes
 - [ ] **ING-02**: System crawls DK & Udupi college/community watchlist domains and bio-link pages every 2–4 hours
-- [ ] **ING-03**: System polls job/fellowship portals (Greenhouse, Lever, Ashby, YC, Wellfound, Cutshort, Cuvette, LFX/GSoC/MLH) via search-index + direct polling every 30–60 minutes
+- [x] **ING-03**: System polls job/fellowship portals (Greenhouse, Lever, Ashby, YC, Wellfound, Cutshort, Cuvette, LFX/GSoC/MLH) via search-index + direct polling every 30–60 minutes
 - [ ] **ING-04**: Bot relays external Discord #announcements into private #raw-incoming-feeds via official Bot Gateway (no self-bot)
 - [ ] **ING-05**: System polls X/LinkedIn via exported session cookies on randomized 45–90 minute jitter plus search-index fallback
 - [x] **ING-06**: Sanitizer strips scripts/styles/SVG/nav via Jina-first + shared headless browser fallback, cutting token payload ≥85%
@@ -101,7 +101,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 |-------------|-------|--------|
 | ING-01 | Phase 4 | Complete |
 | ING-02 | Phase 6 | Pending |
-| ING-03 | Phase 5 | Pending |
+| ING-03 | Phase 5 | Complete |
 | ING-04 | Phase 6 | Pending |
 | ING-05 | Phase 6 | Pending |
 | ING-06 | Phase 2 | Complete |

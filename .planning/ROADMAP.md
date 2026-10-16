@@ -127,7 +127,7 @@ Plans:
   4. An online event failing the ₹1L rule but carrying a real free perk diverts to #🎁-free-swag-and-credits with India-shipping verified; a US-only drop is rejected
   5. The same event seen on two portals arrives as one merged alert with unified registration links
 
-**Plans**: 9 plans
+**Plans**: 7/9 plans executed
 
 **Wave 1**
 - [x] 05-08-PLAN.md — Contract foundations: D-14 one-way schema migration + new-channel env keys + resolveChannel env-ID-first + per-pipeline audit-card fields (blocking-human D-14 checkpoint) (JOB-02, JOB-04, JOB-05, LOT-01..04)
@@ -142,7 +142,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 - [ ] 05-05-PLAN.md — EVT-07 fuzzy merger: ≥0.9/±3d/organizer gate, intake skip + drain backstop, merged tombstones, link union (EVT-07)
-- [ ] 05-07-PLAN.md — YC + Wellfound browser-mode sources: logged-out accessibility probe + two logged-out listing adapters into the jobs fan-out (ING-03)
+- [x] 05-07-PLAN.md — YC + Wellfound browser-mode sources: logged-out accessibility probe + two logged-out listing adapters into the jobs fan-out (ING-03)
 
 **Wave 5** *(blocked on Wave 4 completion)*
 - [ ] 05-06-PLAN.md — Cross-pipeline drain ledger + .env.example bijection guard + full-suite phase gate (all 11 requirements)
@@ -190,6 +190,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 2. Scraper Foundation | 3/3 | Complete    | 2026-10-15 |
 | 3. LLM Swarm | 3/3 | Complete    | 2026-10-15 |
 | 4. Events Vertical Slice | 3/3 | Complete    | 2026-10-16 |
-| 5. Jobs + Loot Pipelines | 5/9 | Executing | 2026-10-16 |
+| 5. Jobs + Loot Pipelines | 7/9 | In Progress|  |
 | 6. Delivery + Local/Social Coverage | 0/TBD | Not started | - |
 | 7. Telemetry Dashboard + Ops Hardening | 0/TBD | Not started | - |
