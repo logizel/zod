@@ -13,6 +13,8 @@ import {
   SCHEDULER_TIMEZONE,
   STUB_JOBS,
   GATEWAY_JOBS,
+  JOB_POLL_JOBS,
+  AUDIT_JOBS,
   computeBufferHoldMiB,
   runStubTick,
   runGatewayTick,
@@ -27,6 +29,8 @@ export {
   SCHEDULER_TIMEZONE,
   STUB_JOBS,
   GATEWAY_JOBS,
+  JOB_POLL_JOBS,
+  AUDIT_JOBS,
   computeBufferHoldMiB,
   runStubTick,
   runGatewayTick,
@@ -77,7 +81,12 @@ export function assertSchedulerGuards(mod: SchedulerModule = cron): void {
         'expected registry node-cron@^4 on the 4.6 line (never the kelektiv/* git shorthand)',
     );
   }
-  for (const def of [...STUB_JOBS, ...GATEWAY_JOBS]) {
+  for (const def of [
+    ...STUB_JOBS,
+    ...GATEWAY_JOBS,
+    ...JOB_POLL_JOBS,
+    ...AUDIT_JOBS,
+  ]) {
     if (!mod.validate(def.expression)) {
       throw new Error(
         `${GUARD_PREFIX} scheduler build rejects expression '${def.expression}' (${def.name})`,
@@ -171,6 +180,89 @@ export function registerGatewayJobs(
   assertSchedulerGuards(mod);
   const heartbeatDir = opts.heartbeatDir ?? process.env['SCHEDULER_HEARTBEAT_DIR'];
   const tasks = GATEWAY_JOBS.map((def) => {
+    const task = mod.schedule(
+      def.expression,
+      () => runGatewayTick(def, log, { sink: opts.sink, heartbeatDir, tickHandler: opts.tickHandler }),
+      {
+        name: def.name,
+        timezone: SCHEDULER_TIMEZONE,
+        noOverlap: true,
+        maxRandomDelay: def.maxRandomDelayMs,
+      },
+    );
+    task.on('execution:overlap', () => {
+      log.child({ job: def.name }).warn('tick skipped: previous run pending');
+      opts.sink?.record({ job: def.name, phase: 'skip', at: new Date().toISOString() });
+    });
+    void task.start();
+    return task;
+  });
+  return {
+    tasks,
+    stop: () => {
+      for (const task of tasks) {
+        void task.stop();
+      }
+    },
+  };
+}
+
+/** Register job-pipeline poll jobs (jobs-poll, loot-watchlist) via runStubTick
+ * with injected candidate sources. The scheduler stays agnostic of source
+ * internals — sources are injected through TickOptions.candidateSources. */
+export function registerPollJobs(
+  log: TickLogger,
+  mod: SchedulerModule = cron,
+  opts: RegisterOptions & {
+    candidateSources?: Record<string, import('./jobs.js').CandidateSource>;
+  } = {},
+): RegistryHandle {
+  assertSchedulerGuards(mod);
+  const heartbeatDir = opts.heartbeatDir ?? process.env['SCHEDULER_HEARTBEAT_DIR'];
+  const tasks = JOB_POLL_JOBS.map((def) => {
+    const task = mod.schedule(
+      def.expression,
+      () => runStubTick(def, log, {
+        sink: opts.sink,
+        heartbeatDir,
+        candidateSources: opts.candidateSources,
+      }),
+      {
+        name: def.name,
+        timezone: SCHEDULER_TIMEZONE,
+        noOverlap: true,
+        maxRandomDelay: def.maxRandomDelayMs,
+      },
+    );
+    task.on('execution:overlap', () => {
+      log.child({ job: def.name }).warn('tick skipped: previous run pending');
+      opts.sink?.record({ job: def.name, phase: 'skip', at: new Date().toISOString() });
+    });
+    void task.start();
+    return task;
+  });
+  return {
+    tasks,
+    stop: () => {
+      for (const task of tasks) {
+        void task.stop();
+      }
+    },
+  };
+}
+
+/** Register the audit-drain job via an injected tickHandler (orchestrator
+ * provides the handler; scheduler stays agnostic — cycle-free). */
+export function registerAuditDrain(
+  log: TickLogger,
+  mod: SchedulerModule = cron,
+  opts: RegisterOptions & {
+    tickHandler?: (def: StubJobDef, log: TickLogger) => Promise<void> | void;
+  } = {},
+): RegistryHandle {
+  assertSchedulerGuards(mod);
+  const heartbeatDir = opts.heartbeatDir ?? process.env['SCHEDULER_HEARTBEAT_DIR'];
+  const tasks = AUDIT_JOBS.map((def) => {
     const task = mod.schedule(
       def.expression,
       () => runGatewayTick(def, log, { sink: opts.sink, heartbeatDir, tickHandler: opts.tickHandler }),

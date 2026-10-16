@@ -124,8 +124,10 @@ export async function recordFailure(
 export async function resumeByUrl(
   pb: PocketBase,
   url: string,
+  pipeline: Pipeline = 'events',
+  title: string = '',
 ): Promise<{ row: TaskScratchpadRow; shouldFetch: boolean }> {
-  const row = await getOrCreateScratchpad(pb, url);
+  const row = await getOrCreateScratchpad(pb, url, pipeline, title);
   // StepPosition schema validation — loud on drift.
   StepPosition.parse(row.step_position);
   return { row, shouldFetch: row.step_position === 'STEP_1' };

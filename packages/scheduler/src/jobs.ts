@@ -14,6 +14,7 @@ import { precheck as runPrecheck, type HotStore, type ColdStore } from '@zod/ded
 import { hashUrl, normalizeUrl } from '@zod/dedup';
 import { prefilter } from '@zod/scout';
 import { resumeByUrl, advanceToStep2, recordFailure } from '@zod/db-hot/scratchpad';
+import type { Pipeline } from '@zod/db-hot/schema';
 import { fetch as fetchFacade } from '@zod/sanitize';
 import {
   list as listCtftime,
@@ -36,6 +37,7 @@ import {
 import {
   list as listMeetup,
 } from '@zod/discord-router/portals/meetup';
+import { getJobCandidates } from '@zod/discord-router/portals/jobs/index';
 
 export const SCHEDULER_TIMEZONE = 'Asia/Kolkata';
 
@@ -55,6 +57,8 @@ export interface StubJobDef {
   expression: string;
   /** Per-job jitter in milliseconds -> node-cron maxRandomDelay. */
   maxRandomDelayMs: number;
+  /** Candidate source key resolved via TickOptions.candidateSources (live path). */
+  candidateSource?: string;
   description: string;
 }
 
@@ -165,10 +169,56 @@ export const GATEWAY_JOBS: readonly StubJobDef[] = [
   },
 ];
 
+/** Job pipeline poll + audit-drain jobs (Phase 5, D-01 / D-14).
+ *
+ * - jobs-poll: every 40m + 10m jitter, candidateSource 'jobs' → getJobCandidates()
+ * - loot-watchlist: every 5h + 15m jitter, candidateSource 'loot' → getLootCandidates() (plan 05-04)
+ * - audit-drain: every 5m + 60s jitter, orchestrator drain via tickHandler (registerAuditDrain)
+ */
+export const JOB_POLL_JOBS: readonly StubJobDef[] = [
+  {
+    name: 'jobs-poll',
+    expression: '*/40 * * * *',
+    maxRandomDelayMs: 10 * 60_000,
+    candidateSource: 'jobs',
+    description: 'jobs sources poll — ATS JSON + aggregators + HN, every 40m + 10m jitter (ING-03)',
+  },
+  {
+    name: 'loot-watchlist',
+    expression: '0 */5 * * *',
+    maxRandomDelayMs: 15 * 60_000,
+    candidateSource: 'loot',
+    description: 'vendor watchlist poll — low cadence (D-12)',
+  },
+];
+
+export const AUDIT_JOBS: readonly StubJobDef[] = [
+  {
+    name: 'audit-drain',
+    expression: '*/5 * * * *',
+    maxRandomDelayMs: 60 * 1000,
+    description: 'orchestrator STEP_2 audit drain — registered via tickHandler (registerAuditDrain)',
+  },
+];
+
 export interface PollCandidate {
   url: string;
   title: string;
   snippet: string;
+  /** Location metadata from the listing (used by geo gate at audit time). */
+  location?: string;
+}
+
+/** A candidate source: pipeline name + list() + optional ATS-JSON detail fetch. */
+export interface CandidateSource {
+  /** Pipeline this source feeds (events | jobs | loot | local | social). */
+  pipeline: string;
+  /** List candidates from this source (listing-first: title+snippet only). */
+  list(): Promise<PollCandidate[]>;
+  /** Fetch mode hint: 'ats-json' means the source has a detail() text fetch. */
+  fetch?: 'ats-json';
+  /** Detail text fetch for ATS-JSON sources; null → tick falls back to facade. */
+  detail?: (cand: PollCandidate) => Promise<string | null>;
 }
 
 /** Portal adapter list functions (D-01: all 7 national portals wired).
@@ -243,6 +293,8 @@ export interface TickOptions {
   fetch?: (url: string, opts?: unknown) => Promise<{ markdown: string; capped: boolean; source: 'jina' | 'browser' }>;
   /** Candidate list override. */
   candidates?: readonly PollCandidate[];
+  /** Injected candidate sources keyed by source name (live path). */
+  candidateSources?: Record<string, CandidateSource>;
   /** Nested bag of stores/deps (convenience for tests). */
   stores?: Record<string, any>;
   deps?: Record<string, any>;
@@ -302,7 +354,36 @@ export async function runStubTick(
     (typeof bag.fetch === 'function' ? bag.fetch : undefined) ??
     (typeof opts.fetch === 'function' ? opts.fetch : undefined) ??
     fetchFacade;
-  const candidates = (opts.candidates ?? bag.candidates ?? POLL_CANDIDATES) as readonly PollCandidate[];
+
+  // --- Candidate source resolution (D-01, Phase 5) ---
+  // Order:
+  //  (1) def.candidateSource declared + source exists in bag → source.list() (live path)
+  //  (2) opts.candidates / bag.candidates override (tests)
+  //  (3) def.candidateSource declared but source missing → warn + skip (never static list)
+  //  (4) pb/hot/cold all injected (live mode) but no source → warn + skip (never static fallback in live mode)
+  //  (5) legacy stub mode (no deps, no source) → static POLL_CANDIDATES fallback
+  const bagSources = (bag.candidateSources ?? (opts as any).candidateSources) as
+    | Record<string, CandidateSource>
+    | undefined;
+
+  let candidates: readonly PollCandidate[];
+
+  if (def.candidateSource && bagSources?.[def.candidateSource]) {
+    candidates = await bagSources[def.candidateSource].list();
+  } else if (opts.candidates ?? bag.candidates) {
+    candidates = (opts.candidates ?? bag.candidates) as readonly PollCandidate[];
+  } else if (def.candidateSource) {
+    jobLog.warn(
+      { job: def.name, candidateSource: def.candidateSource },
+      'declared candidate source missing; skipping candidate processing',
+    );
+    candidates = [];
+  } else if (pb !== undefined && hot !== undefined && cold !== undefined) {
+    jobLog.warn({ job: def.name }, 'no candidate source; skipping');
+    candidates = [];
+  } else {
+    candidates = POLL_CANDIDATES;
+  }
 
   const runPrecheckSafe = async (cand: PollCandidate): Promise<string> => {
     if (typeof hot?.hasFingerprint !== 'function' && typeof cold?.findTombstone !== 'function') {
@@ -364,7 +445,13 @@ export async function runStubTick(
       // 3. scratchpad resume
       let resume: { row: any; shouldFetch: boolean };
       try {
-        resume = await resumeByUrl(pb, cand.url);
+        const sourceDef = bagSources?.[def.candidateSource ?? ''];
+        resume = await resumeByUrl(
+          pb,
+          cand.url,
+          (sourceDef?.pipeline ?? 'events') as Pipeline,
+          cand.title,
+        );
       } catch (err) {
         cLog.warn({ stage: 'scratchpad', error: String(err) }, 'scratchpad resume failed');
         continue;
@@ -375,8 +462,29 @@ export async function runStubTick(
       }
 
       // 4. fetch -> STEP_2
+      // ATS-JSON sources: call source.detail() first, fall back to the shared
+      // fetch facade when it returns null. Pass source.pipeline + cand.title
+      // into resumeByUrl so the scratchpad row carries pipeline + title.
       try {
-        const result = await fetchFn(cand.url);
+        const sourceDef = bagSources?.[def.candidateSource ?? ''];
+        let result: { markdown: string; capped: boolean; source: string };
+        if (
+          sourceDef?.fetch === 'ats-json' &&
+          typeof sourceDef.detail === 'function'
+        ) {
+          const detailText = await sourceDef.detail(cand);
+          if (detailText !== null && detailText !== undefined) {
+            result = {
+              markdown: detailText.slice(0, 8000),
+              capped: true,
+              source: 'ats-json',
+            };
+          } else {
+            result = await fetchFn(cand.url);
+          }
+        } else {
+          result = await fetchFn(cand.url);
+        }
         await advanceToStep2(pb, resume.row.id, result.markdown);
         cLog.info(
           { stage: 'fetch', source: result.source, capped: result.capped },

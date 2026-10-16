@@ -11,7 +11,13 @@
   "dependencies": {
     "@zod/config": "workspace:*",
     "@zod/logger": "workspace:*",
-    "@zod/scheduler-registry": "workspace:*"
+    "@zod/scheduler-registry": "workspace:*",
+    "@zod/db-hot": "workspace:*",
+    "@zod/db-cold": "workspace:*",
+    "@zod/llm": "workspace:*",
+    "@zod/discord-router": "workspace:*",
+    "@zod/orchestrator": "workspace:*",
+    "@zod/sanitize": "workspace:*"
   },
   "devDependencies": {
     "tsx": "^4.23.15",
