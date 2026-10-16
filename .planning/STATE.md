@@ -28,16 +28,16 @@ See: .planning/PROJECT.md (updated 2026-10-15)
 ## Current Position
 
 Phase: 05 (Jobs + Loot Pipelines) — EXECUTING
-Plan: 1 of 9 (05-08 complete)
-Status: Executing Phase 05 — plan 05-08 contract foundations complete; ready for 05-01 tracer
-Last activity: 2026-10-16 — Completed plan 05-08 (D-14 migration + channel env keys + per-pipeline audit cards), 2 task commits, 233/233 tests green
+Plan: 1 of 9 (05-08 complete, 05-01 complete)
+Status: Executing Phase 05 — plan 05-08 contract foundations complete; plan 05-01 tracer complete
+Last activity: 2026-10-16 — Completed plan 05-01 tracer (orchestrator + Greenhouse → jobs tick → STEP_2 → audit drain → opportunities/tombstone), 1 task commit, 238/238 tests green
 
-Progress: [███████░░░] 64%
+Progress: [████████░░] 68%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 9
+- Total plans completed: 10
 - Average duration: -
 - Total execution time: -
 
@@ -63,6 +63,7 @@ Progress: [███████░░░] 64%
 | Phase 01 P02 | 12 min | 3 tasks | 17 files |
 | Phase 01 P04 | 12 min | 3 tasks | 17 files |
 | Phase 05 05-08 | 8 min | 2 tasks | 11 files |
+| Phase 05 05-01 | 42 min | 1 task | 21 files |
 
 ## Accumulated Context
 

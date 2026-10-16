@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Scraper Foundation** - Shared browser queue, sanitizer, Scout filter, scratchpad state (completed 2026-10-15)
 - [x] **Phase 3: LLM Swarm** - Gateway router with 2D buckets, baton-pass, length-stitch, chaos tests (completed 2026-10-15)
 - [x] **Phase 4: Events Vertical Slice** - First end-to-end verified event alert in Discord (completed 2026-10-16)
-- [ ] **Phase 5: Jobs + Loot Pipelines** - ATS polling, fresher/scam gates, loot verification, dedup hardening
+- [x] **Phase 5: Jobs + Loot Pipelines** - ATS polling, fresher/scam gates, loot verification, dedup hardening
 - [ ] **Phase 6: Delivery + Local/Social Coverage** - Full 10-channel routing, reminders, DK/Udupi, relay, X/LinkedIn
 - [ ] **Phase 7: Telemetry Dashboard + Ops Hardening** - Locked SSE dashboard, health grid, GC verification, kill-tests
 
@@ -133,7 +133,7 @@ Plans:
 - [x] 05-08-PLAN.md — Contract foundations: D-14 one-way schema migration + new-channel env keys + resolveChannel env-ID-first + per-pipeline audit-card fields (blocking-human D-14 checkpoint) (JOB-02, JOB-04, JOB-05, LOT-01..04)
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 05-01-PLAN.md — Tracer: @zod/orchestrator + Greenhouse → jobs tick → STEP_2 → audit drain → opportunities/tombstone; scheduler tables; live dependency wiring (ING-03, JOB-01..05)
+- [x] 05-01-PLAN.md — Tracer: @zod/orchestrator + Greenhouse → jobs tick → STEP_2 → audit drain → opportunities/tombstone; scheduler tables; live dependency wiring (ING-03, JOB-01..05)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 05-02-PLAN.md — Full job source mix: Lever/Ashby/HN Who-is-hiring/startup.jobs/Cutshort/Cuvette/Workday + D-02 seed & auto-learn board rotation (ING-03)
@@ -190,6 +190,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 2. Scraper Foundation | 3/3 | Complete    | 2026-10-15 |
 | 3. LLM Swarm | 3/3 | Complete    | 2026-10-15 |
 | 4. Events Vertical Slice | 3/3 | Complete    | 2026-10-16 |
-| 5. Jobs + Loot Pipelines | 1/9 | Executing | 2026-10-16 |
+| 5. Jobs + Loot Pipelines | 2/9 | Executing | 2026-10-16 |
 | 6. Delivery + Local/Social Coverage | 0/TBD | Not started | - |
 | 7. Telemetry Dashboard + Ops Hardening | 0/TBD | Not started | - |
