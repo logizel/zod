@@ -138,7 +138,7 @@ Plans:
 **Wave 3** *(blocked on Wave 2 completion)*
 - [x] 05-02-PLAN.md — Full job source mix: Lever/Ashby/HN Who-is-hiring/startup.jobs/Cutshort/Cuvette/Workday + D-02 seed & auto-learn board rotation (ING-03)
 - [x] 05-03-PLAN.md — D-04 senior listing screen + full D-05..D-08 fresher/scam/geo gates + JOB-02 admission-class rule pack (JOB-01..05)
-- [ ] 05-04-PLAN.md — Loot vertical: rule pack + gates + 2-hop FAQ reader + divert; events drain branch completion; vendor watchlist (LOT-01..04)
+- [x] 05-04-PLAN.md — Loot vertical: rule pack + gates + 2-hop FAQ reader + divert; events drain branch completion; vendor watchlist (LOT-01..04)
 
 **Wave 4** *(blocked on Wave 3 completion)*
 - [ ] 05-05-PLAN.md — EVT-07 fuzzy merger: ≥0.9/±3d/organizer gate, intake skip + drain backstop, merged tombstones, link union (EVT-07)
@@ -190,6 +190,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 2. Scraper Foundation | 3/3 | Complete    | 2026-10-15 |
 | 3. LLM Swarm | 3/3 | Complete    | 2026-10-15 |
 | 4. Events Vertical Slice | 3/3 | Complete    | 2026-10-16 |
-| 5. Jobs + Loot Pipelines | 4/9 | Executing | 2026-10-16 |
+| 5. Jobs + Loot Pipelines | 5/9 | Executing | 2026-10-16 |
 | 6. Delivery + Local/Social Coverage | 0/TBD | Not started | - |
 | 7. Telemetry Dashboard + Ops Hardening | 0/TBD | Not started | - |
