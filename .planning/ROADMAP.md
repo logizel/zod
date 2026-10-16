@@ -127,7 +127,21 @@ Plans:
   4. An online event failing the ₹1L rule but carrying a real free perk diverts to #🎁-free-swag-and-credits with India-shipping verified; a US-only drop is rejected
   5. The same event seen on two portals arrives as one merged alert with unified registration links
 
-**Plans**: TBD
+**Plans**: 6 plans
+
+**Wave 1**
+- [ ] 05-01-PLAN.md — Tracer: @zod/orchestrator + Greenhouse → jobs tick → STEP_2 → audit drain → opportunities/tombstone; D-14 schema; scheduler tables; channel keys (ING-03, JOB-01..05)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 05-02-PLAN.md — Full job source mix: Lever/Ashby/HN Who-is-hiring/startup.jobs/Cutshort/Cuvette/Workday + D-02 seed & auto-learn board rotation (ING-03)
+- [ ] 05-03-PLAN.md — D-04 senior listing screen + full D-05..D-08 fresher/scam/geo gates + JOB-02 admission-class rule pack (JOB-01..05)
+- [ ] 05-04-PLAN.md — Loot vertical: rule pack + gates + 2-hop FAQ reader + divert; events drain branch completion; vendor watchlist (LOT-01..04)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 05-05-PLAN.md — EVT-07 fuzzy merger: ≥0.9/±3d/organizer gate, intake skip + drain backstop, merged tombstones, link union (EVT-07)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 05-06-PLAN.md — Cross-pipeline drain ledger + .env.example bijection guard + full-suite phase gate (all 11 requirements)
 
 ### Phase 6: Delivery + Local/Social Coverage
 

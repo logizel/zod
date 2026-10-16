@@ -41,6 +41,19 @@ created: "2026-10-16"
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
+| 05-01-T1 | 05-01 | 1 | ING-03, JOB-01..05 | T-05-01..07 | Untrusted text framed as data; SSRF-guarded fetch; idempotent drain (url_hash pre-check); bounded getList; pipeline from code-owned table | integration | `pnpm vitest run packages/orchestrator` | ❌ new | pending |
+| 05-01-T2 | 05-01 | 1 | ING-03, JOB-04, JOB-05 | T-05-03, T-05-05 | Channel IDs env-first; no secrets/channel IDs logged; tombstone reasons verbatim; no network in tests | unit | `pnpm vitest run packages/discord-router packages/scheduler packages/config` | ✅ extend | pending |
+| 05-02-T1 | 05-02 | 2 | ING-03 | T-05-08, T-05-11, T-05-12 | Never-throw parse (non-ok/empty/malformed → []); atomic tmp+rename state writes; no credential surface (public endpoints) | unit | `pnpm vitest run packages/discord-router` | ❌ new | pending |
+| 05-02-T2 | 05-02 | 2 | ING-03 | T-05-09, T-05-10, T-05-13 | Fixed-host fetches (code-owned consts); bounded browser pagination; learn-once rotation; URL dedupe | unit | `pnpm vitest run packages/discord-router` | ❌ new | pending |
+| 05-03-T1 | 05-03 | 2 | JOB-03 | T-05-15, T-05-16 | Senior reject traceable (senior_role + decided_at); flag-only detectors never auto-reject; zero-fetch screen; events untouched | unit + integration | `pnpm vitest run packages/scout packages/scheduler` | ❌ new | pending |
+| 05-03-T2 | 05-03 | 2 | JOB-01..05 | T-05-14, T-05-17, T-05-18 | Prompt-injection framing; parse failure never admits; enumerated reason codes verbatim; fellowship allowlist fail-closed | unit (contract) | `pnpm vitest run packages/orchestrator` | ❌ new | pending |
+| 05-04-T1 | 05-04 | 2 | LOT-02, LOT-03, LOT-04 | T-05-19, T-05-20, T-05-23 | Quoted evidence required to admit; 2-hop SSRF-guarded FAQ read; loot tombstones verbatim; no unfetched-content audit | unit + integration | `pnpm vitest run packages/orchestrator` | ❌ new | pending |
+| 05-04-T2 | 05-04 | 2 | LOT-01 | T-05-21, T-05-22, T-05-23 | Divert requires perk_hint + full loot gate pass; single terminal outcome; bounded audit volume; verbatim reasons | integration | `pnpm vitest run packages/orchestrator` | ❌ new | pending |
+| 05-04-T3 | 05-04 | 2 | LOT-02, LOT-04 | T-05-24 | Config-owned fetch targets (fixed mode enum); loot card fields render quotes; watchlist failure isolated | unit | `pnpm vitest run packages/discord-router` | ❌ new | pending |
+| 05-05-T1 | 05-05 | 3 | EVT-07 | T-05-25, T-05-26, T-05-27, T-05-29 | Threshold + evidence + window all mandatory; bounded candidate queries; audited pinned dependency | unit | `pnpm vitest run packages/dedup` | ❌ new | pending |
+| 05-05-T2 | 05-05 | 3 | EVT-07 | T-05-28 | Race single-master; merged tombstone ('merged'/'merger'); append-only late dupes; fresh-only intake | integration | `pnpm vitest run packages/scheduler packages/orchestrator packages/discord-router` | ❌ new | pending |
+| 05-06-T1 | 05-06 | 4 | all 11 | T-05-30 | Mixed-batch exact ledger; per-row isolation; no cross-pipeline writes | integration | `pnpm vitest run packages/orchestrator` | ❌ new | pending |
+| 05-06-T2 | 05-06 | 4 | all 11 | T-05-31 | Env bijection guard (canary keys); fail-fast boot preserved; full-suite phase gate | unit + gate | `pnpm test` | ❌ new | pending |
 
 *Populated from PLAN task IDs after planning. Requirement-level projection from RESEARCH.md is below.*
 
