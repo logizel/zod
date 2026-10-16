@@ -35,4 +35,23 @@ describe('parseEnv', () => {
     expect(parsed.PB_URL).toBe('http://127.0.0.1:8091');
     expect(parsed.LOG_LEVEL).toBe('debug');
   });
+
+  it('new channel keys default to empty string when absent, parseEnv still passes', () => {
+    const parsed = parseEnv({ ...REQUIRED });
+    expect(parsed.DISCORD_CHANNEL_JOBS_SYS_CLOUD).toBe('');
+    expect(parsed.DISCORD_CHANNEL_JOBS_GENERAL).toBe('');
+    expect(parsed.DISCORD_CHANNEL_LOOT).toBe('');
+  });
+
+  it('explicitly set channel IDs are returned as configured', () => {
+    const parsed = parseEnv({
+      ...REQUIRED,
+      DISCORD_CHANNEL_JOBS_SYS_CLOUD: '111000000000000000',
+      DISCORD_CHANNEL_JOBS_GENERAL: '222000000000000000',
+      DISCORD_CHANNEL_LOOT: '333000000000000000',
+    });
+    expect(parsed.DISCORD_CHANNEL_JOBS_SYS_CLOUD).toBe('111000000000000000');
+    expect(parsed.DISCORD_CHANNEL_JOBS_GENERAL).toBe('222000000000000000');
+    expect(parsed.DISCORD_CHANNEL_LOOT).toBe('333000000000000000');
+  });
 });

@@ -15,6 +15,12 @@ const EnvSchema = z.object({
   GITHUB_TOKEN: z.string().min(1),
   SAMBANOVA_API_KEY: z.string().default(''),
   DISCORD_TOKEN: z.string().min(1),
+  // D-14 / Pitfall 8: channel IDs for the three new job/loot buckets.
+  // Empty default keeps boot passing when env is unset; resolveChannel uses
+  // these IDs first, falling back to exact channel-name matching.
+  DISCORD_CHANNEL_JOBS_SYS_CLOUD: z.string().default(''),
+  DISCORD_CHANNEL_JOBS_GENERAL: z.string().default(''),
+  DISCORD_CHANNEL_LOOT: z.string().default(''),
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
 });
 
