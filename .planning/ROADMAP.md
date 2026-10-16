@@ -161,10 +161,10 @@ Plans:
   4. An external Discord #announcements post appears in #raw-incoming-feeds via the official Gateway relay
   5. Feedback posted in #🧠-bot-training-chat produces a confirmation reply and changes subsequent Auditor/Curator verdicts
 
-**Plans**: 4 plans
+**Plans**: 1/4 plans executed
 
 **Wave 1**
-- [ ] 06-01-PLAN.md — Ingestion tracer: local DK/Udupi source + announcements relay + X/LinkedIn social source (ING-02, ING-04, ING-05)
+- [x] 06-01-PLAN.md — Ingestion tracer: local DK/Udupi source + announcements relay + X/LinkedIn social source (ING-02, ING-04, ING-05)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 06-02-PLAN.md — Routing: local geo classification + travel-curated selection + TBA two-ping 48h loop (EVT-03, EVT-04, EVT-06)
@@ -204,5 +204,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 3. LLM Swarm | 3/3 | Complete    | 2026-10-15 |
 | 4. Events Vertical Slice | 3/3 | Complete    | 2026-10-16 |
 | 5. Jobs + Loot Pipelines | 9/9 | Complete    | 2026-10-16 |
-| 6. Delivery + Local/Social Coverage | 0/4 | Not started | - |
+| 6. Delivery + Local/Social Coverage | 1/4 | In Progress|  |
 | 7. Telemetry Dashboard + Ops Hardening | 0/TBD | Not started | - |
