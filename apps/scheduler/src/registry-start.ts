@@ -16,6 +16,7 @@ import {
   startRegistry,
   registerPollJobs,
   registerAuditDrain,
+  registerGatewayJobs,
   type RegistryHandle,
   type TickLogger,
 } from '@zod/scheduler-registry';
@@ -29,6 +30,7 @@ import { getJobCandidates } from '@zod/discord-router/portals/jobs/index';
 import { getLootCandidates } from '@zod/discord-router/portals/loot/vendors';
 import { localSource } from '@zod/discord-router/portals/local';
 import { socialSource } from '@zod/discord-router/portals/social';
+import { startRelayService } from '@zod/discord-router/relay';
 import { OrchestratorScheduler } from '@zod/orchestrator';
 
 type CandidateSource = {
@@ -79,6 +81,22 @@ export function startSchedulerRegistry(log: TickLogger): RegistryHandle {
   });
   registerAuditDrain(log, undefined, {
     tickHandler: orchestrator.getTickHandler(),
+  });
+
+  // Relay service: polls external #announcements and relays to #raw-incoming-feeds.
+  // Registered via registerGatewayJobs with a tickHandler — no setInterval scatter.
+  const relayService = startRelayService({
+    env: env as any,
+    log,
+    pb: pbPromise as any,
+    client: undefined, // gateway client injected at runtime via getClient()
+  });
+  registerGatewayJobs(log, undefined, {
+    tickHandler: (def, jobLog) => {
+      if (def.name === 'relay-poll') {
+        return relayService.tick();
+      }
+    },
   });
 
   orchestrator.start(log);

@@ -173,6 +173,12 @@ export const GATEWAY_JOBS: readonly StubJobDef[] = [
     maxRandomDelayMs: 10 * 1000,
     description: 'validates ladder + env keys at gateway boot (idempotent)',
   },
+  {
+    name: 'relay-poll',
+    expression: '*/15 * * * *',
+    maxRandomDelayMs: 5 * 60_000,
+    description: 'Discord #announcements relay poll (ING-04)',
+  },
 ];
 
 /** Job pipeline poll + audit-drain jobs (Phase 5, D-01 / D-14).
