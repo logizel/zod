@@ -26,6 +26,7 @@ import { createLogger } from '@zod/logger';
 import { parseEnv } from '@zod/config';
 import { getPortalCandidates } from '@zod/scheduler/jobs';
 import { getJobCandidates } from '@zod/discord-router/portals/jobs/index';
+import { getLootCandidates } from '@zod/discord-router/portals/loot/vendors';
 import { OrchestratorScheduler } from '@zod/orchestrator';
 
 type CandidateSource = {
@@ -56,6 +57,7 @@ export function startSchedulerRegistry(log: TickLogger): RegistryHandle {
   const candidateSources: Record<string, CandidateSource> = {
     events: { pipeline: 'events', list: getPortalCandidates },
     jobs: { pipeline: 'jobs', list: getJobCandidates },
+    loot: { pipeline: 'loot', list: getLootCandidates },
   };
 
   // --- Register jobs through the single registry ---
