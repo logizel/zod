@@ -4,10 +4,10 @@ current_phase: 05
 current_phase_name: Jobs + Loot Pipelines
 status: executing
 stopped_at: Completed 05-02-PLAN.md — browser sources + D-02 auto-learn + getJobCandidates fan-out
-last_updated: "2026-10-16T08:52:00Z"
+last_updated: "2026-10-16T09:13:34Z"
 last_activity: 2026-10-16
-last_activity_desc: Executed plan 05-02 — Tasks 1 and 2 complete; 2 task commits; full suite 99/99 green
-state_head: e9ad644b6f056c213e4885071396d7c665b00f10
+last_activity_desc: Executed plan 05-03 — Tasks 1 and 2 complete; 2 task commits; full suite green (scout 56 + scheduler 26 + orchestrator/config 80)
+state_head: c0354d5ca92cf68fc3fb78df3cc15f4e0df8982d
 progress:
   total_phases: 7
   completed_phases: 4
@@ -28,9 +28,9 @@ See: .planning/PROJECT.md (updated 2026-10-15)
 ## Current Position
 
 Phase: 05 (Jobs + Loot Pipelines) — EXECUTING
-Plan: 2 of 9 (05-08 complete, 05-01 complete, 05-02 complete)
-Status: Executing Phase 05 — plan 05-02 complete (browser sources + D-02 auto-learn + getJobCandidates fan-out)
-Last activity: 2026-10-16 — Completed plan 05-02 (Lever/Ashby/HN/startup.jobs/Cutshort/Cuvette/Workday adapters + boards state core + index fan-out), 2 task commits, 99/99 discord-router tests green
+Plan: 3 of 9 (05-08 complete, 05-01 complete, 05-02 complete, 05-03 complete)
+Status: Executing Phase 05 — plan 05-03 complete (D-04 senior listing screen + D-05..D-08 gates + JOB-02 admission-class rule pack)
+Last activity: 2026-10-16 — Completed plan 05-03 (D-04 zero-fetch senior screen + scheduler wiring + D-05..D-08 gates + JOB-02 admission-class rule pack), 2 task commits, full suite green
 
 Progress: [████████░░] 68%
 
@@ -65,6 +65,7 @@ Progress: [████████░░] 68%
 | Phase 05 05-08 | 8 min | 2 tasks | 11 files |
 | Phase 05 05-01 | 42 min | 1 task | 21 files |
 | Phase 05 05-02 | 29 min | 2 tasks | 20 files |
+| Phase 05 05-03 | 17 min | 2 tasks | 17 files |
 
 ## Accumulated Context
 
@@ -85,6 +86,10 @@ Recent decisions affecting current work:
 - [Phase 05 05-02]: D-02 seed + auto-learn board rotation — extractBoardUrl (3 ATS hosts), learnBoard idempotent + capped at 200, loadBoards seed∪learned
 - [Phase 05 05-02]: getJobCandidates fan-out — 8 JOB_LIST_FNS + learned-board fan-out through provider adapters, URL dedupe, next-tick learnBoard harvest
 - [Phase 05 05-02]: Workday cxs JSON first ([ASSUMED A1]) with exactly-one fetchViaBrowser fallback (D-03)
+- [Phase 05 05-03]: DEFAULT_FELLOWSHIP_ALLOWLIST in @zod/config with FELLOWSHIP_ALLOWLIST_EXTRA env extension, fail-closed on unknown programs (T-05-18)
+- [Phase 05 05-03]: evaluateJobsGates keeps final reject authority; deterministic predicates re-parse from fetched text (T-05-14)
+- [Phase 05 05-03]: D-04 senior screen whole-word case-insensitive title regex; 'Leadership'/'Managerial' do not match (Pitfall 9)
+- [Phase 05 05-03]: Listing-stage scam/geo detectors flag-only (telemetry), never auto-reject (T-05-16, T-05-17)
 
 ### Pending Todos
 
