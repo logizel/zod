@@ -17,6 +17,10 @@
     "./spam": {
       "types": "./dist/spam.d.ts",
       "default": "./dist/spam.js"
+    },
+    "./jobs-screen": {
+      "types": "./dist/jobs-screen.d.ts",
+      "default": "./dist/jobs-screen.js"
     }
   },
   "scripts": {

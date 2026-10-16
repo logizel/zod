@@ -13,6 +13,7 @@ import { join } from 'node:path';
 import { precheck as runPrecheck, type HotStore, type ColdStore } from '@zod/dedup/precheck';
 import { hashUrl, normalizeUrl } from '@zod/dedup';
 import { prefilter } from '@zod/scout';
+import { screenListing } from '@zod/scout/jobs-screen';
 import { resumeByUrl, advanceToStep2, recordFailure } from '@zod/db-hot/scratchpad';
 import type { Pipeline } from '@zod/db-hot/schema';
 import { fetch as fetchFacade } from '@zod/sanitize';
@@ -440,6 +441,41 @@ export async function runStubTick(
         }
         cLog.info({ stage: 'scout', reason: pf.reason, detail: pf.detail }, 'skip: scout rejected');
         continue;
+      }
+
+      // D-04 listing screen — zero-fetch senior reject, flag-only pre-detectors.
+      // Runs only for the jobs pipeline (candidateSource === 'jobs'); other
+      // pipelines are untouched. Flags never auto-reject — telemetry only.
+      if (def.candidateSource === 'jobs') {
+        const screen = screenListing({ title: cand.title, snippet: cand.snippet } as any) as any;
+        if (screen?.reject?.reason === 'senior_role') {
+          // write tombstone_ledger row terminal_status senior_role, source listing-screen
+          try {
+            const urlHash = hashUrl(normalizeUrl(cand.url));
+            const row = {
+              url_hash: urlHash,
+              fingerprint: urlHash,
+              terminal_status: 'senior_role',
+              source: 'listing-screen',
+              decided_at: new Date().toISOString(),
+            };
+            if (typeof cold?.create === 'function') {
+              await cold.create(row);
+            } else if (pb?.collection) {
+              const coll = pb.collection('tombstone_ledger');
+              if (typeof coll?.create === 'function') await coll.create(row);
+            }
+          } catch (err) {
+            cLog.warn({ stage: 'listing-screen', error: String(err) }, 'listing-screen tombstone write failed');
+          }
+          cLog.info({ stage: 'listing-screen', reason: 'senior_role' }, 'skip: senior role rejected at listing stage');
+          continue;
+        }
+        // flag-only: child-log warn with candidate URL + flag class names,
+        // never values beyond title-stage text already logged, never a tombstone.
+        if (screen?.flags?.length) {
+          cLog.warn({ stage: 'listing-screen', flags: screen.flags }, 'listing flags raised (telemetry only)');
+        }
       }
 
       // 3. scratchpad resume
