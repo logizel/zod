@@ -322,3 +322,261 @@ describe('orchestrator loot branch link_hop_failed (fetch mocked)', () => {
     vi.unstubAllGlobals();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Events scratch row helper
+// ---------------------------------------------------------------------------
+
+function makeEventsScratchRow(overrides: Partial<TaskScratchpadRow> = {}): TaskScratchpadRow {
+  return {
+    id: 'scratch-events-1',
+    created: '2026-10-16T08:00:00Z',
+    updated: '2026-10-16T08:00:00Z',
+    candidate_url: 'https://devpost.com/event/hackathon-2026',
+    step_position: 'STEP_2',
+    pipeline: 'events',
+    candidate_title: 'National CTF 2026',
+    partial_buffer: '',
+    attempts: 0,
+    last_error: null,
+    ...overrides,
+  } as TaskScratchpadRow;
+}
+
+/** Install a fetch mock that makes resolveOfficialDomain succeed via a 2-hop chain. */
+function installEventsFetch(): void {
+  const mockFetch = vi.fn();
+  mockFetch.mockImplementation(async (input: any) => {
+    const url = String(input);
+    if (url.startsWith('https://r.jina.ai/')) {
+      return new Response('event page markdown', { status: 200, headers: { 'content-type': 'text/plain' } });
+    }
+    if (url === 'https://devpost.com/event/hackathon-2026') {
+      return new Response(null, { status: 302, headers: { location: 'https://intermediate.example.com/event' } });
+    }
+    if (url === 'https://intermediate.example.com/event') {
+      return new Response(null, { status: 302, headers: { location: 'https://official.example.com/event' } });
+    }
+    if (url === 'https://official.example.com/event') {
+      return new Response(null, { status: 200 });
+    }
+    return new Response(null, { status: 200 });
+  });
+  vi.stubGlobal('fetch', mockFetch);
+}
+
+const fullEventsVerdict = {
+  title: 'National CTF 2026',
+  organizer: 'CyberSec India',
+  category: 'sys-cp-sec',
+  prize_cash_inr: 150000,
+  prize_text: '₹1,50,000 cash',
+  organizer_score: 9,
+  agenda_score: 9,
+  dates: { start: '2026-12-15T09:00:00Z', end: '2026-12-16T18:00:00Z' },
+  audit_summary: 'Verified CTF infosec event, ₹1.5L cash prize, India-organized',
+  perk_hint: null,
+};
+
+// ---------------------------------------------------------------------------
+// Events branch tests
+// ---------------------------------------------------------------------------
+
+describe('orchestrator drainStep2Rows events branch', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('admit verdict creates one audited events opportunities row in the correct Phase 4 bucket', async () => {
+    installEventsFetch();
+    const { pb, collections } = makePb({
+      scratchpadRows: [makeEventsScratchRow()],
+      existingOpportunities: [],
+    });
+
+    const router = makeRouter(() => ({ ...fullEventsVerdict }));
+
+    await drainStep2Rows({
+      pb,
+      router: router as any,
+      pageSize: 25,
+    });
+
+    expect(collections.opportunities.create).toHaveBeenCalledTimes(1);
+    const opp = (collections.opportunities.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(opp.status).toBe('audited');
+    expect(opp.pipeline).toBe('events');
+    // sys-cp-sec → Phase 4 bucket '#🔥-priority-sys-cp-sec'
+    expect(opp.bucket_channel).toBe('#🔥-priority-sys-cp-sec');
+    expect(opp.title).toBe('National CTF 2026');
+    expect(opp.organizer).toBe('CyberSec India');
+    expect(opp.audit_summary).toBe('Verified CTF infosec event, ₹1.5L cash prize, India-organized');
+
+    expect(collections.scratchpad.update).toHaveBeenCalledWith('scratch-events-1', { step_position: 'STEP_3' });
+    expect(collections.tombstone_ledger.create).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it('general category → Phase 4 bucket #-online-1lakh-plus', async () => {
+    installEventsFetch();
+    const { pb, collections } = makePb({
+      scratchpadRows: [makeEventsScratchRow()],
+      existingOpportunities: [],
+    });
+
+    const router = makeRouter(() => ({
+      ...fullEventsVerdict,
+      category: 'general',
+    }));
+
+    await drainStep2Rows({
+      pb,
+      router: router as any,
+      pageSize: 25,
+    });
+
+    expect(collections.opportunities.create).toHaveBeenCalledTimes(1);
+    const opp = (collections.opportunities.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(opp.bucket_channel).toBe('#-online-1lakh-plus');
+    vi.unstubAllGlobals();
+  });
+
+  it('prize-gate false without perk_hint → prize_below_threshold tombstone, no opportunity', async () => {
+    installEventsFetch();
+    const { pb, collections } = makePb({
+      scratchpadRows: [makeEventsScratchRow()],
+      existingOpportunities: [],
+    });
+
+    // Below ₹1L → prize gate false, no perk hint
+    const router = makeRouter(() => ({
+      ...fullEventsVerdict,
+      prize_cash_inr: 50000,
+      prize_text: '₹50,000 cash',
+      perk_hint: null,
+    }));
+
+    await drainStep2Rows({
+      pb,
+      router: router as any,
+      pageSize: 25,
+    });
+
+    expect(collections.opportunities.create).not.toHaveBeenCalled();
+    expect(collections.tombstone_ledger.create).toHaveBeenCalledTimes(1);
+    const tsCall = (collections.tombstone_ledger.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(tsCall.terminal_status).toBe('prize_below_threshold');
+    expect(collections.scratchpad.update).toHaveBeenCalledWith('scratch-events-1', { step_position: 'STEP_3' });
+    vi.unstubAllGlobals();
+  });
+
+  it('prize-gate false WITH perk_hint → divert to loot branch, single terminal outcome', async () => {
+    installEventsFetch();
+    installSuccessFetch(); // drainLootRow needs readLootRules to succeed
+    const { pb, collections } = makePb({
+      scratchpadRows: [makeEventsScratchRow()],
+      existingOpportunities: [],
+    });
+
+    // Prize gate fails (below ₹1L) but perk_hint present → divert
+    const router = makeRouter(() => ({
+      ...fullEventsVerdict,
+      prize_cash_inr: 50000,
+      prize_text: '₹50,000 cash plus free swag',
+      perk_hint: 'free swag drop for attendees',
+    }));
+
+    await drainStep2Rows({
+      pb,
+      router: router as any,
+      pageSize: 25,
+    });
+
+    // Exactly one terminal outcome: either a loot opportunity OR a loot tombstone
+    const oppCalls = (collections.opportunities.create as ReturnType<typeof vi.fn>).mock.calls.length;
+    const tsCalls = (collections.tombstone_ledger.create as ReturnType<typeof vi.fn>).mock.calls.length;
+    expect(oppCalls + tsCalls).toBe(1);
+
+    // Never an events opportunity and never a prize_below_threshold tombstone in the divert flow
+    if (oppCalls > 0) {
+      const opp = (collections.opportunities.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(opp.pipeline).toBe('loot');
+      expect(opp.bucket_channel).toBe('#🎁-free-swag-and-credits');
+    } else {
+      const tsCall = (collections.tombstone_ledger.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(tsCall.terminal_status).not.toBe('prize_below_threshold');
+    }
+    vi.unstubAllGlobals();
+  });
+
+  it('link_hop_failed tombstones when resolveOfficialDomain fails', async () => {
+    installHopFailureFetch();
+    const { pb, collections } = makePb({
+      scratchpadRows: [makeEventsScratchRow()],
+      existingOpportunities: [],
+    });
+
+    const router = makeRouter(() => ({ ...fullEventsVerdict }));
+
+    await drainStep2Rows({
+      pb,
+      router: router as any,
+      pageSize: 25,
+    });
+
+    expect(collections.opportunities.create).not.toHaveBeenCalled();
+    expect(collections.tombstone_ledger.create).toHaveBeenCalledTimes(1);
+    const tsCall = (collections.tombstone_ledger.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(tsCall.terminal_status).toBe('link_hop_failed');
+    vi.unstubAllGlobals();
+  });
+
+  it('domain filter reject → tombstone with Phase 4 reason verbatim, no opportunity', async () => {
+    // Domain filter rejects: low organizer/agenda scores, non-SWE domain
+    installEventsFetch();
+    const { pb, collections } = makePb({
+      scratchpadRows: [makeEventsScratchRow()],
+      existingOpportunities: [],
+    });
+
+    const router = makeRouter(() => ({
+      ...fullEventsVerdict,
+      organizer_score: 2,
+      agenda_score: 2,
+    }));
+
+    await drainStep2Rows({
+      pb,
+      router: router as any,
+      pageSize: 25,
+    });
+
+    expect(collections.opportunities.create).not.toHaveBeenCalled();
+    expect(collections.tombstone_ledger.create).toHaveBeenCalledTimes(1);
+    const tsCall = (collections.tombstone_ledger.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(tsCall.terminal_status).toBe('non-technical');
+    vi.unstubAllGlobals();
+  });
+
+  it('UNVERIFIED verdict writes nothing and leaves row at STEP_2', async () => {
+    installEventsFetch();
+    const { pb, collections } = makePb({
+      scratchpadRows: [makeEventsScratchRow()],
+      existingOpportunities: [],
+    });
+
+    const router = makeRouter(() => 'UNVERIFIED');
+
+    await drainStep2Rows({
+      pb,
+      router: router as any,
+      pageSize: 25,
+    });
+
+    expect(collections.opportunities.create).not.toHaveBeenCalled();
+    expect(collections.tombstone_ledger.create).not.toHaveBeenCalled();
+    expect(collections.scratchpad.update).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+});

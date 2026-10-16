@@ -18,8 +18,16 @@ import {
   parseLootVerdict,
   type LootVerdict,
 } from './rule-packs/loot.js';
+import {
+  buildEventsMessages,
+  parseEventsVerdict,
+  type EventsVerdict,
+} from './rule-packs/events.js';
 import { evaluateLootGates, BUCKET_LOOT, type LootGateResult } from './gates/loot.js';
 import { readLootRules } from './loot-faq.js';
+import { passesPrizeGate } from '@zod/discord-router/prize-gate';
+import { resolveOfficialDomain } from '@zod/discord-router/link-hop';
+import { prefilter as domainPrefilter } from '@zod/discord-router/domain-filter';
 
 const log = createLogger('info').child({ component: 'orchestrator' });
 
@@ -117,6 +125,8 @@ async function processRow(
   switch (row.pipeline) {
     case 'loot':
       return await drainLootRow(pb, router, rowLog, row);
+    case 'events':
+      return await processEventsRow(pb, router, rowLog, row);
     case 'jobs':
     default:
       return await processJobsRow(pb, router, rowLog, row);
@@ -343,4 +353,119 @@ async function writeTombstone(
     source,
     decided_at: new Date().toISOString(),
   });
+}
+
+/**
+ * Events audit flow: rule pack → router → resolveOfficialDomain (2-hop) →
+ * 80/20 domain filter → prize gate → admit (category bucket) | divert
+ * (perk_hint → loot branch on same row) | prize_below_threshold tombstone.
+ *
+ * The divert calls drainLootRow — exactly one terminal outcome (loot row or
+ * loot tombstone), never an events opportunity and never a prize_below_threshold
+ * tombstone in the divert flow (LOT-01).
+ */
+async function processEventsRow(
+  pb: PbLike,
+  router: LlmRouter,
+  rowLog: Logger,
+  row: TaskScratchpadRow,
+): Promise<void> {
+  const candidateUrl = row.candidate_url;
+  const candidateTitle = row.candidate_title ?? '';
+  const fetchedText = row.partial_buffer ?? '';
+
+  // Step 1: build events audit messages + call LlmRouter (auditor-events-1).
+  const messages = buildEventsMessages({
+    pipeline: 'events',
+    candidateUrl,
+    candidateTitle,
+    fetchedText,
+  });
+
+  const result = await router.complete({
+    messages,
+    step1: '',
+    step2: fetchedText,
+    slot: 'auditor-events-1',
+    pipeline: 'events',
+    url: candidateUrl,
+    priority: 2,
+  });
+
+  // UNVERIFIED / POOL_SATURATED: leave at STEP_2, never write, never crash.
+  if (result.verdict === 'UNVERIFIED' || result.verdict === 'POOL_SATURATED') {
+    rowLog.info({ verdict: result.verdict, reason: result.reason }, 'no verdict; leaving at STEP_2');
+    return;
+  }
+
+  // Step 2: parse the verdict through the zod boundary.
+  const verdict = parseEventsVerdict(result.verdict);
+  if (!verdict) {
+    rowLog.warn({ stage: 'verdict_parse' }, 'verdict parse failed; tombstoning');
+    await writeTombstone(pb, candidateUrl, 'verdict_parse_failed', 'auditor');
+    await scratchpadColl(pb).update(row.id, { step_position: 'STEP_3' });
+    return;
+  }
+
+  // Step 3: resolve official domain within the 2-hop cap (SSRF-guarded).
+  const hop = await resolveOfficialDomain(candidateUrl, 2);
+  if (!hop.ok) {
+    rowLog.info({ stage: 'resolveOfficialDomain' }, 'domain resolution failed; tombstoning link_hop_failed');
+    await writeTombstone(pb, candidateUrl, 'link_hop_failed', 'auditor');
+    await scratchpadColl(pb).update(row.id, { step_position: 'STEP_3' });
+    return;
+  }
+
+  // Step 4: 80/20 domain filter with organizer/agenda scores from the verdict.
+  const domainVerdict = domainPrefilter(
+    { title: verdict.title, snippet: verdict.audit_summary },
+    { organizerScore: verdict.organizer_score, agendaScore: verdict.agenda_score },
+  );
+  if (domainVerdict.verdict === 'reject') {
+    rowLog.info({ stage: 'domain-filter', reason: domainVerdict.reason }, 'domain filter rejected; tombstoning');
+    await writeTombstone(pb, candidateUrl, domainVerdict.reason, 'auditor');
+    await scratchpadColl(pb).update(row.id, { step_position: 'STEP_3' });
+    return;
+  }
+
+  // Step 5: prize gate — explicit liquid cash >= ₹1L, credits stripped.
+  const prizeGatePasses = passesPrizeGate(verdict.prize_text, verdict.prize_cash_inr);
+
+  if (prizeGatePasses) {
+    // Admit → opportunities row with Phase 4 bucket for the verdict category.
+    const bucketChannel =
+      verdict.category === 'sys-cp-sec' ? '#🔥-priority-sys-cp-sec' : '#-online-1lakh-plus';
+
+    const urlHash = hashUrl(normalizeUrl(candidateUrl));
+    await createOpportunityIfAbsent(pb, {
+      url_hash: urlHash,
+      fingerprint_hash: urlHash,
+      pipeline: 'events',
+      bucket_channel: bucketChannel,
+      status: 'audited',
+      title: candidateTitle,
+      organizer: verdict.organizer,
+      links: { official: candidateUrl },
+      prize_cash_inr: verdict.prize_cash_inr ?? null,
+      prize_text: verdict.prize_text,
+      audit_summary: verdict.audit_summary,
+      description_raw: fetchedText.slice(0, 8000),
+    });
+    await scratchpadColl(pb).update(row.id, { step_position: 'STEP_3' });
+    rowLog.info({ bucketChannel }, 'events opportunity written (audited)');
+    return;
+  }
+
+  // Prize gate failed.
+  if (verdict.perk_hint) {
+    // LOT-01 divert: perk-carrying event → loot branch on the same row.
+    // drainLootRow is the single terminal outcome (loot row or loot tombstone).
+    await drainLootRow(pb, router, rowLog, row);
+    return;
+  }
+
+  // No perk → tombstone prize_below_threshold only.
+  await writeTombstone(pb, candidateUrl, 'prize_below_threshold', 'auditor');
+  await scratchpadColl(pb).update(row.id, { step_position: 'STEP_3' });
+  rowLog.info({ reasonCode: 'prize_below_threshold' }, 'tombstone written (prize below threshold)');
 }
