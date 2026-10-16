@@ -14,6 +14,7 @@
 
 import { mkdirSync, renameSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
+import { homedir } from 'node:os';
 import { z } from 'zod';
 
 export interface SeedBoard {
@@ -43,7 +44,7 @@ export type BoardsState = z.infer<typeof BoardsStateSchema>;
 export const DEFAULT_STATE_PATH = join(
   typeof process !== 'undefined' && process.env.HOME
     ? process.env.HOME
-    : require('node:os').homedir(),
+    : homedir(),
   '.zod',
   'boards-learned.json',
 );
