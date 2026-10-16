@@ -130,7 +130,7 @@ Plans:
 **Plans**: 9 plans
 
 **Wave 1**
-- [ ] 05-08-PLAN.md — Contract foundations: D-14 one-way schema migration + new-channel env keys + resolveChannel env-ID-first + per-pipeline audit-card fields (blocking-human D-14 checkpoint) (JOB-02, JOB-04, JOB-05, LOT-01..04)
+- [x] 05-08-PLAN.md — Contract foundations: D-14 one-way schema migration + new-channel env keys + resolveChannel env-ID-first + per-pipeline audit-card fields (blocking-human D-14 checkpoint) (JOB-02, JOB-04, JOB-05, LOT-01..04)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 05-01-PLAN.md — Tracer: @zod/orchestrator + Greenhouse → jobs tick → STEP_2 → audit drain → opportunities/tombstone; scheduler tables; live dependency wiring (ING-03, JOB-01..05)
@@ -190,6 +190,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 2. Scraper Foundation | 3/3 | Complete    | 2026-10-15 |
 | 3. LLM Swarm | 3/3 | Complete    | 2026-10-15 |
 | 4. Events Vertical Slice | 3/3 | Complete    | 2026-10-16 |
-| 5. Jobs + Loot Pipelines | 0/9 | Not started | - |
+| 5. Jobs + Loot Pipelines | 1/9 | Executing | 2026-10-16 |
 | 6. Delivery + Local/Social Coverage | 0/TBD | Not started | - |
 | 7. Telemetry Dashboard + Ops Hardening | 0/TBD | Not started | - |
