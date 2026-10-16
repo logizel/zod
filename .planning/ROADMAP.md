@@ -127,22 +127,26 @@ Plans:
   4. An online event failing the ₹1L rule but carrying a real free perk diverts to #🎁-free-swag-and-credits with India-shipping verified; a US-only drop is rejected
   5. The same event seen on two portals arrives as one merged alert with unified registration links
 
-**Plans**: 7 plans
+**Plans**: 9 plans
 
 **Wave 1**
-- [ ] 05-01-PLAN.md — Tracer: @zod/orchestrator + Greenhouse → jobs tick → STEP_2 → audit drain → opportunities/tombstone; D-14 schema; scheduler tables; channel keys (ING-03, JOB-01..05)
+- [ ] 05-08-PLAN.md — Contract foundations: D-14 one-way schema migration + new-channel env keys + resolveChannel env-ID-first + per-pipeline audit-card fields (blocking-human D-14 checkpoint) (JOB-02, JOB-04, JOB-05, LOT-01..04)
 
 **Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 05-01-PLAN.md — Tracer: @zod/orchestrator + Greenhouse → jobs tick → STEP_2 → audit drain → opportunities/tombstone; scheduler tables; live dependency wiring (ING-03, JOB-01..05)
+
+**Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 05-02-PLAN.md — Full job source mix: Lever/Ashby/HN Who-is-hiring/startup.jobs/Cutshort/Cuvette/Workday + D-02 seed & auto-learn board rotation (ING-03)
 - [ ] 05-03-PLAN.md — D-04 senior listing screen + full D-05..D-08 fresher/scam/geo gates + JOB-02 admission-class rule pack (JOB-01..05)
 - [ ] 05-04-PLAN.md — Loot vertical: rule pack + gates + 2-hop FAQ reader + divert; events drain branch completion; vendor watchlist (LOT-01..04)
 
-**Wave 3** *(blocked on Wave 2 completion)*
+**Wave 4** *(blocked on Wave 3 completion)*
 - [ ] 05-05-PLAN.md — EVT-07 fuzzy merger: ≥0.9/±3d/organizer gate, intake skip + drain backstop, merged tombstones, link union (EVT-07)
 - [ ] 05-07-PLAN.md — YC + Wellfound browser-mode sources: logged-out accessibility probe + two logged-out listing adapters into the jobs fan-out (ING-03)
 
-**Wave 4** *(blocked on Wave 3 completion)*
+**Wave 5** *(blocked on Wave 4 completion)*
 - [ ] 05-06-PLAN.md — Cross-pipeline drain ledger + .env.example bijection guard + full-suite phase gate (all 11 requirements)
+- [ ] 05-09-PLAN.md — Unit + wiring coverage for gates, registry tables, tick sources, and Greenhouse adapter (dependent companion to 05-01, keeps 05-01's file concentration within the proven envelope) (ING-03, JOB-04, JOB-05)
 
 ### Phase 6: Delivery + Local/Social Coverage
 
@@ -186,6 +190,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 2. Scraper Foundation | 3/3 | Complete    | 2026-10-15 |
 | 3. LLM Swarm | 3/3 | Complete    | 2026-10-15 |
 | 4. Events Vertical Slice | 3/3 | Complete    | 2026-10-16 |
-| 5. Jobs + Loot Pipelines | 0/7 | Not started | - |
+| 5. Jobs + Loot Pipelines | 0/9 | Not started | - |
 | 6. Delivery + Local/Social Coverage | 0/TBD | Not started | - |
 | 7. Telemetry Dashboard + Ops Hardening | 0/TBD | Not started | - |
