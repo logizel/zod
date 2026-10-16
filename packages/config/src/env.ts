@@ -4,7 +4,7 @@ import 'dotenv/config';
 // Fail-fast env gate (D-06/D-07): dotenv loads `.env`, zod parses + validates.
 // PB_URL defaults to the loopback PB address; every credential is required.
 // Throws on missing/invalid secrets BEFORE any client constructs.
-const EnvSchema = z.object({
+export const EnvSchema = z.object({
   PB_URL: z.string().default('http://127.0.0.1:8090'),
   PB_SERVICE_EMAIL: z.email(),
   PB_SERVICE_PASSWORD: z.string().min(1),
