@@ -18,9 +18,15 @@ import { list as listStartupJobs } from './startup-jobs.js';
 import { list as listCutshort } from './cutshort.js';
 import { list as listCuvette } from './cuvette.js';
 import { list as listWorkday } from './workday.js';
+import { list as listYc } from './yc.js';
+import { list as listWellfound } from './wellfound.js';
 import { loadBoards, learnBoard } from './boards.js';
 
-/** All job portal adapter list functions (D-01). */
+/** All job portal adapter list functions (D-01).
+ * Ten sources: the 05-02 eight plus YC Work-at-a-Startup + Wellfound
+ * (appended here; zero scheduler/registry/.env changes — they ride the
+ * existing JOB_POLL_JOBS jobs tick).
+ */
 export const JOB_LIST_FNS: readonly (() => Promise<PollCandidate[]>)[] = [
   listGreenhouse,
   () => listLever(),
@@ -30,6 +36,8 @@ export const JOB_LIST_FNS: readonly (() => Promise<PollCandidate[]>)[] = [
   () => listCutshort(),
   () => listCuvette(),
   () => listWorkday(),
+  () => listYc(),
+  () => listWellfound(),
 ];
 
 /** Fetch candidates from all job portal adapters plus learned-board fan-out,
@@ -41,7 +49,7 @@ export async function getJobCandidates(): Promise<PollCandidate[]> {
   // from current fan-out; they appear on the next tick)
   const boardsSnapshot = loadBoards();
 
-  // 1. Default JOB_LIST_FNS fan-out (all 8 sources)
+  // 1. Default JOB_LIST_FNS fan-out (all 10 sources)
   const baseResults = await Promise.all(JOB_LIST_FNS.map((fn) => fn()));
 
   // 2. Learned board fan-out through provider adapters with slug tokens
