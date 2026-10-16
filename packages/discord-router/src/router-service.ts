@@ -26,12 +26,13 @@ export interface RouterService {
  */
 export async function processOpportunity(
   pb: any,
+  env: Env,
   client: any,
   opportunity: OpportunityRow,
   log: Pick<Logger, 'warn' | 'info' | 'error'>,
 ): Promise<boolean> {
   const embed = buildAuditCard(opportunity);
-  const channel = await resolveChannel(client, opportunity.bucket_channel);
+  const channel = await resolveChannel(env, client, opportunity.bucket_channel);
   if (!channel) {
     log.warn({ channel: opportunity.bucket_channel, id: opportunity.id }, 'channel not found; skipping post');
     return false;
@@ -85,7 +86,7 @@ export function createRouterService(deps: RouterServiceDeps): RouterService {
               pbLog.warn({ id: opportunity.id }, 'discord client not ready; deferring post');
               continue;
             }
-            const ok = await processOpportunity(pb, client, opportunity, pbLog);
+            const ok = await processOpportunity(pb, env, client, opportunity, pbLog);
             if (!ok) {
               continue;
             }
@@ -127,12 +128,40 @@ export function startRouterService({ env, log }: { env: Env; log: Logger }): voi
   void createRouterService({ env, log });
 }
 
-/** Resolve a text channel by ID or by name match across guilds. */
+// D-14 / Pitfall 8: bucket-channel value → env key for the three new buckets.
+// Env-configured Discord channel IDs are resolved first; exact-name matching
+// is preserved as fallback. Unknown/unresolvable channels keep the skip path.
+const CHANNEL_ID_ENV_KEYS: Record<string, keyof Env> = {
+  '#⚙️-jobs-sys-cloud-devops': 'DISCORD_CHANNEL_JOBS_SYS_CLOUD',
+  '#💼-jobs-general-swe': 'DISCORD_CHANNEL_JOBS_GENERAL',
+  '#🎁-free-swag-and-credits': 'DISCORD_CHANNEL_LOOT',
+};
+
+/** Resolve a text channel by env-configured ID first, then by name match across guilds. */
 async function resolveChannel(
+  env: Env,
   client: any,
   bucketChannelId: string,
 ): Promise<any | null> {
   if (!client) return null;
+
+  // 1. Env-ID-first for the three new buckets
+  const envKey = CHANNEL_ID_ENV_KEYS[bucketChannelId];
+  if (envKey) {
+    const channelId = env[envKey];
+    if (channelId) {
+      try {
+        const channel = await client.channels.fetch(channelId);
+        if (channel && typeof channel.isTextBased === 'function' && channel.isTextBased() && !channel.isDMBased()) {
+          return channel;
+        }
+      } catch {
+        // fall through to name-based resolution
+      }
+    }
+  }
+
+  // 2. Existing ID-based fetch (for non-bucket or pre-existing channels)
   try {
     const channel = await client.channels.fetch(bucketChannelId);
     if (channel && typeof channel.isTextBased === 'function' && channel.isTextBased() && !channel.isDMBased()) {
@@ -141,6 +170,8 @@ async function resolveChannel(
   } catch {
     // fall through to name-based resolution
   }
+
+  // 3. Exact-name fallback (preserved)
   const guilds = client.guilds?.caches?.values?.() ?? [];
   for (const guild of guilds) {
     const channels = guild.channels?.cache?.values?.() ?? [];
