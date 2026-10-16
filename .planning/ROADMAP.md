@@ -146,7 +146,7 @@ Plans:
 
 **Wave 5** *(blocked on Wave 4 completion)*
 - [ ] 05-06-PLAN.md — Cross-pipeline drain ledger + .env.example bijection guard + full-suite phase gate (all 11 requirements)
-- [ ] 05-09-PLAN.md — Unit + wiring coverage for gates, registry tables, tick sources, and Greenhouse adapter (dependent companion to 05-01, keeps 05-01's file concentration within the proven envelope) (ING-03, JOB-04, JOB-05)
+- [x] 05-09-PLAN.md — Unit + wiring coverage for gates, registry tables, tick sources, and Greenhouse adapter (dependent companion to 05-01, keeps 05-01's file concentration within the proven envelope) (ING-03, JOB-04, JOB-05)
 
 ### Phase 6: Delivery + Local/Social Coverage
 

@@ -3,17 +3,17 @@ gsd_state_version: "1.0"
 current_phase: 05
 current_phase_name: Jobs + Loot Pipelines
 status: executing
-stopped_at: Completed 05-04-PLAN.md — loot vertical core + events completion + vendor watchlist
-last_updated: "2026-10-16T09:40:25Z"
+stopped_at: Completed 05-09-PLAN.md — unit + wiring test coverage for gates, registry, tick sources, and Greenhouse adapter
+last_updated: "2026-10-16T09:55:00Z"
 last_activity: 2026-10-16
-last_activity_desc: Executed plan 05-04 — loot vertical core (rule pack, gates, FAQ reader, drain loot branch), events completion (events rule pack + drain events branch with prize-gate divert into loot), vendor watchlist + live loot wiring; 3 task commits; full suite green (462 tests)
-state_head: d5a5c02d372fc40ce68dfe88eaa4044dcd4edfc9
+last_activity_desc: Executed plan 05-09 — unit + wiring coverage for gates, registry tables, tick sources, and Greenhouse adapter; 1 task commit; full suite green (507 tests)
+state_head: 28aadbf2fdd7e2858b44a558a96f7697c1300518
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 22
-  completed_plans: 16
-  percent: 73
+  completed_plans: 17
+  percent: 77
 ---
 
 # Project State
@@ -28,11 +28,11 @@ See: .planning/PROJECT.md (updated 2026-10-15)
 ## Current Position
 
 Phase: 05 (Jobs + Loot Pipelines) — EXECUTING
-Plan: 4 of 9 (05-08 complete, 05-01 complete, 05-02 complete, 05-03 complete, 05-04 complete)
-Status: Executing Phase 05 — plan 05-04 complete (loot vertical core + events completion + vendor watchlist)
-Last activity: 2026-10-16 — Completed plan 05-04 (loot vertical core + events completion + vendor watchlist), 3 task commits, full suite green (462 tests)
+Plan: 5 of 9 (05-08 complete, 05-01 complete, 05-02 complete, 05-03 complete, 05-04 complete, 05-09 complete)
+Status: Executing Phase 05 — plan 05-09 complete (unit + wiring test coverage for gates, registry, tick sources, and Greenhouse adapter)
+Last activity: 2026-10-16 — Completed plan 05-09 (unit + wiring coverage for gates, registry tables, tick sources, and Greenhouse adapter), 1 task commit, full suite green (507 tests)
 
-Progress: [████████░░] 73%
+Progress: [█████████░] 77%
 
 ## Performance Metrics
 
@@ -67,6 +67,7 @@ Progress: [████████░░] 73%
 | Phase 05 05-02 | 29 min | 2 tasks | 20 files |
 | Phase 05 05-03 | 17 min | 2 tasks | 17 files |
 | Phase 05 05-04 | 20 min | 3 tasks | 18 files |
+| Phase 05 05-09 | 6 min | 1 task | 5 files |
 
 ## Accumulated Context
 
