@@ -91,7 +91,8 @@ export const STUB_JOBS: readonly StubJobDef[] = [
     name: 'local-stub',
     expression: '0 */3 * * *',
     maxRandomDelayMs: 20 * 60_000,
-    description: 'local DK/Udupi cadence stub (real polling lands Phase 2+)',
+    candidateSource: 'local',
+    description: 'local DK/Udupi domain + bio-link poll (ING-02)',
   },
   {
     name: 'social-stub',

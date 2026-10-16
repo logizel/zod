@@ -23,6 +23,7 @@ import {
   type TickLogger,
   type TickOptions,
   type TickRecord,
+  type CandidateSource,
 } from './jobs.js';
 
 export {
@@ -59,6 +60,8 @@ export interface RegisterOptions {
    * SCHEDULER_HEARTBEAT_DIR; unset skips heartbeat writes (dev/test).
    */
   heartbeatDir?: string;
+  /** Injected candidate sources keyed by source name (live path). */
+  candidateSources?: Record<string, CandidateSource>;
 }
 
 const GUARD_PREFIX = '[scheduler-guard]';
@@ -141,7 +144,7 @@ export function registerStubJobs(
   const tasks = STUB_JOBS.map((def) => {
     const task = mod.schedule(
       def.expression,
-      () => runStubTick(def, log, { sink: opts.sink, heartbeatDir }),
+      () => runStubTick(def, log, { sink: opts.sink, heartbeatDir, candidateSources: opts.candidateSources }),
       {
         name: def.name,
         timezone: SCHEDULER_TIMEZONE,
