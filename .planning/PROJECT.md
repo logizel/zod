@@ -12,19 +12,19 @@ Only verified, deduplicated, high-signal opportunities reach Discord — every o
 
 ### Validated
 
-(None yet — ship to validate)
+- ✓ Poll job/fellowship portals (Greenhouse, Lever, Ashby, Workday, YC, Wellfound, Cutshort, Cuvette, LFX, GSoC, MLH) every 30–60m — Phase 5
+- ✓ Enforce job rules: India + India-eligible remote, 0–1yr/intern verification with 2yr+/scam rejection, Sys/Cloud/DevOps vs General SWE routing — Phase 5
+- ✓ Enforce loot rules: trash-to-treasure divert gate, credit/voucher/swag verification with India-shipping check — Phase 5
+- ✓ Fuzzy duplicate merger (≥0.9 title + ±3d + organizer/company evidence) — Phase 5 (EVT-07)
 
 ### Active
 
 - [ ] Discover structured event portals (Unstop, Devfolio, Devpost, Luma, Meetup, CTFtime, CLIST.by) via APIs/RSS first, headless fallback, 15–30m poll
 - [ ] Watch DK & Udupi local list (NITK, MIT Manipal, NMAMIT, SJEC, Sahyadri, MITE, AJIET, St. Aloysius, SOSC, GDG/FOSS) via domain crawler + bio-link watcher, 2–4h
-- [ ] Poll job/fellowship portals (Greenhouse, Lever, Ashby, Workday, YC, Wellfound, Cutshort, Cuvette, LFX, GSoC, MLH) every 30–60m
 - [ ] Relay Discord #announcements natively via Bot Gateway into #raw-incoming-feeds (no self-bot)
 - [ ] Poll X/LinkedIn via session-cookie + 45–90m jitter + search-index fallback
 - [ ] Run Scout → Link-Hopper (2 hops max) → Deep-Auditor → Chief Curator with atomic Task_Scratchpad and 429/413 baton-pass + length-stitch
-- [ ] Enforce event rules: Sys/CP/Sec fast-track, 80/20 domain filter, 3-bucket geo/prize (Local / Travel-selected / Online ₹1L+), TBA two-ping 48h loop, fuzzy duplicate merger
-- [ ] Enforce job rules: India + India-eligible remote, 0–1yr/intern verification with 2yr+/scam rejection, Sys/Cloud/DevOps vs General SWE routing
-- [ ] Enforce loot rules: trash-to-treasure divert gate, credit/voucher/swag verification with India-shipping check
+- [ ] Enforce event rules: Sys/CP/Sec fast-track, 80/20 domain filter, 3-bucket geo/prize (Local / Travel-selected / Online ₹1L+), TBA two-ping 48h loop
 - [ ] Persist hot memory (PocketBase: opportunities + agent_telemetry), cold tombstones + taste_rules (Turso), midnight GC purge with permanent fingerprints
 - [ ] Route 10 Discord channels with audit cards, deadline reminders, bookmark reactions, #🧠-bot-training-chat taste learning
 - [ ] Serve locked dashboard: Zero Trust gate, rolling agent slots over PocketBase SSE, 2D pool health grid, read-only opportunity/audit boards via Cloudflare Tunnel
@@ -71,6 +71,19 @@ Only verified, deduplicated, high-signal opportunities reach Discord — every o
 | 2D per-model bucket rotation + scratchpad handoff | Survives 429/413/length mid-STEP_3 without re-scraping | — Pending |
 | Research-first before requirements | Validate stack/features/arch/pitfalls against live docs | — Pending |
 | MVP vertical slices for roadmap | Working alert slice fast, then add pipelines | — Pending |
+| D-14 one-way schema migration | Nullable/defaulted fields only, no new collection; Phase 4 rows parse via defaults | Shipped Phase 5 (05-08) |
+| resolveChannel env-ID-first | Bucket→env channel ID mapping before exact-name fallback; unknown keeps skip path | Shipped Phase 5 (05-08) |
+| .env.example bijective with EnvSchema | 3 channel keys + 4 Pitfall-10 drift keys; bijection guard in 05-06 | Shipped Phase 5 (05-06, 05-08) |
+| D-02 seed + auto-learn board rotation | extractBoardUrl (3 ATS hosts), learnBoard idempotent + capped 200, next-tick fan-out | Shipped Phase 5 (05-02) |
+| Workday cxs JSON + browser fallback | cxs JSON first ([ASSUMED A1]), exactly-one fetchViaBrowser fallback | Shipped Phase 5 (05-02) |
+| DEFAULT_FELLOWSHIP_ALLOWLIST | LFX/GSoC/MLH defaults + FELLOWSHIP_ALLOWLIST_EXTRA env, fail-closed | Shipped Phase 5 (05-03) |
+| D-04 senior screen | Whole-word case-insensitive title regex; Leadership/Managerial don't match | Shipped Phase 5 (05-03) |
+| Listing-stage scam/geo flag-only | Flag-only detectors, never auto-reject; auditor confirms from full text | Shipped Phase 5 (05-03) |
+| drainLootRow named export | Reused verbatim by events divert path — zero duplicated logic | Shipped Phase 5 (05-04) |
+| Event bucket verbatim reuse | Phase 4 bucket constants (#🔥-priority-sys-cp-sec, #-online-1lakh-plus) | Shipped Phase 5 (05-04) |
+| YC browser-mode + Wellfound fetch-facade | Probe-first mode selection; logged-out only, no credentials | Shipped Phase 5 (05-07) |
+| string-similarity-js@2.1.4 | Audited OK; deprecated string-similarity forbidden | Shipped Phase 5 (05-05) |
+| MergeStore structural port | No db-hot/db-cold import in @zod/dedup; createMergeStore wires PB/cold | Shipped Phase 5 (05-05) |
 
 ## Evolution
 
@@ -90,4 +103,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-10-15 after initialization*
+*Last updated: 2026-10-16 after Phase 5*

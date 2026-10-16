@@ -1,19 +1,19 @@
 ---
 gsd_state_version: "1.0"
-current_phase: 05
-current_phase_name: Jobs + Loot Pipelines
-status: executing
-stopped_at: Completed 05-06-PLAN.md — cross-pipeline drain ledger + env-drift bijection guard + full-suite phase gate
-last_updated: "2026-10-16T10:54:51.454Z"
+current_phase: 6
+current_phase_name: Delivery + Local/Social Coverage
+status: planning
+stopped_at: Phase 05 complete, ready to plan Phase 6
+last_updated: "2026-10-16T11:27:57.477Z"
 last_activity: 2026-10-16
-last_activity_desc: Executed plan 05-05 — EVT-07 cross-portal duplicate merger; 2 task commits; full suite green (567 tests)
-state_head: 93c0dc902177694aaaee1895f9b7b3397b3f5964
+last_activity_desc: Phase 05 complete, transitioned to Phase 6
+state_head: 908aa581178e9587cb6baab202a76da03db4f82e
 progress:
   total_phases: 7
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 22
   completed_plans: 22
-  percent: 57
+  percent: 71
 ---
 
 # Project State
@@ -23,21 +23,21 @@ progress:
 See: .planning/PROJECT.md (updated 2026-10-15)
 
 **Core value:** Only verified, deduplicated, high-signal opportunities reach Discord — every online event has audited cash ≥₹1,00,000 or a real perk with India shipping, every job is true 0–1yr/intern, every alert links the official source.
-**Current focus:** Phase 05 — Jobs + Loot Pipelines
+**Current focus:** Phase 6 — Delivery + Local/Social Coverage
 
 ## Current Position
 
-Phase: 05 (Jobs + Loot Pipelines) — EXECUTING
-Plan: 7 of 9 (05-08 complete, 05-01 complete, 05-02 complete, 05-03 complete, 05-04 complete, 05-09 complete, 05-05 complete)
-Status: Ready to execute
-Last activity: 2026-10-16 — Completed plan 05-05 (EVT-07 cross-portal duplicate merger), 2 task commits, full suite green (567 tests)
+Phase: 6 — Delivery + Local/Social Coverage
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-10-16 — Phase 05 complete, transitioned to Phase 6
 
-Progress: [██████░░░░] 57%
+Progress: [███████░░░] 71%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 10
+- Total plans completed: 18
 - Average duration: -
 - Total execution time: -
 
@@ -48,6 +48,7 @@ Progress: [██████░░░░] 57%
 | 02 | 3 | - | - |
 | 03 | 3 | - | - |
 | 04 | 3 | - | - |
+| 05 | 9 | - | - |
 
 **Recent Trend:**
 - Last 5 plans: -
@@ -115,7 +116,7 @@ None yet.
 
 ### Blockers/Concerns
 
-- Free-tier provider lineup rotates quarterly — re-verify model IDs/limits at Phase 3 planning (research flag)
+- ⚠️ [Phase 5] CR-01: SQL-injection pattern in createOpportunityIfAbsent PocketBase filter (orchestrator.ts:363) — urlHash is SHA-256 hex so not exploitable, but fragile hand-rolled escaping; review for Phase 6 hardening
 - X/LinkedIn session posture + DK/Udupi domain inventory need review as gates before Phase 6 build
 
 ## Deferred Items
@@ -128,6 +129,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-16T10:54:48.087Z
-Stopped at: Completed 05-06-PLAN.md — cross-pipeline drain ledger + env-drift bijection guard + full-suite phase gate
+Last session: 2026-10-16T11:27:57.477Z
+Stopped at: Phase 05 complete, ready to plan Phase 6
 Resume file: None
