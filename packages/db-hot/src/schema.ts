@@ -92,6 +92,19 @@ export const Opportunity = z.object({
   audit_summary: z.string().default(''),
   /** Heavy-text column: raw fetched copy, FIRST purge target under GC. */
   description_raw: z.string().default(''),
+  // ---------------------------------------------------------------------------
+  // D-14: nullable/defaulted Phase 5 extension fields (one-way migration)
+  // Jobs fields (experience span, stack tags, eligibility summary)
+  experience_span: z.string().nullable().default(null),
+  stack_tags: z.array(z.string()).default([]),
+  eligibility_summary: z.string().default(''),
+  // Loot fields (shipping verified, card required, claim steps)
+  shipping_verified: z.boolean().nullable().default(null),
+  card_required: z.boolean().nullable().default(null),
+  claim_steps: z.array(z.object({ step: z.string(), quote: z.string() })).default([]),
+  // Shared fields (registration links, possible dupe of)
+  registration_links: z.array(z.string()).default([]),
+  possible_dupe_of: z.string().default(''),
 });
 export type Opportunity = z.infer<typeof Opportunity>;
 
@@ -136,6 +149,10 @@ export const TaskScratchpad = z.object({
   candidate_url: z.url(),
   /** Orchestrator STEP machine position (STEP_1..STEP_4). */
   step_position: z.string().min(1),
+  /** Pipeline this scratchpad row belongs to (events | jobs | loot | local | social). */
+  pipeline: Pipeline.default('events'),
+  /** Candidate title captured at scratchpad creation for audit-card rendering. */
+  candidate_title: z.string().default(''),
   /** Partial LLM stream buffered across 429/413 baton-passes. */
   partial_buffer: z.string().default(''),
   attempts: z.number().int().min(0).default(0),
@@ -208,10 +225,17 @@ export const INDEX_NOTES: Record<HotCollection, readonly string[]> = {
   opportunities: ['fingerprint_hash (unique)', 'url_hash', 'status', 'end_date', 'pipeline + status'],
   // Ring trim scans by age; slot boards filter by slot + recency.
   agent_telemetry: ['created', 'slot + created'],
-  // Resume-by-URL after a crash must be a point lookup.
-  task_scratchpad: ['candidate_url (unique)'],
+  // Resume-by-URL after a crash must be a point lookup; step_position is the
+  // drain filter for the Phase 5 audit orchestrator (STEP_2 rows).
+  task_scratchpad: ['candidate_url (unique)', 'step_position'],
   // Mirror point-lookup parity with the cold hash PK; tombstones are eternal.
   tombstone_ledger: ['url_hash (unique)', 'fingerprint'],
   // Training-chat weight tuning reads by kind.
   taste_rules: ['kind'],
 };
+
+// D-14 coordination note: the PocketBase collection update (adding the new
+// fields above to the `opportunities` and `task_scratchpad` collections) and
+// the INDEX_NOTES index application must be applied together with the phase's
+// infra step. HOT_COLLECTIONS is intentionally untouched — no new collection
+// is added; this is a one-way field-only migration on existing collections.
