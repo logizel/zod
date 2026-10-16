@@ -3,17 +3,17 @@ gsd_state_version: "1.0"
 current_phase: 05
 current_phase_name: Jobs + Loot Pipelines
 status: executing
-stopped_at: Completed 05-08-PLAN.md contract foundations (D-14 migration + channel env keys + per-pipeline audit cards)
-last_updated: "2026-10-16T07:55:22Z"
+stopped_at: Completed 05-02-PLAN.md — browser sources + D-02 auto-learn + getJobCandidates fan-out
+last_updated: "2026-10-16T08:52:00Z"
 last_activity: 2026-10-16
-last_activity_desc: Executed plan 05-08 — Tasks 1 and 2 complete; 2 task commits; full suite 233/233 green
-state_head: 65f7508178e0ecb0d832079aa489fb7f58459568
+last_activity_desc: Executed plan 05-02 — Tasks 1 and 2 complete; 2 task commits; full suite 99/99 green
+state_head: e9ad644b6f056c213e4885071396d7c665b00f10
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 22
-  completed_plans: 14
-  percent: 64
+  completed_plans: 15
+  percent: 68
 ---
 
 # Project State
@@ -28,9 +28,9 @@ See: .planning/PROJECT.md (updated 2026-10-15)
 ## Current Position
 
 Phase: 05 (Jobs + Loot Pipelines) — EXECUTING
-Plan: 1 of 9 (05-08 complete, 05-01 complete)
-Status: Executing Phase 05 — plan 05-08 contract foundations complete; plan 05-01 tracer complete
-Last activity: 2026-10-16 — Completed plan 05-01 tracer (orchestrator + Greenhouse → jobs tick → STEP_2 → audit drain → opportunities/tombstone), 1 task commit, 238/238 tests green
+Plan: 2 of 9 (05-08 complete, 05-01 complete, 05-02 complete)
+Status: Executing Phase 05 — plan 05-02 complete (browser sources + D-02 auto-learn + getJobCandidates fan-out)
+Last activity: 2026-10-16 — Completed plan 05-02 (Lever/Ashby/HN/startup.jobs/Cutshort/Cuvette/Workday adapters + boards state core + index fan-out), 2 task commits, 99/99 discord-router tests green
 
 Progress: [████████░░] 68%
 
@@ -64,6 +64,7 @@ Progress: [████████░░] 68%
 | Phase 01 P04 | 12 min | 3 tasks | 17 files |
 | Phase 05 05-08 | 8 min | 2 tasks | 11 files |
 | Phase 05 05-01 | 42 min | 1 task | 21 files |
+| Phase 05 05-02 | 29 min | 2 tasks | 20 files |
 
 ## Accumulated Context
 
@@ -81,6 +82,9 @@ Recent decisions affecting current work:
 - [Phase 05 05-08]: D-14 one-way schema migration — nullable/defaulted fields only, no new collection, HOT_COLLECTIONS untouched (locked CONTEXT decision)
 - [Phase 05 05-08]: resolveChannel env-ID-first for three new bucket channels before exact-name fallback; unknown channels keep skip path (Pitfall 8)
 - [Phase 05 05-08]: .env.example bijective with EnvSchema — 3 channel keys + 4 Pitfall-10 drift keys added (Pitfall 10)
+- [Phase 05 05-02]: D-02 seed + auto-learn board rotation — extractBoardUrl (3 ATS hosts), learnBoard idempotent + capped at 200, loadBoards seed∪learned
+- [Phase 05 05-02]: getJobCandidates fan-out — 8 JOB_LIST_FNS + learned-board fan-out through provider adapters, URL dedupe, next-tick learnBoard harvest
+- [Phase 05 05-02]: Workday cxs JSON first ([ASSUMED A1]) with exactly-one fetchViaBrowser fallback (D-03)
 
 ### Pending Todos
 
@@ -101,6 +105,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-16T07:55:22Z
-Stopped at: Completed 05-08-PLAN.md contract foundations
+Last session: 2026-10-16T08:52:00Z
+Stopped at: Completed 05-02-PLAN.md — browser sources + D-02 auto-learn + getJobCandidates fan-out
 Resume file: .planning/phases/05-jobs-loot-pipelines/05-CONTEXT.md
