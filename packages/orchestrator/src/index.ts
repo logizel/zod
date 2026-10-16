@@ -9,3 +9,4 @@ export { buildLootMessages, type LootCtx, parseLootVerdict, type LootVerdict } f
 export { pickJobsBucket, evaluateJobsGates, type JobsGateResult } from './gates/jobs.js';
 export { evaluateLootGates, BUCKET_LOOT, type LootGateResult } from './gates/loot.js';
 export { readLootRules } from './loot-faq.js';
+export { buildEventsMessages, type EventsCtx, parseEventsVerdict, type EventsVerdict } from './rule-packs/events.js';
