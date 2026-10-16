@@ -24,6 +24,19 @@ export const EnvSchema = z.object({
   // D-06: fellowship allowlist extension — operator-extensible without a
   // release. getFellowshipAllowlist() merges this into the config default.
   FELLOWSHIP_ALLOWLIST_EXTRA: z.string().default(''),
+  // Phase 6: local DK/Udupi domain inventory env override (D-01).
+  LOCAL_WATCHLIST_DOMAINS: z.string().default(''),
+  // Phase 6: X/LinkedIn session-cookie file path (D-07).
+  SOCIAL_COOKIES_PATH: z.string().default(''),
+  // Phase 6: external #announcements source channel for the relay (D-04).
+  DISCORD_RELAY_SOURCE_CHANNEL_ID: z.string().default(''),
+  // Phase 6: bucket channel IDs (env-ID-first resolution in router-service).
+  BOOKMARK_EMOJI_ID: z.string().default(''),
+  DISCORD_CHANNEL_LOCAL: z.string().default(''),
+  DISCORD_CHANNEL_TRAVEL: z.string().default(''),
+  DISCORD_CHANNEL_TBA: z.string().default(''),
+  DISCORD_CHANNEL_RELAY: z.string().default(''),
+  DISCORD_CHANNEL_TRAINING: z.string().default(''),
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
 });
 

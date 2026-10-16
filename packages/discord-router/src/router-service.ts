@@ -135,10 +135,15 @@ const CHANNEL_ID_ENV_KEYS: Record<string, keyof Env> = {
   '#⚙️-jobs-sys-cloud-devops': 'DISCORD_CHANNEL_JOBS_SYS_CLOUD',
   '#💼-jobs-general-swe': 'DISCORD_CHANNEL_JOBS_GENERAL',
   '#🎁-free-swag-and-credits': 'DISCORD_CHANNEL_LOOT',
+  '#📍-local-dk-udupi': 'DISCORD_CHANNEL_LOCAL',
+  '#✈️-travel-curated': 'DISCORD_CHANNEL_TRAVEL',
+  '#⏳-early-tba-radar': 'DISCORD_CHANNEL_TBA',
+  '#raw-incoming-feeds': 'DISCORD_CHANNEL_RELAY',
+  '#🧠-bot-training-chat': 'DISCORD_CHANNEL_TRAINING',
 };
 
 /** Resolve a text channel by env-configured ID first, then by name match across guilds. */
-async function resolveChannel(
+export async function resolveChannel(
   env: Env,
   client: any,
   bucketChannelId: string,

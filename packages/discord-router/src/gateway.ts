@@ -16,7 +16,11 @@ export interface GatewayDeps {
 
 export function startGateway({ env, log }: GatewayDeps): Client {
   const client = new Client({
-    intents: [GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],
+    intents: [
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMessageReactions,
+  ],
     partials: [Partials.Message, Partials.Reaction, Partials.Channel],
   });
 
