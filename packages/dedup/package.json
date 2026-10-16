@@ -13,6 +13,10 @@
     "./precheck": {
       "types": "./dist/precheck.d.ts",
       "default": "./dist/precheck.js"
+    },
+    "./merger": {
+      "types": "./dist/merger.d.ts",
+      "default": "./dist/merger.js"
     }
   },
   "scripts": {
@@ -20,6 +24,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "string-similarity-js": "2.1.4",
     "zod": "^4.6.7"
   },
   "devDependencies": {
