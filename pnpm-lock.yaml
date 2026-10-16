@@ -41,9 +41,27 @@ importers:
       '@zod/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@zod/db-cold':
+        specifier: workspace:*
+        version: link:../../packages/db-cold
+      '@zod/db-hot':
+        specifier: workspace:*
+        version: link:../../packages/db-hot
+      '@zod/discord-router':
+        specifier: workspace:*
+        version: link:../../packages/discord-router
+      '@zod/llm':
+        specifier: workspace:*
+        version: link:../../packages/llm
       '@zod/logger':
         specifier: workspace:*
         version: link:../../packages/logger
+      '@zod/orchestrator':
+        specifier: workspace:*
+        version: link:../../packages/orchestrator
+      '@zod/sanitize':
+        specifier: workspace:*
+        version: link:../../packages/sanitize
       '@zod/scheduler-registry':
         specifier: workspace:*
         version: link:../../packages/scheduler
@@ -130,6 +148,9 @@ importers:
 
   packages/dedup:
     dependencies:
+      string-similarity-js:
+        specifier: 2.1.4
+        version: 2.1.4
       zod:
         specifier: ^4.6.7
         version: 4.6.7
@@ -218,6 +239,46 @@ importers:
       pino-pretty:
         specifier: ^13.2.0
         version: 13.2.0
+      typescript:
+        specifier: ~5.9
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.7
+        version: 3.2.7(@types/node@26.6.5)(tsx@4.23.15)
+
+  packages/orchestrator:
+    dependencies:
+      '@zod/config':
+        specifier: workspace:*
+        version: link:../config
+      '@zod/db-hot':
+        specifier: workspace:*
+        version: link:../db-hot
+      '@zod/discord-router':
+        specifier: workspace:*
+        version: link:../discord-router
+      '@zod/llm':
+        specifier: workspace:*
+        version: link:../llm
+      '@zod/logger':
+        specifier: workspace:*
+        version: link:../logger
+      '@zod/sanitize':
+        specifier: workspace:*
+        version: link:../sanitize
+      '@zod/scheduler-registry':
+        specifier: workspace:*
+        version: link:../scheduler
+      '@zod/scout':
+        specifier: workspace:*
+        version: link:../scout
+      pino:
+        specifier: ^10.4.0
+        version: 10.4.0
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
+    devDependencies:
       typescript:
         specifier: ~5.9
         version: 5.9.3
@@ -1222,6 +1283,9 @@ packages:
 
   std-env@3.10.0:
     resolution: {integrity: sha512-5GS12FdOZNliM5mAOxFRg7Ir0pWz8MdpYm6AY6VPkGpbA7ZzmbzNcBJQ0GPvvyWgcY7QAhCgf9Uy89I03faLkg==}
+
+  string-similarity-js@2.1.4:
+    resolution: {integrity: sha512-uApODZNjCHGYROzDSAdCmAHf60L/pMDHnP/yk6TAbvGg7JSPZlSto/ceCI7hZEqzc53/juU2aOJFkM2yUVTMTA==}
 
   strip-json-comments@5.0.3:
     resolution: {integrity: sha512-1tB5mhVo7U+ETBKNf92xT4hrQa3pm0MZ0PQvuDnWgAAGHDsfp4lPSpiS6psrSiet87wyGPh9ft6wmhOMQ0hDiw==}
@@ -2274,6 +2338,8 @@ snapshots:
   stackback@0.0.2: {}
 
   std-env@3.10.0: {}
+
+  string-similarity-js@2.1.4: {}
 
   strip-json-comments@5.0.3: {}
 
