@@ -3,17 +3,17 @@ gsd_state_version: "1.0"
 current_phase: 05
 current_phase_name: Jobs + Loot Pipelines
 status: executing
-stopped_at: Completed 05-07-PLAN.md — YC + Wellfound listing adapters + ten-source fan-out
-last_updated: "2026-10-16T10:14:37.258Z"
+stopped_at: Completed 05-05-PLAN.md — EVT-07 cross-portal duplicate merger (merger core + intake/drain wiring + link-union card)
+last_updated: "2026-10-16T11:20:00Z"
 last_activity: 2026-10-16
-last_activity_desc: Executed plan 05-09 — unit + wiring coverage for gates, registry tables, tick sources, and Greenhouse adapter; 1 task commit; full suite green (507 tests)
-state_head: 79e31cc093168f35eb36de92b0b6e5ceb5e1d141
+last_activity_desc: Executed plan 05-05 — EVT-07 cross-portal duplicate merger; 2 task commits; full suite green (567 tests)
+state_head: 2f053450336cf8d543989d1f0253cc64587dd15f
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 22
-  completed_plans: 20
-  percent: 57
+  completed_plans: 21
+  percent: 95
 ---
 
 # Project State
@@ -28,11 +28,11 @@ See: .planning/PROJECT.md (updated 2026-10-15)
 ## Current Position
 
 Phase: 05 (Jobs + Loot Pipelines) — EXECUTING
-Plan: 6 of 9 (05-08 complete, 05-01 complete, 05-02 complete, 05-03 complete, 05-04 complete, 05-09 complete)
+Plan: 6 of 9 (05-08 complete, 05-01 complete, 05-02 complete, 05-03 complete, 05-04 complete, 05-09 complete, 05-05 complete)
 Status: Ready to execute
-Last activity: 2026-10-16 — Completed plan 05-09 (unit + wiring coverage for gates, registry tables, tick sources, and Greenhouse adapter), 1 task commit, full suite green (507 tests)
+Last activity: 2026-10-16 — Completed plan 05-05 (EVT-07 cross-portal duplicate merger), 2 task commits, full suite green (567 tests)
 
-Progress: [██████░░░░] 57%
+Progress: [██████████████████░] 95%
 
 ## Performance Metrics
 
@@ -69,6 +69,7 @@ Progress: [██████░░░░] 57%
 | Phase 05 05-04 | 20 min | 3 tasks | 18 files |
 | Phase 05 05-09 | 6 min | 1 task | 5 files |
 | Phase 05 P07 | 9 | 2 tasks | 6 files |
+| Phase 05 05-05 | ~75 min | 2 tasks | 20 files |
 
 ## Accumulated Context
 
@@ -100,6 +101,9 @@ Recent decisions affecting current work:
 - [Phase 05]: YC primary mode = browser (fetchViaBrowser via shared queue): probe showed workatastartup.com/jobs returns a client-rendered React shell with 0 job/company links via plain fetch
 - [Phase 05]: Wellfound primary mode = fetch-facade (native fetch): probe showed wellfound.com/jobs serves full listing markup (215 anchors, ~110 job/company hrefs, __NEXT_DATA__) to a logged-out plain fetch; exactly-one fetchViaBrowser fallback on shell detection
 - [Phase 05]: No scheduler/registry/.env changes — new sources ride the existing JOB_POLL_JOBS jobs tick (05-01 cadence)
+- [Phase 05 05-05]: string-similarity-js@2.1.4 selected (audited OK per 05-RESEARCH.md); deprecated string-similarity forbidden (Pitfall 4)
+- [Phase 05 05-05]: MergeStore port kept structural in @zod/dedup — no db-hot/db-cold import; createMergeStore wires PB/cold at scheduler/orchestrator layer
+- [Phase 05 05-05]: Intake merge runs only on precheck 'fresh' verdicts (Pitfall 9); hot-hit/tombstoned bypass; missing pb → graceful skip
 
 ### Pending Todos
 
@@ -120,6 +124,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-16T10:14:33.970Z
-Stopped at: Completed 05-07-PLAN.md — YC + Wellfound listing adapters + ten-source fan-out
+Last session: 2026-10-16T11:20:00Z
+Stopped at: Completed 05-05-PLAN.md — EVT-07 cross-portal duplicate merger
 Resume file: None
