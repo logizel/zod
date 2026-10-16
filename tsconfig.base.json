@@ -14,7 +14,10 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "paths": {
-      "@zod/scheduler-registry": ["./packages/scheduler/src/registry.ts"]
+      "@zod/scheduler-registry": ["./packages/scheduler/src/registry.ts"],
+      "@zod/dedup": ["./packages/dedup/src/fingerprint.ts"],
+      "@zod/dedup/precheck": ["./packages/dedup/src/precheck.ts"],
+      "@zod/scheduler/jobs": ["./packages/scheduler/src/jobs.ts"]
     }
   }
 }

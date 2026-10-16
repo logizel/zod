@@ -13,6 +13,10 @@
     "./portals/*": {
       "types": "./dist/portals/*.d.ts",
       "default": "./dist/portals/*.js"
+    },
+    "./portals/jobs/*": {
+      "types": "./dist/portals/jobs/*.d.ts",
+      "default": "./dist/portals/jobs/*.js"
     }
   },
   "scripts": {

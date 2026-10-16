@@ -34,6 +34,9 @@
     },
     {
       "path": "./packages/browser"
+    },
+    {
+      "path": "./packages/orchestrator"
     }
   ]
 }
