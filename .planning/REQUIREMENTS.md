@@ -35,11 +35,11 @@
 
 ### Jobs Pipeline
 
-- [ ] **JOB-01**: System admits India on-site/hybrid roles plus India-eligible global remote roles
-- [ ] **JOB-02**: Deep-Auditor admits internships, 6-month PPOs, new-grad, off-campus, LFX/GSoC fellowships, and 0–1yr entry roles from full requirements text
-- [ ] **JOB-03**: System rejects 2+yr roles, unpaid non-fellowships, and pay-for-training/certificate scams
-- [ ] **JOB-04**: Systems/Cloud/DevOps/SRE/K8s/Rust-Go-C roles route to #⚙️-jobs-sys-cloud-devops with stack + ATS link
-- [ ] **JOB-05**: Other verified SWE roles route to #💼-jobs-general-swe with eligibility + direct apply link
+- [x] **JOB-01**: System admits India on-site/hybrid roles plus India-eligible global remote roles
+- [x] **JOB-02**: Deep-Auditor admits internships, 6-month PPOs, new-grad, off-campus, LFX/GSoC fellowships, and 0–1yr entry roles from full requirements text
+- [x] **JOB-03**: System rejects 2+yr roles, unpaid non-fellowships, and pay-for-training/certificate scams
+- [x] **JOB-04**: Systems/Cloud/DevOps/SRE/K8s/Rust-Go-C roles route to #⚙️-jobs-sys-cloud-devops with stack + ATS link
+- [x] **JOB-05**: Other verified SWE roles route to #💼-jobs-general-swe with eligibility + direct apply link
 
 ### Loot Pipeline
 
@@ -117,12 +117,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | EVT-04 | Phase 6 | Pending |
 | EVT-05 | Phase 4 | Complete |
 | EVT-06 | Phase 6 | Pending |
-| EVT-07 | Phase 5 | Pending |
-| JOB-01 | Phase 5 | Pending |
-| JOB-02 | Phase 5 | Pending |
-| JOB-03 | Phase 5 | Pending |
-| JOB-04 | Phase 5 | Pending |
-| JOB-05 | Phase 5 | Pending |
+| EVT-07 | Phase 5 | Complete |
+| JOB-01 | Phase 5 | Complete |
+| JOB-02 | Phase 5 | Complete |
+| JOB-03 | Phase 5 | Complete |
+| JOB-04 | Phase 5 | Complete |
+| JOB-05 | Phase 5 | Complete |
 | LOT-01 | Phase 5 | Complete |
 | LOT-02 | Phase 5 | Complete |
 | LOT-03 | Phase 5 | Complete |

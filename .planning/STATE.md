@@ -3,17 +3,17 @@ gsd_state_version: "1.0"
 current_phase: 05
 current_phase_name: Jobs + Loot Pipelines
 status: executing
-stopped_at: Completed 05-05-PLAN.md — EVT-07 cross-portal duplicate merger (merger core + intake/drain wiring + link-union card)
-last_updated: "2026-10-16T11:20:00Z"
+stopped_at: Completed 05-06-PLAN.md — cross-pipeline drain ledger + env-drift bijection guard + full-suite phase gate
+last_updated: "2026-10-16T10:54:51.454Z"
 last_activity: 2026-10-16
 last_activity_desc: Executed plan 05-05 — EVT-07 cross-portal duplicate merger; 2 task commits; full suite green (567 tests)
-state_head: 2f053450336cf8d543989d1f0253cc64587dd15f
+state_head: 93c0dc902177694aaaee1895f9b7b3397b3f5964
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 22
-  completed_plans: 21
-  percent: 95
+  completed_plans: 22
+  percent: 57
 ---
 
 # Project State
@@ -28,11 +28,11 @@ See: .planning/PROJECT.md (updated 2026-10-15)
 ## Current Position
 
 Phase: 05 (Jobs + Loot Pipelines) — EXECUTING
-Plan: 6 of 9 (05-08 complete, 05-01 complete, 05-02 complete, 05-03 complete, 05-04 complete, 05-09 complete, 05-05 complete)
+Plan: 7 of 9 (05-08 complete, 05-01 complete, 05-02 complete, 05-03 complete, 05-04 complete, 05-09 complete, 05-05 complete)
 Status: Ready to execute
 Last activity: 2026-10-16 — Completed plan 05-05 (EVT-07 cross-portal duplicate merger), 2 task commits, full suite green (567 tests)
 
-Progress: [██████████████████░] 95%
+Progress: [██████░░░░] 57%
 
 ## Performance Metrics
 
@@ -70,6 +70,7 @@ Progress: [██████████████████░] 95%
 | Phase 05 05-09 | 6 min | 1 task | 5 files |
 | Phase 05 P07 | 9 | 2 tasks | 6 files |
 | Phase 05 05-05 | ~75 min | 2 tasks | 20 files |
+| Phase 05 P06 | 424 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -104,6 +105,9 @@ Recent decisions affecting current work:
 - [Phase 05 05-05]: string-similarity-js@2.1.4 selected (audited OK per 05-RESEARCH.md); deprecated string-similarity forbidden (Pitfall 4)
 - [Phase 05 05-05]: MergeStore port kept structural in @zod/dedup — no db-hot/db-cold import; createMergeStore wires PB/cold at scheduler/orchestrator layer
 - [Phase 05 05-05]: Intake merge runs only on precheck 'fresh' verdicts (Pitfall 9); hot-hit/tombstoned bypass; missing pb → graceful skip
+- [Phase 05]: No production-code changes for Task 1 (test-only gate per plan prohibition)
+- [Phase 05]: Minimal production change for Task 2: added export keyword to EnvSchema only, no parsing/default changes
+- [Phase 05]: Mocked @zod/dedup/merger attemptMerge to return merged for duplicate URL (EVENTS_6), simulating link union on master opportunity
 
 ### Pending Todos
 
@@ -124,6 +128,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-16T11:20:00Z
-Stopped at: Completed 05-05-PLAN.md — EVT-07 cross-portal duplicate merger
+Last session: 2026-10-16T10:54:48.087Z
+Stopped at: Completed 05-06-PLAN.md — cross-pipeline drain ledger + env-drift bijection guard + full-suite phase gate
 Resume file: None
