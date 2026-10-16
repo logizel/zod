@@ -18,6 +18,10 @@
       "types": "./dist/portals/jobs/*.d.ts",
       "default": "./dist/portals/jobs/*.js"
     },
+    "./portals/loot/*": {
+      "types": "./dist/portals/loot/*.d.ts",
+      "default": "./dist/portals/loot/*.js"
+    },
     "./link-hop": {
       "types": "./dist/link-hop.d.ts",
       "default": "./dist/link-hop.js"
