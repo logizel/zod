@@ -9,6 +9,7 @@ import {
   detectScamClasses,
   geoVerdict,
   evaluateJobsGates,
+  pickJobsBucket,
   type JobsGateResult,
 } from './jobs.js';
 
@@ -274,5 +275,56 @@ describe('evaluateJobsGates', () => {
     );
     expect(result.admitted).toBe(true);
     expect(result.bucketChannel).toBe('#💼-jobs-general-swe');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// pickJobsBucket (JOB-04/JOB-05)
+// ---------------------------------------------------------------------------
+
+describe('pickJobsBucket', () => {
+  it.each([
+    ['sys', '#⚙️-jobs-sys-cloud-devops'],
+    ['cloud', '#⚙️-jobs-sys-cloud-devops'],
+    ['devops', '#⚙️-jobs-sys-cloud-devops'],
+    ['sre', '#⚙️-jobs-sys-cloud-devops'],
+    ['k8s', '#⚙️-jobs-sys-cloud-devops'],
+    ['kubernetes', '#⚙️-jobs-sys-cloud-devops'],
+    ['rust', '#⚙️-jobs-sys-cloud-devops'],
+    ['go', '#⚙️-jobs-sys-cloud-devops'],
+    ['golang', '#⚙️-jobs-sys-cloud-devops'],
+  ])('sys/cloud stack tag %s → sys/cloud bucket', (tag, expected) => {
+    expect(pickJobsBucket([tag])).toBe(expected);
+  });
+
+  it.each([
+    [['frontend'], '#💼-jobs-general-swe'],
+    [['data'], '#💼-jobs-general-swe'],
+    [['unknown'], '#💼-jobs-general-swe'],
+    [[], '#💼-jobs-general-swe'],
+    [['c'], '#💼-jobs-general-swe'],
+    [['c++'], '#💼-jobs-general-swe'],
+  ])('non-sys-cloud tags %s → general bucket', (tags, expected) => {
+    expect(pickJobsBucket(tags)).toBe(expected);
+  });
+
+  it('never returns an empty bucket value', () => {
+    expect(pickJobsBucket([])).toBe('#💼-jobs-general-swe');
+    expect(pickJobsBucket(['unknown'])).toBe('#💼-jobs-general-swe');
+    expect(pickJobsBucket(['c', 'c++'])).toBe('#💼-jobs-general-swe');
+  });
+
+  it('whole-tag semantics: go does not match google or django', () => {
+    expect(pickJobsBucket(['go'])).toBe('#⚙️-jobs-sys-cloud-devops');
+    expect(pickJobsBucket(['google'])).toBe('#💼-jobs-general-swe');
+    expect(pickJobsBucket(['django'])).toBe('#💼-jobs-general-swe');
+    expect(pickJobsBucket(['golang'])).toBe('#⚙️-jobs-sys-cloud-devops');
+    expect(pickJobsBucket(['go', 'google'])).toBe('#⚙️-jobs-sys-cloud-devops'); // go wins on first match
+  });
+
+  it('first sys/cloud tag wins when mixed with general tags', () => {
+    expect(pickJobsBucket(['React', 'k8s', 'TypeScript'])).toBe('#⚙️-jobs-sys-cloud-devops');
+    expect(pickJobsBucket(['k8s', 'React'])).toBe('#⚙️-jobs-sys-cloud-devops');
+    expect(pickJobsBucket(['React', 'TypeScript'])).toBe('#💼-jobs-general-swe');
   });
 });

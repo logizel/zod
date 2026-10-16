@@ -110,6 +110,23 @@ function makeLootScratchRow(overrides: Partial<TaskScratchpadRow> = {}): TaskScr
   } as TaskScratchpadRow;
 }
 
+function makeJobsScratchRow(overrides: Partial<TaskScratchpadRow> = {}): TaskScratchpadRow {
+  return {
+    id: 'scratch-jobs-1',
+    created: '2026-10-16T08:00:00Z',
+    updated: '2026-10-16T08:00:00Z',
+    candidate_url: 'https://boards.greenhouse.io/acme/jobs/123',
+    step_position: 'STEP_2',
+    pipeline: 'jobs',
+    candidate_title: 'Frontend Engineer (Fresher)',
+    partial_buffer:
+      'We are hiring a frontend engineer for our growing team. This is a fresher-friendly role with 0-1 years experience. Based in Bangalore, India. Stack: React, TypeScript, Node.js.',
+    attempts: 0,
+    last_error: null,
+    ...overrides,
+  } as TaskScratchpadRow;
+}
+
 /** Install a fetch mock that makes readLootRules succeed via a 2-hop chain. */
 function installSuccessFetch(): void {
   const mockFetch = vi.fn();
@@ -578,5 +595,135 @@ describe('orchestrator drainStep2Rows events branch', () => {
     expect(collections.tombstone_ledger.create).not.toHaveBeenCalled();
     expect(collections.scratchpad.update).not.toHaveBeenCalled();
     vi.unstubAllGlobals();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Drain limit enforcement, per-row isolation, cold-store tombstone, parse failure
+// ---------------------------------------------------------------------------
+
+describe('orchestrator drainStep2Rows — drain limit and isolation', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('calls getList with bounded page size (default 25)', async () => {
+    const { pb, collections } = makePb({
+      scratchpadRows: [],
+      existingOpportunities: [],
+    });
+    const getListSpy = vi.spyOn(collections.scratchpad, 'getList');
+
+    const router = makeRouter(() => 'UNVERIFIED');
+
+    await drainStep2Rows({ pb, router: router as any, pageSize: 25 });
+
+    expect(getListSpy).toHaveBeenCalledWith(1, 25, expect.objectContaining({
+      filter: "step_position = 'STEP_2'",
+    }));
+  });
+
+  it('uses custom pageSize when provided', async () => {
+    const { pb, collections } = makePb({
+      scratchpadRows: [],
+      existingOpportunities: [],
+    });
+    const getListSpy = vi.spyOn(collections.scratchpad, 'getList');
+
+    const router = makeRouter(() => 'UNVERIFIED');
+
+    await drainStep2Rows({ pb, router: router as any, pageSize: 10 });
+
+    expect(getListSpy).toHaveBeenCalledWith(1, 10, expect.objectContaining({
+      filter: "step_position = 'STEP_2'",
+    }));
+  });
+
+  it('per-row isolation: a throwing router call does not abort the batch', async () => {
+    const { pb, collections } = makePb({
+      scratchpadRows: [
+        makeJobsScratchRow({ id: 'scratch-1', candidate_url: 'https://example.com/job-1' }),
+        makeJobsScratchRow({ id: 'scratch-2', candidate_url: 'https://example.com/job-2' }),
+      ],
+      existingOpportunities: [],
+    });
+
+    let callCount = 0;
+    const router = makeRouter(() => {
+      callCount++;
+      if (callCount === 1) throw new Error('router boom');
+      return {
+        admission_class: 'admit',
+        reason_code: null,
+        stack_tags: ['React'],
+        eligibility_summary: 'ok',
+        audit_summary: 'ok',
+      };
+    });
+
+    await drainStep2Rows({ pb, router: router as any, pageSize: 25 });
+
+    // Router called for both rows (first threw, second succeeded)
+    expect(callCount).toBe(2);
+    // Second row still created an opportunity
+    expect(collections.opportunities.create).toHaveBeenCalledTimes(1);
+    // Throwing row stays at STEP_2 (no update), succeeding row advances to STEP_3
+    expect(collections.scratchpad.update).toHaveBeenCalledTimes(1);
+    expect(collections.scratchpad.update).toHaveBeenCalledWith('scratch-2', { step_position: 'STEP_3' });
+    // No tombstone for the throwing row (error is caught and logged)
+    expect(collections.tombstone_ledger.create).not.toHaveBeenCalled();
+  });
+
+  it('cold-store tombstone write invoked on reject verdict', async () => {
+    const { pb, collections } = makePb({
+      scratchpadRows: [makeJobsScratchRow()],
+      existingOpportunities: [],
+    });
+
+    const router = makeRouter(() => ({
+      admission_class: 'reject',
+      reason_code: 'scam_pay_to_join',
+      stack_tags: [],
+      eligibility_summary: '',
+      audit_summary: 'rejected',
+    }));
+
+    await drainStep2Rows({ pb, router: router as any, pageSize: 25 });
+
+    expect(collections.opportunities.create).not.toHaveBeenCalled();
+    expect(collections.tombstone_ledger.create).toHaveBeenCalledTimes(1);
+    const tsCall = collections.tombstone_ledger.create.mock.calls[0][0];
+    expect(tsCall.terminal_status).toBe('scam_pay_to_join');
+    expect(tsCall.source).toBe('auditor');
+    expect(collections.scratchpad.update).toHaveBeenCalledWith('scratch-jobs-1', { step_position: 'STEP_3' });
+  });
+
+  it('opportunity parse failure: no partial row, tombstone with verdict_parse_failed', async () => {
+    const { pb, collections } = makePb({
+      scratchpadRows: [makeJobsScratchRow()],
+      existingOpportunities: [],
+    });
+
+    // Verdict missing required audit_summary → zod parse failure
+    const router = makeRouter(() => ({
+      admission_class: 'admit',
+      reason_code: null,
+      stack_tags: ['React'],
+      eligibility_summary: 'ok',
+      // audit_summary intentionally missing → parse fails
+    }));
+
+    await drainStep2Rows({ pb, router: router as any, pageSize: 25 });
+
+    // No opportunities row created (no partial write)
+    expect(collections.opportunities.create).not.toHaveBeenCalled();
+    // Tombstone written with verdict_parse_failed
+    expect(collections.tombstone_ledger.create).toHaveBeenCalledTimes(1);
+    const tsCall = collections.tombstone_ledger.create.mock.calls[0][0];
+    expect(tsCall.terminal_status).toBe('verdict_parse_failed');
+    expect(tsCall.source).toBe('auditor');
+    // Row advanced to STEP_3 (terminal decision reached)
+    expect(collections.scratchpad.update).toHaveBeenCalledWith('scratch-jobs-1', { step_position: 'STEP_3' });
   });
 });

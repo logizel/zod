@@ -5,7 +5,12 @@ import cron from 'node-cron';
 import {
   assertSchedulerGuards,
   GATEWAY_JOBS,
+  JOB_POLL_JOBS,
+  AUDIT_JOBS,
+  STUB_JOBS,
   registerGatewayJobs,
+  registerPollJobs,
+  registerAuditDrain,
   registerStubJobs,
   runGatewayTick,
   SCHEDULER_TIMEZONE,
@@ -169,5 +174,150 @@ describe('runGatewayTick', () => {
     expect(records.map((r) => r.phase)).toEqual(['start', 'done']);
     const warns = logRecords.filter((r: any) => r.level === 'warn');
     expect(warns.length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Job poll + audit drain jobs registered via single registry
+// ---------------------------------------------------------------------------
+
+describe('job poll jobs registered via single registry', () => {
+  it('schedules JOB_POLL_JOBS with timezone, overlap guard, and jitter', () => {
+    const { log } = makeFakeLogger();
+    const { mod, calls } = makeFakeScheduler();
+
+    const handle = registerPollJobs(log, mod);
+
+    const jobCalls = calls.filter((c) => c.options['name'] !== 'guard-probe');
+    expect(handle.tasks).toHaveLength(JOB_POLL_JOBS.length);
+    expect(jobCalls).toHaveLength(JOB_POLL_JOBS.length);
+    expect(jobCalls.map((c) => c.options['name'])).toEqual(
+      JOB_POLL_JOBS.map((j) => j.name),
+    );
+    expect(jobCalls.map((c) => c.expression)).toEqual(
+      JOB_POLL_JOBS.map((j) => j.expression),
+    );
+    for (const [index, call] of jobCalls.entries()) {
+      expect(call.options['timezone']).toBe(SCHEDULER_TIMEZONE);
+      expect(call.options['timezone']).toBe('Asia/Kolkata');
+      expect(call.options['noOverlap']).toBe(true);
+      expect(call.options['maxRandomDelay']).toBe(
+        JOB_POLL_JOBS[index]?.maxRandomDelayMs,
+      );
+    }
+    for (const call of jobCalls) {
+      expect(call.started).toBe(true);
+      expect(call.handlers['execution:overlap']).toBeTypeOf('function');
+    }
+
+    handle.stop();
+    for (const call of jobCalls) {
+      expect(call.stopped).toBe(true);
+    }
+  });
+
+  it('schedules AUDIT_JOBS via registerAuditDrain with injected tickHandler', () => {
+    const { log } = makeFakeLogger();
+    const { mod, calls } = makeFakeScheduler();
+    let tickHandlerInvoked = false;
+
+    const handle = registerAuditDrain(log, mod, {
+      tickHandler: () => {
+        tickHandlerInvoked = true;
+      },
+    });
+
+    const jobCalls = calls.filter((c) => c.options['name'] !== 'guard-probe');
+    expect(handle.tasks).toHaveLength(AUDIT_JOBS.length);
+    expect(jobCalls).toHaveLength(AUDIT_JOBS.length);
+    expect(jobCalls.map((c) => c.options['name'])).toEqual(
+      AUDIT_JOBS.map((j) => j.name),
+    );
+    expect(jobCalls.map((c) => c.expression)).toEqual(
+      AUDIT_JOBS.map((j) => j.expression),
+    );
+    for (const call of jobCalls) {
+      expect(call.options['timezone']).toBe(SCHEDULER_TIMEZONE);
+      expect(call.options['noOverlap']).toBe(true);
+      expect(call.options['maxRandomDelay']).toBe(AUDIT_JOBS[0]?.maxRandomDelayMs);
+      expect(call.started).toBe(true);
+      expect(call.handlers['execution:overlap']).toBeTypeOf('function');
+    }
+
+    handle.stop();
+    for (const call of jobCalls) {
+      expect(call.stopped).toBe(true);
+    }
+  });
+
+  it('JOB_POLL_JOBS exact contents: name, expression, maxRandomDelayMs, candidateSource', () => {
+    expect(JOB_POLL_JOBS).toHaveLength(2);
+    expect(JOB_POLL_JOBS[0]).toMatchObject({
+      name: 'jobs-poll',
+      expression: '*/40 * * * *',
+      maxRandomDelayMs: 10 * 60_000,
+      candidateSource: 'jobs',
+      description: expect.stringContaining('jobs sources poll'),
+    });
+    expect(JOB_POLL_JOBS[1]).toMatchObject({
+      name: 'loot-watchlist',
+      expression: '0 */5 * * *',
+      maxRandomDelayMs: 15 * 60_000,
+      candidateSource: 'loot',
+      description: expect.stringContaining('vendor watchlist'),
+    });
+  });
+
+  it('AUDIT_JOBS exact contents: name, expression, maxRandomDelayMs', () => {
+    expect(AUDIT_JOBS).toHaveLength(1);
+    expect(AUDIT_JOBS[0]).toMatchObject({
+      name: 'audit-drain',
+      expression: '*/5 * * * *',
+      maxRandomDelayMs: 60 * 1000,
+      description: expect.stringContaining('audit drain'),
+    });
+  });
+
+  it('portal-* STUB_JOBS entries: 7 entries with staggered expressions', () => {
+    const portalJobs = STUB_JOBS.filter((j) => j.name.startsWith('portal-'));
+    expect(portalJobs).toHaveLength(7);
+    const portalNames = portalJobs.map((j) => j.name).sort();
+    expect(portalNames).toEqual([
+      'portal-clist',
+      'portal-ctftime',
+      'portal-devfolio',
+      'portal-devpost',
+      'portal-luma',
+      'portal-meetup',
+      'portal-unstop',
+    ].sort());
+    for (const job of portalJobs) {
+      expect(cron.validate(job.expression)).toBe(true);
+      expect(job.maxRandomDelayMs).toBe(5 * 60_000);
+      expect(job.description).toContain('portal poll');
+    }
+  });
+});
+
+describe('assertSchedulerGuards covers all four job tables', () => {
+  it('assertSchedulerGuards passes against real cron for all four tables', () => {
+    expect(() => assertSchedulerGuards(cron)).not.toThrow();
+    for (const def of [...STUB_JOBS, ...GATEWAY_JOBS, ...JOB_POLL_JOBS, ...AUDIT_JOBS]) {
+      expect(cron.validate(def.expression)).toBe(true);
+    }
+  });
+
+  it('assertSchedulerGuards iterates all four tables — rejecting one fails loudly', () => {
+    const { mod } = makeFakeScheduler();
+    const rejecting = { ...mod, validate: () => false };
+    expect(() => assertSchedulerGuards(rejecting)).toThrow(/scheduler-guard/);
+  });
+
+  it('all four tables have noOverlap + jitter on every entry', () => {
+    for (const def of [...STUB_JOBS, ...GATEWAY_JOBS, ...JOB_POLL_JOBS, ...AUDIT_JOBS]) {
+      expect(def.maxRandomDelayMs).toBeGreaterThan(0);
+      expect(def.expression).toBeTruthy();
+      expect(def.name).toMatch(/\S/);
+    }
   });
 });
