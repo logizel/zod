@@ -11,8 +11,11 @@
     { "path": "../config" },
     { "path": "../db-hot" },
     { "path": "../dedup" },
+    { "path": "../discord-router" },
     { "path": "../llm" },
     { "path": "../logger" },
-    { "path": "../scheduler" }
+    { "path": "../scheduler" },
+    { "path": "../sanitize" },
+    { "path": "../scout" }
   ]
 }

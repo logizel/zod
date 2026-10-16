@@ -13,6 +13,13 @@ import { LlmRouter } from '@zod/llm';
 import { createLogger, type Logger } from '@zod/logger';
 import { buildJobsMessages, parseJobsVerdict, type JobsVerdict } from './rule-packs/jobs.js';
 import { evaluateJobsGates, BUCKET_JOBS_GENERAL, type JobsGateResult } from './gates/jobs.js';
+import {
+  buildLootMessages,
+  parseLootVerdict,
+  type LootVerdict,
+} from './rule-packs/loot.js';
+import { evaluateLootGates, BUCKET_LOOT, type LootGateResult } from './gates/loot.js';
+import { readLootRules } from './loot-faq.js';
 
 const log = createLogger('info').child({ component: 'orchestrator' });
 
@@ -105,12 +112,30 @@ async function processRow(
   rowLog: Logger,
   row: TaskScratchpadRow,
 ): Promise<void> {
+  // Dispatch by pipeline. The scratchpad row's pipeline field is authoritative
+  // (never candidate data) — T-05-06.
+  switch (row.pipeline) {
+    case 'loot':
+      return await drainLootRow(pb, router, rowLog, row);
+    case 'jobs':
+    default:
+      return await processJobsRow(pb, router, rowLog, row);
+  }
+}
+
+/** Jobs audit flow: rule pack → router → jobs gates → write/tombstone. */
+async function processJobsRow(
+  pb: PbLike,
+  router: LlmRouter,
+  rowLog: Logger,
+  row: TaskScratchpadRow,
+): Promise<void> {
   const pipeline = row.pipeline;
   const candidateUrl = row.candidate_url;
   const candidateTitle = row.candidate_title ?? '';
   const fetchedText = row.partial_buffer ?? '';
 
-  // Build rule-pack messages (jobs pipeline in this tracer slice).
+  // Build rule-pack messages (jobs pipeline).
   const messages = buildJobsMessages({
     pipeline,
     candidateUrl,
@@ -178,6 +203,103 @@ async function processRow(
   });
   await scratchpadColl(pb).update(row.id, { step_position: 'STEP_3' });
   rowLog.info({ bucketChannel }, 'opportunity written (audited)');
+}
+
+/**
+ * Loot audit flow (D-13): readLootRules → loot rule pack → router → loot gates
+ * → opportunities write (loot fields) | tombstone (loot reason verbatim).
+ *
+ * This is a named export reused by the events divert (plan 05-04 Task 2) — no
+ * duplicated logic between the direct loot branch and the divert path.
+ */
+export async function drainLootRow(
+  pb: PbLike,
+  router: LlmRouter,
+  rowLog: Logger,
+  row: TaskScratchpadRow,
+): Promise<void> {
+  const candidateUrl = row.candidate_url;
+  const candidateTitle = row.candidate_title ?? '';
+
+  // Step 1: read the official FAQ/rules page (2-hop cap, SSRF-guarded).
+  // Hop failure → tombstone link_hop_failed, no audit on unfetched content.
+  const faqText = await readLootRules(candidateUrl);
+  if (faqText === null) {
+    rowLog.info({ stage: 'readLootRules' }, 'FAQ read failed; tombstoning link_hop_failed');
+    await writeTombstone(pb, candidateUrl, 'link_hop_failed', 'auditor');
+    await scratchpadColl(pb).update(row.id, { step_position: 'STEP_3' });
+    rowLog.info({ reasonCode: 'link_hop_failed' }, 'tombstone written (hop failure)');
+    return;
+  }
+
+  // Step 2: build loot audit messages (FAQ text framed as untrusted data).
+  const messages = buildLootMessages({
+    pipeline: 'loot',
+    candidateUrl,
+    candidateTitle,
+    fetchedText: faqText,
+  });
+
+  // Call LlmRouter.complete — auditor-loot-1 lane, priority 2 per plan.
+  const result = await router.complete({
+    messages,
+    step1: '',
+    step2: faqText.slice(0, 8000),
+    slot: 'auditor-loot-1',
+    pipeline: 'loot',
+    url: candidateUrl,
+    priority: 2,
+  });
+
+  // UNVERIFIED / POOL_SATURATED: leave at STEP_2, never write, never crash.
+  if (result.verdict === 'UNVERIFIED' || result.verdict === 'POOL_SATURATED') {
+    rowLog.info({ verdict: result.verdict, reason: result.reason }, 'no verdict; leaving at STEP_2');
+    return;
+  }
+
+  // Parse the verdict through the zod boundary.
+  const verdict = parseLootVerdict(result.verdict);
+  if (!verdict) {
+    rowLog.warn({ stage: 'verdict_parse' }, 'verdict parse failed; tombstoning');
+    await writeTombstone(pb, candidateUrl, 'verdict_parse_failed', 'auditor');
+    await scratchpadColl(pb).update(row.id, { step_position: 'STEP_3' });
+    rowLog.info({ reasonCode: 'verdict_parse_failed' }, 'tombstone written (parse failure)');
+    return;
+  }
+
+  // Evaluate deterministic loot gates (final authority).
+  const gate: LootGateResult = evaluateLootGates(verdict);
+
+  if (!gate.admitted) {
+    // Reject → tombstone with the loot reason verbatim (logged-not-alerted).
+    const reasonCode = gate.reasonCode ?? 'rejected';
+    await writeTombstone(pb, candidateUrl, reasonCode, 'auditor');
+    await scratchpadColl(pb).update(row.id, { step_position: 'STEP_3' });
+    rowLog.info({ reasonCode }, 'tombstone written (rejected)');
+    return;
+  }
+
+  // Admit → create opportunities row with loot fields + bucket (idempotent drain).
+  const bucketChannel = gate.bucketChannel ?? BUCKET_LOOT;
+
+  const urlHash = hashUrl(normalizeUrl(candidateUrl));
+  await createOpportunityIfAbsent(pb, {
+    url_hash: urlHash,
+    fingerprint_hash: urlHash,
+    pipeline: 'loot',
+    bucket_channel: bucketChannel,
+    status: 'audited',
+    title: candidateTitle,
+    organizer: '',
+    links: { official: candidateUrl },
+    shipping_verified: verdict.shipping_verified,
+    card_required: verdict.card_required,
+    claim_steps: verdict.claim_steps,
+    audit_summary: verdict.audit_summary,
+    description_raw: faqText.slice(0, 8000),
+  });
+  await scratchpadColl(pb).update(row.id, { step_position: 'STEP_3' });
+  rowLog.info({ bucketChannel }, 'loot opportunity written (audited)');
 }
 
 /** Idempotent create: skip if an opportunities row already exists for url_hash. */
