@@ -98,6 +98,7 @@ export const STUB_JOBS: readonly StubJobDef[] = [
     name: 'social-stub',
     expression: '0 * * * *',
     maxRandomDelayMs: 25 * 60_000,
+    candidateSource: 'social',
     description: 'social X/LI cadence stub (real polling lands Phase 2+)',
   },
   // 7 portal-poll jobs (D-01, D-02): staggered across 15-30m window with
