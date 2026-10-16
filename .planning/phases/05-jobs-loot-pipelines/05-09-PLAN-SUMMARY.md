@@ -129,6 +129,10 @@ None - no external service configuration required.
 
 All 05-01 tracer contracts are pinned by unit tests. Later plans (05-02..05-08) can expand horizontally without silently breaking the tracer's guarantees.
 
+## Self-Check: PASSED
+
+All created files exist on disk. Both commits (28aadbf task commit, b2a3cbd docs commit) are in the repository.
+
 ---
 *Phase: 05-jobs-loot-pipelines*
 *Completed: 2026-10-16*
