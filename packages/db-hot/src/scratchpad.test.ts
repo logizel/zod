@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { StepPosition } from './scratchpad.js';
-import { getOrCreateScratchpad, advanceToStep2, recordFailure, resumeByUrl } from './scratchpad.js';
+import {
+  getOrCreateScratchpad,
+  advanceToStep2,
+  advanceToStep3,
+  recordFailure,
+  resumeByUrl,
+} from './scratchpad.js';
 
 function unescapeFilter(filter: string): string {
   const m = /candidate_url = '(.+)'/u.exec(filter);
@@ -135,5 +141,51 @@ describe('scratchpad', () => {
   it('Test 10: StepPosition enum rejects invalid values', () => {
     expect(() => StepPosition.parse('STEP_5')).toThrow();
     expect(() => StepPosition.parse('step_2')).toThrow();
+  });
+
+  it('Test 11: getOrCreateScratchpad persists pipeline + candidate_title on create', async () => {
+    const pb = makePb();
+    const r = await getOrCreateScratchpad(pb, 'https://example.com/job/1', 'jobs', 'Senior SWE Intern');
+    expect(r.pipeline).toBe('jobs');
+    expect(r.candidate_title).toBe('Senior SWE Intern');
+  });
+
+  it('Test 12: getOrCreateScratchpad defaults pipeline to events and title to empty when omitted', async () => {
+    const pb = makePb();
+    const r = await getOrCreateScratchpad(pb, 'https://example.com/event/1');
+    expect(r.pipeline).toBe('events');
+    expect(r.candidate_title).toBe('');
+  });
+
+  it('Test 13: resumeByUrl returns pipeline + candidate_title on the row', async () => {
+    const pb = makePb();
+    await getOrCreateScratchpad(pb, 'https://example.com/loot/1', 'loot', 'Free AWS credits');
+    const { row } = await resumeByUrl(pb, 'https://example.com/loot/1');
+    expect(row.pipeline).toBe('loot');
+    expect(row.candidate_title).toBe('Free AWS credits');
+  });
+
+  it('Test 14: advanceToStep3 moves row to STEP_3 without touching other fields', async () => {
+    const pb = makePb();
+    const r = await getOrCreateScratchpad(pb, 'https://example.com/job/1', 'jobs', 'SWE Intern');
+    await advanceToStep3(pb, r.id);
+    const row = await pb.collection('task_scratchpad').getOne(r.id);
+    expect(row.step_position).toBe('STEP_3');
+    expect(row.pipeline).toBe('jobs');
+    expect(row.candidate_title).toBe('SWE Intern');
+    expect(row.partial_buffer).toBe('');
+    expect(row.attempts).toBe(0);
+  });
+
+  it('Test 15: advanceToStep3 does not affect advanceToStep2 or recordFailure behavior', async () => {
+    const pb = makePb();
+    const r = await getOrCreateScratchpad(pb, 'https://example.com/job/1', 'jobs', 'SWE Intern');
+    await advanceToStep2(pb, r.id, 'cached markdown');
+    expect((await pb.collection('task_scratchpad').getOne(r.id)).step_position).toBe('STEP_2');
+    await advanceToStep3(pb, r.id);
+    expect((await pb.collection('task_scratchpad').getOne(r.id)).step_position).toBe('STEP_3');
+    const res = await recordFailure(pb, r.id, 'boom');
+    expect(res.attempts).toBe(1);
+    expect((await pb.collection('task_scratchpad').getOne(r.id)).last_error).toBe('boom');
   });
 });

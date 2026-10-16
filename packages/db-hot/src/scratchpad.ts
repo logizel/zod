@@ -1,6 +1,6 @@
 import * as z from 'zod';
 import type PocketBase from 'pocketbase';
-import { TaskScratchpadRow } from './schema.js';
+import { Pipeline, TaskScratchpadRow } from './schema.js';
 import { hashUrl, normalizeUrl } from '@zod/dedup';
 
 export const StepPosition = z.enum(['STEP_1', 'STEP_2', 'STEP_3', 'STEP_4']);
@@ -51,6 +51,8 @@ async function readRow(pb: PocketBase, id: string): Promise<TaskScratchpadRow> {
 export async function getOrCreateScratchpad(
   pb: PocketBase,
   url: string,
+  pipeline: Pipeline = 'events',
+  title: string = '',
 ): Promise<TaskScratchpadRow> {
   const escaped = url.replace(/'/g, "''");
   try {
@@ -62,6 +64,8 @@ export async function getOrCreateScratchpad(
     return scratchpad(pb).create({
       candidate_url: url,
       step_position: 'STEP_1',
+      pipeline,
+      candidate_title: title,
       attempts: 0,
       partial_buffer: '',
       last_error: null,
@@ -77,6 +81,15 @@ export async function advanceToStep2(
   await scratchpad(pb).update(id, {
     step_position: 'STEP_2',
     partial_buffer: markdown.slice(0, 8000),
+  });
+}
+
+export async function advanceToStep3(
+  pb: PocketBase,
+  id: string,
+): Promise<void> {
+  await scratchpad(pb).update(id, {
+    step_position: 'STEP_3',
   });
 }
 
