@@ -8,6 +8,7 @@
 // T-05-07: structural PbLike port (no global PocketBase type), explicit rows.
 
 import { hashUrl, normalizeUrl } from '@zod/dedup';
+import { attemptMerge, createMergeStore } from '@zod/dedup/merger';
 import type { TaskScratchpadRow } from '@zod/db-hot/schema';
 import { LlmRouter } from '@zod/llm';
 import { createLogger, type Logger } from '@zod/logger';
@@ -195,6 +196,39 @@ async function processJobsRow(
   // Admit → create opportunities row with url_hash pre-check (idempotent drain).
   const bucketChannel = gate.bucketChannel ?? BUCKET_JOBS_GENERAL;
 
+  // D-10: drain backstop — merge before opportunities create.
+  // A same-batch duplicate folds into the master (append links + tombstone, no create).
+  // A possible dupe carries possible_dupe_of on the created row.
+  let possibleDupeOf = '';
+  if (pb !== undefined) {
+    const store = createMergeStore({ pb: pb as any });
+    const pipeline = row.pipeline as 'events' | 'jobs';
+    const mergeResult = await attemptMerge(
+      {
+        pipeline,
+        title: row.candidate_title ?? '',
+        url: row.candidate_url,
+        organizer: (row.organizer as string | undefined) ?? undefined,
+        dateMs: undefined,
+        location: undefined,
+      },
+      store,
+    );
+
+    if (mergeResult.merged) {
+      await writeTombstone(pb, row.candidate_url, 'merged', 'merger');
+      await scratchpadColl(pb).update(row.id, { step_position: 'STEP_3' });
+      rowLog.info(
+        { stage: 'backstop', masterId: mergeResult.masterId },
+        'merged at drain — no opportunity create',
+      );
+      return;
+    }
+    if (mergeResult.possibleDupe && mergeResult.masterId) {
+      possibleDupeOf = mergeResult.masterId;
+    }
+  }
+
   const urlHash = hashUrl(normalizeUrl(candidateUrl));
   await createOpportunityIfAbsent(pb, {
     url_hash: urlHash,
@@ -210,6 +244,7 @@ async function processJobsRow(
     eligibility_summary: verdict.eligibility_summary ?? '',
     audit_summary: verdict.audit_summary,
     description_raw: fetchedText.slice(0, 8000),
+    possible_dupe_of: possibleDupeOf,
   });
   await scratchpadColl(pb).update(row.id, { step_position: 'STEP_3' });
   rowLog.info({ bucketChannel }, 'opportunity written (audited)');
@@ -436,6 +471,36 @@ async function processEventsRow(
     const bucketChannel =
       verdict.category === 'sys-cp-sec' ? '#🔥-priority-sys-cp-sec' : '#-online-1lakh-plus';
 
+    // D-10: drain backstop — merge before opportunities create (events).
+    let possibleDupeOf = '';
+    if (pb !== undefined) {
+      const store = createMergeStore({ pb: pb as any });
+      const mergeResult = await attemptMerge(
+        {
+          pipeline: 'events',
+          title: candidateTitle,
+          url: candidateUrl,
+          organizer: (verdict.organizer as string | undefined) ?? undefined,
+          dateMs: undefined,
+          location: undefined,
+        },
+        store,
+      );
+
+      if (mergeResult.merged) {
+        await writeTombstone(pb, candidateUrl, 'merged', 'merger');
+        await scratchpadColl(pb).update(row.id, { step_position: 'STEP_3' });
+        rowLog.info(
+          { stage: 'backstop', masterId: mergeResult.masterId },
+          'merged at drain — no opportunity create',
+        );
+        return;
+      }
+      if (mergeResult.possibleDupe && mergeResult.masterId) {
+        possibleDupeOf = mergeResult.masterId;
+      }
+    }
+
     const urlHash = hashUrl(normalizeUrl(candidateUrl));
     await createOpportunityIfAbsent(pb, {
       url_hash: urlHash,
@@ -450,6 +515,7 @@ async function processEventsRow(
       prize_text: verdict.prize_text,
       audit_summary: verdict.audit_summary,
       description_raw: fetchedText.slice(0, 8000),
+      possible_dupe_of: possibleDupeOf,
     });
     await scratchpadColl(pb).update(row.id, { step_position: 'STEP_3' });
     rowLog.info({ bucketChannel }, 'events opportunity written (audited)');

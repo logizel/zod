@@ -220,4 +220,48 @@ describe('buildAuditCard (UI-01)', () => {
     expect(linksField?.value).toContain('[Aggregator]');
     expect(linksField?.value).not.toContain('[Reg ');
   });
+
+  // --- New: registration_links deduplication + stable order (D-10) ---
+
+  it('deduplicates registration_links in Links field', () => {
+    const opp: Opportunity = {
+      ...baseFixture,
+      pipeline: 'jobs',
+      registration_links: [
+        'https://lever.co/acme/456',
+        'https://boards.greenhouse.io/acme/jobs/123',
+        'https://lever.co/acme/456', // duplicate
+      ],
+    };
+    const embed = buildAuditCard(opp);
+    const linksField = embed.data.fields?.find((f) => f.name === 'Links');
+    const value = linksField?.value ?? '';
+    // Duplicate appears only once
+    expect(value.match(/\[Reg 2\]\(https:\/\/lever\.co\/acme\/456\)/g)).toHaveLength(1);
+    // Both unique links present
+    expect(value).toContain('[Reg 1]');
+    expect(value).toContain('[Reg 2]');
+  });
+
+  it('renders registration_links in stable sorted order', () => {
+    const opp: Opportunity = {
+      ...baseFixture,
+      pipeline: 'jobs',
+      registration_links: [
+        'https://z.example.com/c',
+        'https://a.example.com/a',
+        'https://m.example.com/m',
+      ],
+    };
+    const embed = buildAuditCard(opp);
+    const linksField = embed.data.fields?.find((f) => f.name === 'Links');
+    const value = linksField?.value ?? '';
+    // Stable sorted order: a, m, c (by URL string)
+    const reg1Match = value.match(/\[Reg 1\]\(([^)]+)\)/);
+    const reg2Match = value.match(/\[Reg 2\]\(([^)]+)\)/);
+    const reg3Match = value.match(/\[Reg 3\]\(([^)]+)\)/);
+    expect(reg1Match?.[1]).toBe('https://a.example.com/a');
+    expect(reg2Match?.[1]).toBe('https://m.example.com/m');
+    expect(reg3Match?.[1]).toBe('https://z.example.com/c');
+  });
 });

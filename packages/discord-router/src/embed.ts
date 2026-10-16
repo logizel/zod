@@ -25,6 +25,7 @@ export function buildAuditCard(opp: Opportunity): EmbedBuilder {
   }
 
   // Links field: official + aggregator + apply + registration_links union
+  // (deduplicated, stable order — D-10)
   const linkParts: string[] = [`[Official](${opp.links.official})`];
   if (opp.links.aggregator) {
     linkParts.push(`[Aggregator](${opp.links.aggregator})`);
@@ -35,7 +36,8 @@ export function buildAuditCard(opp: Opportunity): EmbedBuilder {
     linkParts.push(`[Apply](${opp.links.apply})`);
   }
   if (opp.registration_links?.length) {
-    opp.registration_links.forEach((url, i) => {
+    const deduped = [...new Set(opp.registration_links)].sort();
+    deduped.forEach((url, i) => {
       linkParts.push(`[Reg ${i + 1}](${url})`);
     });
   }
