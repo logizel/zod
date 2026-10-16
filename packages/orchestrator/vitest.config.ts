@@ -23,7 +23,8 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@zod/config': resolve(here, '../config/src/env.ts'),
+      '@zod/config$': resolve(here, '../config/src/env.ts'),
+      '@zod/config/jobs-policy': resolve(here, '../config/src/jobs-policy.ts'),
       '@zod/db-hot/schema': resolve(here, '../db-hot/src/schema.ts'),
       '@zod/db-hot/scratchpad': resolve(here, '../db-hot/src/scratchpad.ts'),
       '@zod/dedup': resolve(here, '../dedup/src/fingerprint.ts'),

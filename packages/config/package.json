@@ -9,6 +9,10 @@
     ".": {
       "types": "./dist/env.d.ts",
       "default": "./dist/env.js"
+    },
+    "./jobs-policy": {
+      "types": "./dist/jobs-policy.d.ts",
+      "default": "./dist/jobs-policy.js"
     }
   },
   "scripts": {
