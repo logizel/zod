@@ -570,27 +570,12 @@ function computeReminders(deadlines: OpportunityDeadlines, channel: string): Opp
 
 **If this table is empty:** All claims in this research were verified or cited — no user confirmation needed.
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Relay poll cadence (D-04 discretion)**
-   - What we know: D-04 says "polling timer" but doesn't specify exact interval.
-   - What's unclear: How frequently to poll external #announcements (5m? 15m? 30m?).
-   - Recommendation: Default to 15m + 5m jitter (matches events cadence; relay is low-volume).
-
-2. **Taste rule schema extension (D-12 discretion)**
-   - What we know: Current schema has `{ kind, rule, weight, created_at }`.
-   - What's unclear: Whether to extend with `source` field (reaction/keyword/dm) and `scope` (global/pipeline-specific).
-   - Recommendation: Add `source` field for observability; keep `kind` as string (not enum) to allow future rule types without migration.
-
-3. **Bio-link change detection (discretion)**
-   - What we know: D-03 says "browser page poll" but doesn't define what constitutes "new."
-   - What's unclear: Content hash diff? Timestamp check? New URL detection?
-   - Recommendation: Track known bio-link URLs in a local state; new URLs = new opportunities. Re-poll known URLs for content changes every tick.
-
-4. **Reminder tick cadence (discretion)**
-   - What we know: D-06 defines reminder anchoring but not scan frequency.
-   - What's unclear: How often to scan for due reminders.
-   - Recommendation: Every 15m + 5m jitter (same as events cadence; reminders are time-sensitive but not second-critical).
+1. **Relay poll cadence (D-04 discretion)** — RESOLVED: Default to 15m + 5m jitter (matches events cadence; relay is low-volume).
+2. **Taste rule schema extension (D-12 discretion)** — RESOLVED: Add `source` field for observability; keep `kind` as string (not enum) to allow future rule types without migration.
+3. **Bio-link change detection (discretion)** — RESOLVED: Track known bio-link URLs in a local state; new URLs = new opportunities. Re-poll known URLs for content changes every tick.
+4. **Reminder tick cadence (discretion)** — RESOLVED: Every 15m + 5m jitter (same as events cadence; reminders are time-sensitive but not second-critical).
 
 ## Environment Availability
 
