@@ -43,10 +43,10 @@
 
 ### Loot Pipeline
 
-- [ ] **LOT-01**: Online events failing the ₹1L cash rule are checked for free-perk diversion to #🎁-free-swag-and-credits before REJECTED
-- [ ] **LOT-02**: Cloud/AI credit alerts flag credit-card requirement for verification
-- [ ] **LOT-03**: Certification voucher alerts cover 100%-free exams (CNCF/LF, AWS, Azure, GitHub, Oracle) with exact claim steps
-- [ ] **LOT-04**: Physical swag alerts verify global-or-India shipping from official rules/FAQ and reject US/EU-only drops
+- [x] **LOT-01**: Online events failing the ₹1L cash rule are checked for free-perk diversion to #🎁-free-swag-and-credits before REJECTED
+- [x] **LOT-02**: Cloud/AI credit alerts flag credit-card requirement for verification
+- [x] **LOT-03**: Certification voucher alerts cover 100%-free exams (CNCF/LF, AWS, Azure, GitHub, Oracle) with exact claim steps
+- [x] **LOT-04**: Physical swag alerts verify global-or-India shipping from official rules/FAQ and reject US/EU-only drops
 
 ### Memory
 
@@ -123,10 +123,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | JOB-03 | Phase 5 | Pending |
 | JOB-04 | Phase 5 | Pending |
 | JOB-05 | Phase 5 | Pending |
-| LOT-01 | Phase 5 | Pending |
-| LOT-02 | Phase 5 | Pending |
-| LOT-03 | Phase 5 | Pending |
-| LOT-04 | Phase 5 | Pending |
+| LOT-01 | Phase 5 | Complete |
+| LOT-02 | Phase 5 | Complete |
+| LOT-03 | Phase 5 | Complete |
+| LOT-04 | Phase 5 | Complete |
 | MEM-01 | Phase 1 | Complete |
 | MEM-02 | Phase 1 | Complete |
 | MEM-03 | Phase 1 | Complete |

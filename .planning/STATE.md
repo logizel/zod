@@ -3,17 +3,17 @@ gsd_state_version: "1.0"
 current_phase: 05
 current_phase_name: Jobs + Loot Pipelines
 status: executing
-stopped_at: Completed 05-02-PLAN.md — browser sources + D-02 auto-learn + getJobCandidates fan-out
-last_updated: "2026-10-16T09:13:34Z"
+stopped_at: Completed 05-04-PLAN.md — loot vertical core + events completion + vendor watchlist
+last_updated: "2026-10-16T09:40:25Z"
 last_activity: 2026-10-16
-last_activity_desc: Executed plan 05-03 — Tasks 1 and 2 complete; 2 task commits; full suite green (scout 56 + scheduler 26 + orchestrator/config 80)
-state_head: c0354d5ca92cf68fc3fb78df3cc15f4e0df8982d
+last_activity_desc: Executed plan 05-04 — loot vertical core (rule pack, gates, FAQ reader, drain loot branch), events completion (events rule pack + drain events branch with prize-gate divert into loot), vendor watchlist + live loot wiring; 3 task commits; full suite green (462 tests)
+state_head: d5a5c02d372fc40ce68dfe88eaa4044dcd4edfc9
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 22
-  completed_plans: 15
-  percent: 68
+  completed_plans: 16
+  percent: 73
 ---
 
 # Project State
@@ -28,11 +28,11 @@ See: .planning/PROJECT.md (updated 2026-10-15)
 ## Current Position
 
 Phase: 05 (Jobs + Loot Pipelines) — EXECUTING
-Plan: 3 of 9 (05-08 complete, 05-01 complete, 05-02 complete, 05-03 complete)
-Status: Executing Phase 05 — plan 05-03 complete (D-04 senior listing screen + D-05..D-08 gates + JOB-02 admission-class rule pack)
-Last activity: 2026-10-16 — Completed plan 05-03 (D-04 zero-fetch senior screen + scheduler wiring + D-05..D-08 gates + JOB-02 admission-class rule pack), 2 task commits, full suite green
+Plan: 4 of 9 (05-08 complete, 05-01 complete, 05-02 complete, 05-03 complete, 05-04 complete)
+Status: Executing Phase 05 — plan 05-04 complete (loot vertical core + events completion + vendor watchlist)
+Last activity: 2026-10-16 — Completed plan 05-04 (loot vertical core + events completion + vendor watchlist), 3 task commits, full suite green (462 tests)
 
-Progress: [████████░░] 68%
+Progress: [████████░░] 73%
 
 ## Performance Metrics
 
@@ -66,6 +66,7 @@ Progress: [████████░░] 68%
 | Phase 05 05-01 | 42 min | 1 task | 21 files |
 | Phase 05 05-02 | 29 min | 2 tasks | 20 files |
 | Phase 05 05-03 | 17 min | 2 tasks | 17 files |
+| Phase 05 05-04 | 20 min | 3 tasks | 18 files |
 
 ## Accumulated Context
 
@@ -90,6 +91,10 @@ Recent decisions affecting current work:
 - [Phase 05 05-03]: evaluateJobsGates keeps final reject authority; deterministic predicates re-parse from fetched text (T-05-14)
 - [Phase 05 05-03]: D-04 senior screen whole-word case-insensitive title regex; 'Leadership'/'Managerial' do not match (Pitfall 9)
 - [Phase 05 05-03]: Listing-stage scam/geo detectors flag-only (telemetry), never auto-reject (T-05-16, T-05-17)
+- [Phase 05 05-04]: drainLootRow named export reused verbatim by events divert — zero duplicated logic between direct loot branch and divert
+- [Phase 05 05-04]: Event buckets read Phase 4 constants verbatim: sys-cp-sec → '#🔥-priority-sys-cp-sec', general → '#-online-1lakh-plus'; no invented bucket strings
+- [Phase 05 05-04]: Domain filter reuses @zod/discord-router/domain-filter prefilter with organizer_score/agenda_score; tombstone reason uses its vocabulary verbatim
+- [Phase 05 05-04]: Vendor watchlist uses globalThis.fetch + validateUrl (SSRF guard) + keyword layer; never-throw entry isolation; config-owned fixed hosts only
 
 ### Pending Todos
 
@@ -110,6 +115,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-16T08:52:00Z
-Stopped at: Completed 05-02-PLAN.md — browser sources + D-02 auto-learn + getJobCandidates fan-out
+Last session: 2026-10-16T09:40:25Z
+Stopped at: Completed 05-04-PLAN.md — loot vertical core + events completion + vendor watchlist
 Resume file: .planning/phases/05-jobs-loot-pipelines/05-CONTEXT.md
