@@ -185,6 +185,10 @@ None - no external service configuration required.
 
 Plan 05-04 is complete. The drain now has all three branches (jobs from 05-01, loot and events from 05-04). Plan 05-05 (dedup merger) can build on the completed drain. Threat mitigations T-05-19 through T-05-24 and T-05-SC are implemented (untrusted-data framing, SSRF-guarded 2-hop cap, verbatim tombstone reasons, no new dependencies).
 
+## Self-Check: PASSED
+
+All created files exist on disk; all 4 commits (fb15044, 10f5754, d5a5c02, cf9b5ac) verified in git history; full workspace suite green (462 tests, 56 files).
+
 ---
 *Phase: 05-jobs-loot-pipelines*
 *Completed: 2026-10-16*
