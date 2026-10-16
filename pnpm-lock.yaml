@@ -254,6 +254,9 @@ importers:
       '@zod/db-hot':
         specifier: workspace:*
         version: link:../db-hot
+      '@zod/dedup':
+        specifier: workspace:*
+        version: link:../dedup
       '@zod/discord-router':
         specifier: workspace:*
         version: link:../discord-router

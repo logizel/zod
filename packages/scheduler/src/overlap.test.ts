@@ -19,7 +19,7 @@ import {
 
 /** In-memory TickLogger: records every call with its child bindings. */
 interface LogRecord {
-  level: 'info' | 'warn';
+  level: 'info' | 'warn' | 'debug';
   bindings: Record<string, unknown>;
   obj?: Record<string, unknown>;
   msg?: string;
@@ -43,6 +43,14 @@ function makeFakeLogger(rootBindings: Record<string, unknown> = {}): {
         records.push({ level: 'warn', bindings, msg: args[0] });
       } else {
         records.push({ level: 'warn', bindings, obj: args[0], msg: args[1] });
+      }
+    },
+    debug: (...args: [Record<string, unknown>, string] | [string]) => {
+      // debug is recorded at info level for test simplicity
+      if (typeof args[0] === 'string') {
+        records.push({ level: 'debug', bindings, msg: args[0] });
+      } else {
+        records.push({ level: 'debug', bindings, obj: args[0], msg: args[1] });
       }
     },
     child: (extra: Record<string, unknown>) => build({ ...bindings, ...extra }),

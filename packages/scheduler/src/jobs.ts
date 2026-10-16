@@ -12,6 +12,7 @@ import { join } from 'node:path';
 
 import { precheck as runPrecheck, type HotStore, type ColdStore } from '@zod/dedup/precheck';
 import { hashUrl, normalizeUrl } from '@zod/dedup';
+import { attemptMerge, createMergeStore } from '@zod/dedup/merger';
 import { prefilter } from '@zod/scout';
 import { screenListing } from '@zod/scout/jobs-screen';
 import { resumeByUrl, advanceToStep2, recordFailure } from '@zod/db-hot/scratchpad';
@@ -42,12 +43,14 @@ import { getJobCandidates } from '@zod/discord-router/portals/jobs/index';
 
 export const SCHEDULER_TIMEZONE = 'Asia/Kolkata';
 
-/** Minimal logger shape a job tick needs: info/warn plus child bindings. */
+/** Minimal logger shape a job tick needs: info/warn/debug plus child bindings. */
 export interface TickLogger {
   info(obj: Record<string, unknown>, msg: string): void;
   info(msg: string): void;
   warn(obj: Record<string, unknown>, msg: string): void;
   warn(msg: string): void;
+  debug(obj: Record<string, unknown>, msg: string): void;
+  debug(msg: string): void;
   child(bindings: Record<string, unknown>): TickLogger;
 }
 
@@ -208,6 +211,10 @@ export interface PollCandidate {
   snippet: string;
   /** Location metadata from the listing (used by geo gate at audit time). */
   location?: string;
+  /** Organizer/company from the listing (used by merger evidence gate). */
+  organizer?: string;
+  /** Epoch-ms date of the listing (used by merger ±3-day window gate). */
+  dateMs?: number;
 }
 
 /** A candidate source: pipeline name + list() + optional ATS-JSON detail fetch. */
@@ -415,6 +422,42 @@ export async function runStubTick(
       if (verdict === 'hot-hit' || verdict === 'tombstoned') {
         cLog.info({ stage: 'precheck', verdict }, 'skip: candidate gated by dedup');
         continue;
+      }
+
+      // D-10: intake merge stage (pre-audit) — runs only on 'fresh' verdicts
+      // (Pitfall 9: hot-hit/tombstoned never reach the merge stage).
+      if (verdict === 'fresh' && pb !== undefined && cold !== undefined) {
+        const store = createMergeStore({ pb, cold });
+        const pipeline = (def.candidateSource ?? 'events') as 'events' | 'jobs';
+        const mergeResult = await attemptMerge(
+          {
+            pipeline,
+            title: cand.title,
+            url: cand.url,
+            organizer: undefined, // extractCompany runs inside attemptMerge
+            dateMs: (cand as any).dateMs ?? undefined,
+            location: cand.location,
+          },
+          store,
+        );
+
+        cLog.info({ stage: 'merge', verdict: mergeResult }, 'intake merge result');
+
+        if (mergeResult.merged) {
+          cLog.info(
+            { stage: 'merge', masterId: mergeResult.masterId },
+            'skip: merged at intake — no fetch/audit/scratchpad',
+          );
+          continue; // skip fetch/audit/scratchpad — the primary skip case
+        }
+        if (mergeResult.possibleDupe && mergeResult.masterId) {
+          cLog.info(
+            { stage: 'merge', masterId: mergeResult.masterId },
+            'possible dupe flagged — proceeding to pipeline',
+          );
+        }
+      } else if (verdict === 'fresh') {
+        cLog.debug({ stage: 'merge' }, 'merge stage skipped: pb/cold not provided');
       }
 
       // 2. scout prefilter (zero fetch)

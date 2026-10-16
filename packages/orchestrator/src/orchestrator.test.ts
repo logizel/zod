@@ -6,6 +6,29 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { drainStep2Rows } from './orchestrator.js';
 import type { TaskScratchpadRow } from '@zod/db-hot/schema';
 
+vi.mock('@zod/dedup/merger', async (importOriginal) => {
+  const actual = await importOriginal() as Record<string, unknown>;
+  return {
+    ...actual,
+    attemptMerge: vi.fn().mockResolvedValue({ merged: false, possibleDupe: false }),
+    createMergeStore: vi.fn(() => ({
+      findCandidates: vi.fn(),
+      appendLinks: vi.fn(),
+      tombstoneMerged: vi.fn(),
+    })),
+  };
+});
+
+import { attemptMerge, createMergeStore } from '@zod/dedup/merger';
+
+const mockedAttemptMerge = attemptMerge as ReturnType<typeof vi.fn>;
+const mockedCreateMergeStore = createMergeStore as ReturnType<typeof vi.fn>;
+
+// Default: no merge, so existing tests are unaffected by the backstop stage.
+beforeEach(() => {
+  mockedAttemptMerge.mockResolvedValue({ merged: false, possibleDupe: false });
+});
+
 const FAQ_TEXT =
   '# CKA Exam FAQ\n\nThe CKA exam voucher is free for CNCF members. No credit card is required. ' +
   'Shipping is worldwide at no additional cost. Claim steps: 1. Register at the CNCF training portal. ' +
@@ -401,7 +424,7 @@ const fullEventsVerdict = {
 
 describe('orchestrator drainStep2Rows events branch', () => {
   beforeEach(() => {
-    vi.restoreAllMocks();
+    vi.clearAllMocks();
     vi.unstubAllGlobals();
   });
 
@@ -604,7 +627,7 @@ describe('orchestrator drainStep2Rows events branch', () => {
 
 describe('orchestrator drainStep2Rows — drain limit and isolation', () => {
   beforeEach(() => {
-    vi.restoreAllMocks();
+    vi.clearAllMocks();
     vi.unstubAllGlobals();
   });
 
@@ -724,6 +747,101 @@ describe('orchestrator drainStep2Rows — drain limit and isolation', () => {
     expect(tsCall.terminal_status).toBe('verdict_parse_failed');
     expect(tsCall.source).toBe('auditor');
     // Row advanced to STEP_3 (terminal decision reached)
+    expect(collections.scratchpad.update).toHaveBeenCalledWith('scratch-jobs-1', { step_position: 'STEP_3' });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Drain backstop (D-10) — merge before opportunities create
+// ---------------------------------------------------------------------------
+
+describe('orchestrator drain backstop (D-10)', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    mockedAttemptMerge.mockReset();
+    mockedCreateMergeStore.mockReset();
+  });
+
+  it('jobs: merged at backstop → no opportunities.create, tombstone merged, STEP_3', async () => {
+    mockedCreateMergeStore.mockImplementation(() => ({
+      findCandidates: vi.fn().mockResolvedValue([{
+        id: 'master-1', pipeline: 'jobs', title: 'Google | I/O 2026',
+        url: 'https://boards.greenhouse.io/acme/jobs/1', organizer: 'Google',
+        location: 'Bangalore, India', dateMs: 1_792_145_094_000 - 86400000,
+        createdAtMs: 1_792_145_094_000 - 86400000, links: ['https://boards.greenhouse.io/acme/jobs/1'],
+      }]),
+      appendLinks: vi.fn(),
+      tombstoneMerged: vi.fn(),
+    }));
+    mockedAttemptMerge.mockResolvedValue({
+      merged: true,
+      masterId: 'master-1',
+      links: ['https://boards.greenhouse.io/acme/jobs/1', 'https://lever.co/acme/456'],
+    });
+
+    const { pb, collections } = makePb({
+      scratchpadRows: [makeJobsScratchRow({ candidate_url: 'https://boards.greenhouse.io/acme/jobs/2' })],
+      existingOpportunities: [],
+    });
+
+    const router = makeRouter(() => ({
+      admission_class: 'admit',
+      reason_code: null,
+      stack_tags: ['React'],
+      eligibility_summary: 'ok',
+      audit_summary: 'Frontend engineer fresher role',
+    }));
+
+    await drainStep2Rows({ pb, router: router as any, pageSize: 25 });
+
+    // No opportunities.create — merged at drain
+    expect(collections.opportunities.create).not.toHaveBeenCalled();
+    // Tombstone written via pb
+    expect(collections.tombstone_ledger.create).toHaveBeenCalledTimes(1);
+    const tsCall = collections.tombstone_ledger.create.mock.calls[0][0];
+    expect(tsCall.terminal_status).toBe('merged');
+    expect(tsCall.source).toBe('merger');
+    // Row advanced to STEP_3
+    expect(collections.scratchpad.update).toHaveBeenCalledWith('scratch-jobs-1', { step_position: 'STEP_3' });
+  });
+
+  it('jobs: possibleDupe at backstop → possible_dupe_of written on create', async () => {
+    mockedCreateMergeStore.mockImplementation(() => ({
+      findCandidates: vi.fn().mockResolvedValue([{
+        id: 'master-2', pipeline: 'jobs', title: 'Google IO 2026',
+        url: 'https://boards.greenhouse.io/acme/jobs/2', organizer: 'Google',
+        location: 'Bangalore, India', dateMs: 1_792_145_094_000 - 86400000,
+        createdAtMs: 1_792_145_094_000 - 86400000, links: ['https://boards.greenhouse.io/acme/jobs/2'],
+      }]),
+      appendLinks: vi.fn(),
+      tombstoneMerged: vi.fn(),
+    }));
+    mockedAttemptMerge.mockResolvedValue({
+      merged: false,
+      possibleDupe: true,
+      masterId: 'master-2',
+    });
+
+    const { pb, collections } = makePb({
+      scratchpadRows: [makeJobsScratchRow({ candidate_url: 'https://boards.greenhouse.io/acme/jobs/3' })],
+      existingOpportunities: [],
+    });
+
+    const router = makeRouter(() => ({
+      admission_class: 'admit',
+      reason_code: null,
+      stack_tags: ['React'],
+      eligibility_summary: 'ok',
+      audit_summary: 'Frontend engineer fresher role',
+    }));
+
+    await drainStep2Rows({ pb, router: router as any, pageSize: 25 });
+
+    // opportunities.create called with possible_dupe_of
+    expect(collections.opportunities.create).toHaveBeenCalledTimes(1);
+    const createCall = collections.opportunities.create.mock.calls[0][0];
+    expect(createCall.possible_dupe_of).toBe('master-2');
+    // Row advanced to STEP_3
     expect(collections.scratchpad.update).toHaveBeenCalledWith('scratch-jobs-1', { step_position: 'STEP_3' });
   });
 });

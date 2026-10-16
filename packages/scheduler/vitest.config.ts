@@ -26,6 +26,7 @@ export default defineConfig({
       '@zod/config': resolve(here, '../config/src/env.ts'),
       '@zod/dedup$': resolve(here, '../dedup/src/fingerprint.ts'),
       '@zod/dedup/precheck': resolve(here, '../dedup/src/precheck.ts'),
+      '@zod/dedup/merger': resolve(here, '../dedup/src/merger.ts'),
       '@zod/scout$': resolve(here, '../scout/src/index.ts'),
       '@zod/scout/jobs-screen': resolve(here, '../scout/src/jobs-screen.ts'),
       '@zod/db-hot$': resolve(here, '../db-hot/src/client.ts'),

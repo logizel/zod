@@ -38,6 +38,13 @@ function makeFakeLogger(): { log: TickLogger; records: any[] } {
         records.push({ level: 'warn', bindings, obj: args[0], msg: args[1] });
       }
     },
+    debug: (...args: [Record<string, unknown>, string] | [string]) => {
+      if (typeof args[0] === 'string') {
+        records.push({ level: 'debug', bindings, msg: args[0] });
+      } else {
+        records.push({ level: 'debug', bindings, obj: args[0], msg: args[1] });
+      }
+    },
     child: (extra: Record<string, unknown>) => build({ ...bindings, ...extra }),
   });
   return { log: build({}), records };
