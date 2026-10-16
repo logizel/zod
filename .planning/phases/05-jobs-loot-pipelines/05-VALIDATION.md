@@ -52,6 +52,8 @@ created: "2026-10-16"
 | 05-04-T3 | 05-04 | 2 | LOT-02, LOT-04 | T-05-24 | Config-owned fetch targets (fixed mode enum); loot card fields render quotes; watchlist failure isolated | unit | `pnpm vitest run packages/discord-router` | ❌ new | pending |
 | 05-05-T1 | 05-05 | 3 | EVT-07 | T-05-25, T-05-26, T-05-27, T-05-29 | Threshold + evidence + window all mandatory; bounded candidate queries; audited pinned dependency | unit | `pnpm vitest run packages/dedup` | ❌ new | pending |
 | 05-05-T2 | 05-05 | 3 | EVT-07 | T-05-28 | Race single-master; merged tombstone ('merged'/'merger'); append-only late dupes; fresh-only intake | integration | `pnpm vitest run packages/scheduler packages/orchestrator packages/discord-router` | ❌ new | pending |
+| 05-07-T1 | 05-07 | 3 | ING-03 | T-05-32, T-05-33, T-05-34 | Logged-out probe verdict recorded; never-throw parse; fixed code-owned hosts; ≤2-page browser budget; no credential surface | unit | `pnpm vitest run packages/discord-router` | ❌ new | pending |
+| 05-07-T2 | 05-07 | 3 | ING-03 | T-05-13, T-05-32 | Ten-source fan-out isolation (one source [] never blocks others); deterministic order; URL dedupe; learn-once harvest participation | unit | `pnpm vitest run packages/discord-router` | ❌ new | pending |
 | 05-06-T1 | 05-06 | 4 | all 11 | T-05-30 | Mixed-batch exact ledger; per-row isolation; no cross-pipeline writes | integration | `pnpm vitest run packages/orchestrator` | ❌ new | pending |
 | 05-06-T2 | 05-06 | 4 | all 11 | T-05-31 | Env bijection guard (canary keys); fail-fast boot preserved; full-suite phase gate | unit + gate | `pnpm test` | ❌ new | pending |
 
@@ -79,7 +81,7 @@ created: "2026-10-16"
 
 ## Wave 0 Requirements
 
-- [ ] `packages/discord-router/src/portals/jobs/*.test.ts` — fixture-driven adapter tests (Greenhouse/Lever/Ashby/HN first; Cutshort/Cuvette/Workday after spike)
+- [ ] `packages/discord-router/src/portals/jobs/*.test.ts` — fixture-driven adapter tests (Greenhouse/Lever/Ashby/HN first; Cutshort/Cuvette/Workday after spike; YC Work-at-a-Startup + Wellfound after the 05-07 logged-out probe)
 - [ ] `packages/dedup/src/merger.test.ts` — threshold/window/flag cases + link-union + late-dupe append
 - [ ] `packages/orchestrator/src/*.test.ts` — rule-pack contract tests + gate unit tests + STEP_2→write integration with fake router/pb/cold
 - [ ] Recorded JSON fixtures for each ATS (trimmed, checked into test dirs)

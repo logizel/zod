@@ -127,7 +127,7 @@ Plans:
   4. An online event failing the ₹1L rule but carrying a real free perk diverts to #🎁-free-swag-and-credits with India-shipping verified; a US-only drop is rejected
   5. The same event seen on two portals arrives as one merged alert with unified registration links
 
-**Plans**: 6 plans
+**Plans**: 7 plans
 
 **Wave 1**
 - [ ] 05-01-PLAN.md — Tracer: @zod/orchestrator + Greenhouse → jobs tick → STEP_2 → audit drain → opportunities/tombstone; D-14 schema; scheduler tables; channel keys (ING-03, JOB-01..05)
@@ -139,6 +139,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 05-05-PLAN.md — EVT-07 fuzzy merger: ≥0.9/±3d/organizer gate, intake skip + drain backstop, merged tombstones, link union (EVT-07)
+- [ ] 05-07-PLAN.md — YC + Wellfound browser-mode sources: logged-out accessibility probe + two logged-out listing adapters into the jobs fan-out (ING-03)
 
 **Wave 4** *(blocked on Wave 3 completion)*
 - [ ] 05-06-PLAN.md — Cross-pipeline drain ledger + .env.example bijection guard + full-suite phase gate (all 11 requirements)
@@ -185,6 +186,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 2. Scraper Foundation | 3/3 | Complete    | 2026-10-15 |
 | 3. LLM Swarm | 3/3 | Complete    | 2026-10-15 |
 | 4. Events Vertical Slice | 3/3 | Complete    | 2026-10-16 |
-| 5. Jobs + Loot Pipelines | 0/TBD | Not started | - |
+| 5. Jobs + Loot Pipelines | 0/7 | Not started | - |
 | 6. Delivery + Local/Social Coverage | 0/TBD | Not started | - |
 | 7. Telemetry Dashboard + Ops Hardening | 0/TBD | Not started | - |

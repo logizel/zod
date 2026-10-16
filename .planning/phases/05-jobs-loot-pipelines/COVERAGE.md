@@ -18,8 +18,8 @@
 | LLM vendors — Groq, GitHub Models, SambaNova, Mistral, Z.ai, NVIDIA, OpenRouter | INTEGRATE | Existing LlmRouter ladder, now actually driven for STEP_2 audits by the new orchestrator drain |
 | Discord API — bot Gateway, channel resolution, embed posting | INTEGRATE | Existing router-service; env-configured channel IDs canonical for the three new channels (jobs sys/cloud, jobs general, loot) |
 | ATS application-submission endpoints (Greenhouse/Lever/Ashby apply POST) | OPT-OUT | The system never auto-applies; alerts carry direct apply links only — discovery + routing is the project scope, not application automation |
-| YC Work-at-a-Startup direct polling | OPT-OUT | Login-walled + ToS risk (research A3, recommendation: do not scrape in v1); YC-startup coverage retained via HN Who-is-hiring, D-02 auto-learned ATS boards, and startup.jobs; revisit post-phase |
-| Wellfound direct polling | OPT-OUT | Login wall (research A4); deferrable from v1 without breaking ING-03 acceptance; seed + auto-learn boards carry startup coverage |
+| YC Work-at-a-Startup direct polling | INTEGRATE | D-01 named source; logged-out listing polling only (no login/signup, no apply automation) through the shared browser queue, ≤2 pages per poll; research Open Question 1 probe delivered by plan 05-07 (revision-time preliminary: plain fetch returns the client-rendered shell → browser-mode primary) |
+| Wellfound direct polling | INTEGRATE | D-01 named source; logged-out listing polling only; primary path per the 05-07 probe (revision-time preliminary: full listing markup served to a logged-out plain fetch → fetch-facade primary with browser fallback) |
 | X (Twitter) and LinkedIn APIs | OPT-OUT | Phase 6 social scope (ING-04/ING-05); burner-cookie human pacing is not part of this phase |
 | LLM fine-tuning / batch inference APIs | OPT-OUT | Zero-monthly-cost constraint; chat completions through the existing free-tier ladder only |
 | Cloudflare Tunnel API and Zero Trust Access API | OPT-OUT | Phase 7 dashboard scope (DSH-01..DSH-04); no inbound surface exists yet |

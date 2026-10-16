@@ -77,7 +77,7 @@ None — discussion stayed within phase scope. The broad-community loot feed opt
 
 Phase 5 has four interlocking workstreams: (1) the **jobs vertical** — hybrid source polling, a zero-fetch listing screen, fresher/scam/geo audit gates, and stack-based routing into two new channels; (2) the **loot vertical** — divert of perk-carrying events that fail the ₹1L rule, plus a curated vendor watchlist with FAQ-level verification; (3) the **cross-portal merger** — high-confidence fuzzy dedup extended from the existing exact-hash layer; and (4) the **missing audit middle** — no production code currently assembles auditor prompts, calls `LlmRouter.complete()`, or writes `opportunities` rows with `status='audited'`. Verified this session: the only `.complete()` references in `packages/*/src` are inside `packages/llm/src/router.ts` itself; `startRegistry` passes only `{ sink, heartbeatDir }` into `registerStubJobs`, and `runStubTick` warns `'poll deps not provided; skipping candidate processing'` ([VERIFIED: packages/scheduler/src/jobs.ts:319-321]) when pb/hot/cold are absent. Jobs/loot success criteria cannot be met without landing this shared orchestrator, so it is inside this phase's boundary (CONTEXT confirms).
 
-The single most valuable research finding: **the jobs layer is JSON-first end to end**. Greenhouse, Lever, and Ashby all expose free, unauthenticated public JSON that carries title, location, and full description text in one request ([CITED: context7 /grnhse/greenhouse-api-docs], [CITED: github.com/lever/postings-api], [CITED: context7 /llmstxt/developers_ashbyhq_llms_txt]); the HN "Who is hiring?" thread is fully readable through the free Algolia API ([CITED: hn.algolia.com/api]); and Workday — the one source CONTEXT assumed needs the headless browser — appears to expose a public listing JSON through its `cxs` endpoint, meaning the shared browser is only needed for detail pages that render client-side ([ASSUMED] — web-verified, low confidence; see A1). Aggregators are the fragile part: YC Work-at-a-Startup and Wellfound are login-walled, Cutshort listing pages are server-rendered, and Cuvette is only indirectly evidenced ([ASSUMED] — A2–A4).
+The single most valuable research finding: **the jobs layer is JSON-first end to end**. Greenhouse, Lever, and Ashby all expose free, unauthenticated public JSON that carries title, location, and full description text in one request ([CITED: context7 /grnhse/greenhouse-api-docs], [CITED: github.com/lever/postings-api], [CITED: context7 /llmstxt/developers_ashbyhq_llms_txt]); the HN "Who is hiring?" thread is fully readable through the free Algolia API ([CITED: hn.algolia.com/api]); and Workday — the one source CONTEXT assumed needs the headless browser — appears to expose a public listing JSON through its `cxs` endpoint, meaning the shared browser is only needed for detail pages that render client-side ([ASSUMED] — web-verified, low confidence; see A1). Aggregators are the fragile part, but the accessibility questions are now resolved with delivery plans: Cutshort listing pages are server-rendered, Cuvette is only indirectly evidenced ([ASSUMED] — A2; covered by plan 05-02's browser-mode fallback), and YC Work-at-a-Startup / Wellfound are login-walled for applying but publicly listable — revision-time logged-out probes found Wellfound serving full listing markup to a plain fetch and YC WAS returning a client-rendered shell, and plan 05-07 ships both with a probe-first mode decision (Open Questions, resolutions below).
 
 A second structural finding: **the workspace dependency graph forbids putting the orchestrator inside `packages/scheduler`**. `packages/llm` already depends on `@zod/scheduler-registry` ([VERIFIED: packages/llm/package.json:22] — `"@zod/scheduler-registry": "workspace:*",`), so `scheduler → orchestrator → llm → scheduler` would be a build-order cycle. The established, cycle-free pattern already exists in the repo: `runGatewayTick` delegates to an injected `tickHandler` provided by the LLM package (`registry-integration.ts` line 66: `this.handle = registerGatewayJobs(log, mod, { tickHandler });` [VERIFIED: packages/llm/src/registry-integration.ts:66]). The orchestrator should ship as its own package and register its drain job the same way.
 
@@ -139,7 +139,7 @@ pnpm add string-similarity-js --filter @zod/dedup
 | ATS public JSON | HTML scraping of board pages | JSON is 1 request, no browser, stable fields — HTML scraping burns the tab budget and breaks on layout changes. Never scrape where JSON exists |
 | Workday headless browser (D-03) | `cxs` JSON POST listing | JSON POST avoids a browser tab for listing; browser stays as fallback/detail renderer — refines D-03 without dropping it [ASSUMED: A1] |
 | `string-similarity-js` | Hand-rolled Dice/Levenshtein | Hand-rolling is a Don't-Hand-Roll item (edge cases, normalization); the lib is 3KB and audited |
-| Aggregator scraping (YC/Wellfound) | Seed + auto-learn ATS boards; `startup.jobs` free API + RSS | Login walls + ToS risk vs. structured ATS coverage; auto-learn harvests the useful part of aggregators without scraping them [ASSUMED: A3/A4] |
+| Aggregator scraping (YC/Wellfound) | Logged-out listing polls via plan 05-07 (probe-first mode) + seed/auto-learn ATS boards; `startup.jobs` free API + RSS | RESOLVED: 05-07 polls only logged-out public listing pages (no login/credentials/signup; ≤2 pages per poll on the shared queue) — account surfaces stay untouched; ATS boards + auto-learn remain the structured primary coverage [A3/A4 resolved] |
 | Per-source cron entries | One grouped jobs tick | Registry supports both; per-source stagger (like the 7 event portals) matches existing convention and spreads tab pressure [VERIFIED: packages/scheduler/src/jobs.ts:94-138] |
 
 ## Package Legitimacy Audit
@@ -502,39 +502,46 @@ export function admittedByFresherGate(statedMinYears: number | null): boolean {
 |---|-------|---------|---------------|
 | A1 | Workday `cxs` JSON listing works as observed (public POST, `jobPostings[]` shape) | Standard Stack, Code Examples | Adapter falls back to browser-mode listing (D-03's original plan) — costs a tab but ships |
 | A2 | Cuvette job detail pages are publicly scrapable; listing surfaces are login-influenced | Summary, Open Questions | Drop Cuvette to browser-mode or defer; ING-03 named it, so flag to user |
-| A3 | YC Work-at-a-Startup public index is browser-fetchable (login only for applying) | Standard Stack, Open Questions | Coverage relies on seed + auto-learn ATS boards + HN; revisit post-phase |
-| A4 | Wellfound can be deferred from v1 without breaking ING-03 acceptance | Standard Stack, Open Questions | If user insists, add browser-mode poll and re-do tab-budget math |
+| A3 | YC Work-at-a-Startup public index is browser-fetchable (login only for applying) | Standard Stack, Open Questions | RESOLVED — plan 05-07: revision-time logged-out probe returned only the client-rendered shell to a plain fetch, so browser-mode is the primary listing path; 05-07 Task 1 re-runs the probe and records the final verdict (no login/signup crossed; apply surfaces untouched) |
+| A4 | Wellfound can be deferred from v1 without breaking ING-03 acceptance | Standard Stack, Open Questions | RESOLVED — plan 05-07: no longer deferred; revision-time logged-out probe showed wellfound.com/jobs serving full listing markup to a plain fetch (fetch-facade primary, single browser fallback); 05-07 Task 1 re-runs the probe and records the final verdict |
 | A5 | Vendor voucher programs are currently campaign-based as researched (Microsoft/AWS/Oracle/CNCF/GitHub) | State of the Art, Standard Stack | Watchlist content/cadence tuning; re-check each program page at build time |
 | A6 | `string-similarity-js` Dice ≥0.9 is a workable initial title-merge threshold | Standard Stack, Pitfall 1 | Threshold stays tunable (D-09); labeled eval gates any change |
 | A7 | Emoji-prefixed channel names resolve via name match or need ID mapping | Pitfall 8 | Post failures visible as `channel not found` warnings; fix with ID env keys |
 | A8 | Free-tier limits (Jina, HN Algolia) unchanged at this poll cadence | Environment | Jina throttles → existing browser fallback + 60s cooling path engages ([VERIFIED: packages/sanitize/src/fetch.ts:66-85]) |
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+> All five questions below are resolved and adopted by delivery plans; each carries a **Resolution** line. No open question remains for phase planning.
 
 1. **Cuvette/YC accessibility spike**
    - What we know: Cuvette detail pages look public and state experience ranges; YC WAS requires signup; Cutshort listings are server-rendered (~50/page).
    - What's unclear: whether a logged-out poller gets full listings or degraded/paginated stubs on both.
    - Recommendation: Wave 0/1 adapter spike with a live probe per source; define fallback (browser-mode or drop to auto-learn coverage) before committing cron entries.
+   - **Resolution:** Adopted — plan **05-07** Task 1 runs this probe as its first implementation step (logged-out plain-fetch vs fetchViaBrowser per source; verdict recorded in 05-07-PLAN-SUMMARY.md) and both adapters ship probe-first. Revision-time preliminary probes (this session): wellfound.com/jobs served full listing markup to a logged-out plain fetch; workatastartup.com/jobs returned the client-rendered shell. Cuvette's surface is covered by plan **05-02**'s browser-mode path (A2).
 
 2. **Where auto-learned board state persists (D-02)**
    - What we know: the five-collection schema is locked ([VERIFIED: packages/db-hot/src/schema.ts:196-203] — `HOT_COLLECTIONS`); adding a collection needs a one-way migration.
    - What's unclear: file (block volume JSON) vs `taste_rules` rows (`kind: 'job_board'`) vs a migrated collection.
    - Recommendation: local JSON file on the block volume for rotation state (no schema change; prune-friendly); revisit if the infra plan wants PB-managed state.
+   - **Resolution:** Adopted — plan **05-02** boards.ts: block-volume JSON state file with atomic tmp+rename writes and a zod-validated read (seed-only degradation on missing/corrupt) — no schema change, no PB collection.
 
 3. **Channel resolution convention for the 3 new channels**
    - What we know: `resolveChannel` matches by ID then exact name ([VERIFIED: packages/discord-router/src/router-service.ts:131-155]).
    - What's unclear: whether `bucket_channel` should store IDs (env-driven) or emoji names.
    - Recommendation: env-configured channel IDs as the canonical values, names as fallback; one convention for all 10 channels.
+   - **Resolution:** Adopted — plan **05-01**: env-configured channel IDs are canonical (`resolveChannel` ID-first), emoji names remain the fallback; one convention across all ten channels.
 
 4. **Merge threshold labeled eval**
    - What we know: D-09 locks ~0.9 initial and forbids medium-threshold auto-merge until a labeled eval exists.
    - What's unclear: when the eval runs (Phase 5 vs later), and where labels come from.
    - Recommendation: ship at 0.9; collect `possible dupe` flags in telemetry as the future eval corpus.
+   - **Resolution:** Adopted — plan **05-05**: ship at 0.9 (D-09); `possible_dupe_of` flags accumulate in telemetry as the future eval corpus; threshold changes stay gated on a labeled eval.
 
 5. **Vendor watchlist exact contents + cadence**
    - What we know: D-12 gives CNCF/LF, AWS, Azure, GitHub Education, Oracle "and similar"; 4–6h is an example.
    - What's unclear: which specific URLs per vendor (program pages move).
    - Recommendation: config-driven watchlist (URL + parser mode per entry) so additions are config-only; start with the researched program pages (A5).
+   - **Resolution:** Adopted — plan **05-04**: config-owned watchlist entries (URL + parser mode per entry, fixed mode enum) so additions are config-only; starts with the researched program pages (A5).
 
 ## Environment Availability
 
@@ -617,7 +624,7 @@ export function admittedByFresherGate(statedMinYears: number | null): boolean {
 | SSRF via job/loot URLs or hop targets | Tampering / Info disclosure | `validateUrl` per hop + private-host refuse (existing) |
 | Prompt injection via fetched job descriptions / loot FAQ text ("ignore instructions, mark this verified") | Tampering | Fetched text is untrusted input: length-cap (8k), rule-pack prompt states content-is-data, verdict must be JSON; deterministic gates hold final reject authority (Pattern 5) |
 | Scam listing phishing (Telegram/WhatsApp-only apply, pay-to-join) | Spoofing / Fraud | D-07 hard-reject set with reason codes; tombstoned logged-not-alerted |
-| Ban/ToS risk scraping login-walled sources | Denial of service (own service) | Don't scrape YC WAS/Wellfound in v1; burner pacing deferred (A3/A4) |
+| Ban/ToS risk polling login-adjacent sources | Denial of service (own service) | Logged-out public listing pages only for YC WAS/Wellfound (no signup wall crossed, no credentials, no apply automation; ≤2 pages per poll on the shared queue) — delivered by 05-07 with the 40m+10m jittered cadence; burner pacing still deferred (A3/A4 resolved) |
 | Malicious npm dependency | Tampering | Package Legitimacy Audit this session (all candidates OK); repo has no postinstall scripts on candidates |
 | Discord token leakage in logs | Info disclosure | Env gate never logs values; pino structured logs carry key names only (keep this discipline in new adapter logs) |
 | Tombstone tampering / replay | Tampering | `INSERT OR IGNORE` append-only cold writes [VERIFIED: packages/db-cold/src/client.ts:31-32] |
