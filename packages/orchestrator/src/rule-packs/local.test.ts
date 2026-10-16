@@ -65,6 +65,7 @@ describe('parseLocalVerdict', () => {
     location: 'Surathkal, DK',
     isOffline: true,
     hasSelectionRound: true,
+    organizer_score: 7,
     category: 'general',
     prize_cash_inr: null,
     prize_text: 'TBA',

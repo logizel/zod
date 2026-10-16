@@ -26,6 +26,7 @@ export const LocalVerdictSchema = z.object({
   location: z.string().min(1),
   isOffline: z.boolean(),
   hasSelectionRound: z.boolean(),
+  organizer_score: z.number().min(0).max(10),
   category: z.enum(['sys-cp-sec', 'general']).default('general'),
   prize_cash_inr: z.number().min(0).nullable(),
   prize_text: z.string(),

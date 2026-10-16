@@ -612,6 +612,13 @@ async function drainLocalRow(
     bucketChannel = '#📍-local-dk-udupi';
   } else if (verdict.isOffline && verdict.hasSelectionRound) {
     // Out-of-town offline + verified selection round → #✈️-travel-curated.
+    // Quality gate: organizer_score >= 5 required for travel-curated admission.
+    if (verdict.organizer_score < 5) {
+      await writeTombstone(pb, candidateUrl, 'quality_below_threshold', 'auditor');
+      await scratchpadColl(pb).update(row.id, { step_position: 'STEP_3' });
+      rowLog.info({ reasonCode: 'quality_below_threshold' }, 'tombstone written (quality below threshold)');
+      return;
+    }
     bucketChannel = '#✈️-travel-curated';
   } else if (verdict.isOffline && !verdict.hasSelectionRound) {
     // Walk-in low-effort out-of-town → tombstone walk_in_rejected.

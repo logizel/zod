@@ -888,6 +888,7 @@ describe('orchestrator drainStep2Rows local branch', () => {
       location: 'Surathkal, DK',
       isOffline: true,
       hasSelectionRound: false,
+      organizer_score: 7,
       category: 'general',
       prize_cash_inr: 50000,
       prize_text: '₹50,000 cash',
@@ -925,6 +926,7 @@ describe('orchestrator drainStep2Rows local branch', () => {
       location: 'DK',
       isOffline: true,
       hasSelectionRound: false,
+      organizer_score: 9,
       category: 'sys-cp-sec',
       prize_cash_inr: 500000,
       prize_text: '₹5,00,000 cash',
@@ -958,6 +960,7 @@ describe('orchestrator drainStep2Rows local branch', () => {
       location: 'Udupi, Karnataka',
       isOffline: true,
       hasSelectionRound: false,
+      organizer_score: 6,
       category: 'general',
       prize_cash_inr: null,
       prize_text: 'TBA',
@@ -990,6 +993,7 @@ describe('orchestrator drainStep2Rows local branch', () => {
       location: 'Mumbai',
       isOffline: true,
       hasSelectionRound: true,
+      organizer_score: 8,
       category: 'general',
       prize_cash_inr: null,
       prize_text: 'TBA',
@@ -1011,6 +1015,74 @@ describe('orchestrator drainStep2Rows local branch', () => {
     vi.unstubAllGlobals();
   });
 
+  it('travel-curated with organizer_score >= 5 admits to #✈️-travel-curated', async () => {
+    const { pb, collections } = makePb({
+      scratchpadRows: [makeLocalScratchRow({ candidate_url: 'https://bits-pilani.edu.in/event/fest-2026' })],
+      existingOpportunities: [],
+    });
+
+    const router = makeRouter(() => ({
+      title: 'BITS Pilani Fest',
+      organizer: 'BITS Pilani',
+      location: 'Goa',
+      isOffline: true,
+      hasSelectionRound: true,
+      organizer_score: 5,
+      category: 'general',
+      prize_cash_inr: null,
+      prize_text: 'TBA',
+      perk_hint: null,
+      dates: null,
+      audit_summary: 'BITS Pilani fest, Goa, quality threshold met',
+    }));
+
+    await drainStep2Rows({
+      pb,
+      router: router as any,
+      pageSize: 25,
+    });
+
+    expect(collections.opportunities.create).toHaveBeenCalledTimes(1);
+    const opp = (collections.opportunities.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(opp.bucket_channel).toBe('#✈️-travel-curated');
+    vi.unstubAllGlobals();
+  });
+
+  it('travel-curated with organizer_score < 5 → tombstone quality_below_threshold', async () => {
+    const { pb, collections } = makePb({
+      scratchpadRows: [makeLocalScratchRow({ candidate_url: 'https://unknown-college.edu.in/event/meetup-2026' })],
+      existingOpportunities: [],
+    });
+
+    const router = makeRouter(() => ({
+      title: 'Unknown College Meetup',
+      organizer: 'Unknown College',
+      location: 'Pune',
+      isOffline: true,
+      hasSelectionRound: true,
+      organizer_score: 3,
+      category: 'general',
+      prize_cash_inr: null,
+      prize_text: 'TBA',
+      perk_hint: null,
+      dates: null,
+      audit_summary: 'Unknown college meetup, low quality',
+    }));
+
+    await drainStep2Rows({
+      pb,
+      router: router as any,
+      pageSize: 25,
+    });
+
+    expect(collections.opportunities.create).not.toHaveBeenCalled();
+    expect(collections.tombstone_ledger.create).toHaveBeenCalledTimes(1);
+    const tsCall = (collections.tombstone_ledger.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(tsCall.terminal_status).toBe('quality_below_threshold');
+    expect(collections.scratchpad.update).toHaveBeenCalledWith('scratch-local-1', { step_position: 'STEP_3' });
+    vi.unstubAllGlobals();
+  });
+
   it('out-of-town offline without selection round → tombstone walk_in_rejected', async () => {
     const { pb, collections } = makePb({
       scratchpadRows: [makeLocalScratchRow({ candidate_url: 'https://bangalore.edu.in/event/workshop-2026' })],
@@ -1023,6 +1095,7 @@ describe('orchestrator drainStep2Rows local branch', () => {
       location: 'Bangalore',
       isOffline: true,
       hasSelectionRound: false,
+      organizer_score: 4,
       category: 'general',
       prize_cash_inr: null,
       prize_text: 'TBA',
@@ -1057,6 +1130,7 @@ describe('orchestrator drainStep2Rows local branch', () => {
       location: 'Online',
       isOffline: false,
       hasSelectionRound: false,
+      organizer_score: 8,
       category: 'sys-cp-sec',
       prize_cash_inr: 150000,
       prize_text: '₹1,50,000 cash',
@@ -1090,6 +1164,7 @@ describe('orchestrator drainStep2Rows local branch', () => {
       location: 'Online',
       isOffline: false,
       hasSelectionRound: false,
+      organizer_score: 6,
       category: 'general',
       prize_cash_inr: 50000,
       prize_text: '₹50,000 cash',
