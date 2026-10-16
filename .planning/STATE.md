@@ -3,17 +3,17 @@ gsd_state_version: "1.0"
 current_phase: 05
 current_phase_name: Jobs + Loot Pipelines
 status: executing
-stopped_at: Completed 05-09-PLAN.md — unit + wiring test coverage for gates, registry, tick sources, and Greenhouse adapter
-last_updated: "2026-10-16T09:55:00Z"
+stopped_at: Completed 05-07-PLAN.md — YC + Wellfound listing adapters + ten-source fan-out
+last_updated: "2026-10-16T10:14:37.258Z"
 last_activity: 2026-10-16
 last_activity_desc: Executed plan 05-09 — unit + wiring coverage for gates, registry tables, tick sources, and Greenhouse adapter; 1 task commit; full suite green (507 tests)
-state_head: 28aadbf2fdd7e2858b44a558a96f7697c1300518
+state_head: 79e31cc093168f35eb36de92b0b6e5ceb5e1d141
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 22
-  completed_plans: 17
-  percent: 77
+  completed_plans: 20
+  percent: 57
 ---
 
 # Project State
@@ -28,11 +28,11 @@ See: .planning/PROJECT.md (updated 2026-10-15)
 ## Current Position
 
 Phase: 05 (Jobs + Loot Pipelines) — EXECUTING
-Plan: 5 of 9 (05-08 complete, 05-01 complete, 05-02 complete, 05-03 complete, 05-04 complete, 05-09 complete)
-Status: Executing Phase 05 — plan 05-09 complete (unit + wiring test coverage for gates, registry, tick sources, and Greenhouse adapter)
+Plan: 6 of 9 (05-08 complete, 05-01 complete, 05-02 complete, 05-03 complete, 05-04 complete, 05-09 complete)
+Status: Ready to execute
 Last activity: 2026-10-16 — Completed plan 05-09 (unit + wiring coverage for gates, registry tables, tick sources, and Greenhouse adapter), 1 task commit, full suite green (507 tests)
 
-Progress: [█████████░] 77%
+Progress: [██████░░░░] 57%
 
 ## Performance Metrics
 
@@ -68,6 +68,7 @@ Progress: [█████████░] 77%
 | Phase 05 05-03 | 17 min | 2 tasks | 17 files |
 | Phase 05 05-04 | 20 min | 3 tasks | 18 files |
 | Phase 05 05-09 | 6 min | 1 task | 5 files |
+| Phase 05 P07 | 9 | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -96,6 +97,9 @@ Recent decisions affecting current work:
 - [Phase 05 05-04]: Event buckets read Phase 4 constants verbatim: sys-cp-sec → '#🔥-priority-sys-cp-sec', general → '#-online-1lakh-plus'; no invented bucket strings
 - [Phase 05 05-04]: Domain filter reuses @zod/discord-router/domain-filter prefilter with organizer_score/agenda_score; tombstone reason uses its vocabulary verbatim
 - [Phase 05 05-04]: Vendor watchlist uses globalThis.fetch + validateUrl (SSRF guard) + keyword layer; never-throw entry isolation; config-owned fixed hosts only
+- [Phase 05]: YC primary mode = browser (fetchViaBrowser via shared queue): probe showed workatastartup.com/jobs returns a client-rendered React shell with 0 job/company links via plain fetch
+- [Phase 05]: Wellfound primary mode = fetch-facade (native fetch): probe showed wellfound.com/jobs serves full listing markup (215 anchors, ~110 job/company hrefs, __NEXT_DATA__) to a logged-out plain fetch; exactly-one fetchViaBrowser fallback on shell detection
+- [Phase 05]: No scheduler/registry/.env changes — new sources ride the existing JOB_POLL_JOBS jobs tick (05-01 cadence)
 
 ### Pending Todos
 
@@ -116,6 +120,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-16T09:40:25Z
-Stopped at: Completed 05-04-PLAN.md — loot vertical core + events completion + vendor watchlist
-Resume file: .planning/phases/05-jobs-loot-pipelines/05-CONTEXT.md
+Last session: 2026-10-16T10:14:33.970Z
+Stopped at: Completed 05-07-PLAN.md — YC + Wellfound listing adapters + ten-source fan-out
+Resume file: None
