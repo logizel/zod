@@ -127,7 +127,7 @@ Plans:
   4. An online event failing the ₹1L rule but carrying a real free perk diverts to #🎁-free-swag-and-credits with India-shipping verified; a US-only drop is rejected
   5. The same event seen on two portals arrives as one merged alert with unified registration links
 
-**Plans**: 7/9 plans executed
+**Plans**: 8/9 plans executed
 
 **Wave 1**
 - [x] 05-08-PLAN.md — Contract foundations: D-14 one-way schema migration + new-channel env keys + resolveChannel env-ID-first + per-pipeline audit-card fields (blocking-human D-14 checkpoint) (JOB-02, JOB-04, JOB-05, LOT-01..04)
@@ -141,7 +141,7 @@ Plans:
 - [x] 05-04-PLAN.md — Loot vertical: rule pack + gates + 2-hop FAQ reader + divert; events drain branch completion; vendor watchlist (LOT-01..04)
 
 **Wave 4** *(blocked on Wave 3 completion)*
-- [ ] 05-05-PLAN.md — EVT-07 fuzzy merger: ≥0.9/±3d/organizer gate, intake skip + drain backstop, merged tombstones, link union (EVT-07)
+- [x] 05-05-PLAN.md — EVT-07 fuzzy merger: ≥0.9/±3d/organizer gate, intake skip + drain backstop, merged tombstones, link union (EVT-07)
 - [x] 05-07-PLAN.md — YC + Wellfound browser-mode sources: logged-out accessibility probe + two logged-out listing adapters into the jobs fan-out (ING-03)
 
 **Wave 5** *(blocked on Wave 4 completion)*

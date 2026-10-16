@@ -31,7 +31,7 @@
 - [ ] **EVT-04**: Out-of-town offline events require verified selection round + quality to reach #✈️-travel-curated; walk-in low-effort rejected
 - [x] **EVT-05**: Online events require verified liquid cash ≥₹1,00,000 INR (credits/vouchers/certificates stripped) to reach #💻-online-1lakh-plus
 - [ ] **EVT-06**: Legit TBA prize/agenda events fire Ping #1 to #⏳-early-tba-radar with WATCHING_TBA status and re-audit every 48h until Ping #2
-- [ ] **EVT-07**: Cross-platform duplicates merge on normalized title + ±3d date window + organizer into one master record with unified registration_links[]
+- [x] **EVT-07**: Cross-platform duplicates merge on normalized title + ±3d date window + organizer into one master record with unified registration_links[]
 
 ### Jobs Pipeline
 
