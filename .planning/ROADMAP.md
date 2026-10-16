@@ -127,7 +127,7 @@ Plans:
   4. An online event failing the ₹1L rule but carrying a real free perk diverts to #🎁-free-swag-and-credits with India-shipping verified; a US-only drop is rejected
   5. The same event seen on two portals arrives as one merged alert with unified registration links
 
-**Plans**: 9/9 plans executed
+**Plans**: 9/9 plans complete
 
 **Wave 1**
 - [x] 05-08-PLAN.md — Contract foundations: D-14 one-way schema migration + new-channel env keys + resolveChannel env-ID-first + per-pipeline audit-card fields (blocking-human D-14 checkpoint) (JOB-02, JOB-04, JOB-05, LOT-01..04)
@@ -161,7 +161,20 @@ Plans:
   4. An external Discord #announcements post appears in #raw-incoming-feeds via the official Gateway relay
   5. Feedback posted in #🧠-bot-training-chat produces a confirmation reply and changes subsequent Auditor/Curator verdicts
 
-**Plans**: TBD
+**Plans**: 4 plans
+
+**Wave 1**
+- [ ] 06-01-PLAN.md — Ingestion tracer: local DK/Udupi source + announcements relay + X/LinkedIn social source (ING-02, ING-04, ING-05)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 06-02-PLAN.md — Routing: local geo classification + travel-curated selection + TBA two-ping 48h loop (EVT-03, EVT-04, EVT-06)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 06-03-PLAN.md — Delivery: bookmark reaction handler + 48h/24h deadline reminder ticker (UI-02)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 06-04-PLAN.md — Feedback: taste rule ingestion (3 paths) + taste rule application (BLOCK pre-scoring + BOOST prompt injection) (MEM-04)
+
 **UI hint**: yes
 
 ### Phase 7: Telemetry Dashboard + Ops Hardening
@@ -190,6 +203,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 2. Scraper Foundation | 3/3 | Complete    | 2026-10-15 |
 | 3. LLM Swarm | 3/3 | Complete    | 2026-10-15 |
 | 4. Events Vertical Slice | 3/3 | Complete    | 2026-10-16 |
-| 5. Jobs + Loot Pipelines | 9/9 | In Progress|  |
-| 6. Delivery + Local/Social Coverage | 0/TBD | Not started | - |
+| 5. Jobs + Loot Pipelines | 9/9 | Complete    | 2026-10-16 |
+| 6. Delivery + Local/Social Coverage | 0/4 | Not started | - |
 | 7. Telemetry Dashboard + Ops Hardening | 0/TBD | Not started | - |
