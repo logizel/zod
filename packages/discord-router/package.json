@@ -17,6 +17,18 @@
     "./portals/jobs/*": {
       "types": "./dist/portals/jobs/*.d.ts",
       "default": "./dist/portals/jobs/*.js"
+    },
+    "./link-hop": {
+      "types": "./dist/link-hop.d.ts",
+      "default": "./dist/link-hop.js"
+    },
+    "./prize-gate": {
+      "types": "./dist/prize-gate.d.ts",
+      "default": "./dist/prize-gate.js"
+    },
+    "./domain-filter": {
+      "types": "./dist/domain-filter.d.ts",
+      "default": "./dist/domain-filter.js"
     }
   },
   "scripts": {

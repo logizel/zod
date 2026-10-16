@@ -18,8 +18,11 @@
   "dependencies": {
     "@zod/config": "workspace:*",
     "@zod/db-hot": "workspace:*",
+    "@zod/discord-router": "workspace:*",
     "@zod/llm": "workspace:*",
     "@zod/logger": "workspace:*",
+    "@zod/sanitize": "workspace:*",
+    "@zod/scout": "workspace:*",
     "@zod/scheduler-registry": "workspace:*",
     "pino": "^10.4.0",
     "zod": "^4.6.7"
