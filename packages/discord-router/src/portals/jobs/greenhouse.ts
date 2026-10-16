@@ -17,9 +17,10 @@ import { validateUrl } from '@zod/sanitize/fetch';
 // injected from config; here it is a placeholder for the tracer slice.
 const GREENHOUSE_BOARD_TOKEN = 'zod'; // placeholder — replaced by config in 05-02
 
-export async function list(opts?: { since?: Date }): Promise<PollCandidate[]> {
+export async function list(opts?: { since?: Date; board?: string }): Promise<PollCandidate[]> {
+  const board = opts?.board ?? GREENHOUSE_BOARD_TOKEN;
   const url = new URL(
-    `https://boards-api.greenhouse.io/v1/boards/${GREENHOUSE_BOARD_TOKEN}/jobs?content=true`,
+    `https://boards-api.greenhouse.io/v1/boards/${board}/jobs?content=true`,
   );
 
   const res = await fetch(url.toString());
