@@ -21,6 +21,9 @@ const EnvSchema = z.object({
   DISCORD_CHANNEL_JOBS_SYS_CLOUD: z.string().default(''),
   DISCORD_CHANNEL_JOBS_GENERAL: z.string().default(''),
   DISCORD_CHANNEL_LOOT: z.string().default(''),
+  // D-06: fellowship allowlist extension — operator-extensible without a
+  // release. getFellowshipAllowlist() merges this into the config default.
+  FELLOWSHIP_ALLOWLIST_EXTRA: z.string().default(''),
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
 });
 
