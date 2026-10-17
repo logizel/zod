@@ -1,6 +1,7 @@
 import { Client, GatewayIntentBits, Partials } from 'discord.js';
 import type { Env } from '@zod/config';
 import { createLogger } from '@zod/logger';
+import { startBookmarkHandler } from './bookmark.js';
 
 // Gateway-intent contract (D-09 prerequisite, Pitfall 2):
 //   GuildMessages = 512   — receive guild message events
@@ -37,6 +38,10 @@ export function startGateway({ env, log }: GatewayDeps): Client {
   void client.login(env.DISCORD_TOKEN).catch((err) => {
     log.error({ err: String(err) }, 'discord login failed');
   });
+
+  // Start bookmark reaction handler at boot (UI-02, D-05).
+  // Listens for messageReactionAdd with the custom bookmark emoji.
+  startBookmarkHandler({ env, log });
 
   clientInstance = client;
   return client;

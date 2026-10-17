@@ -38,8 +38,11 @@ export async function processOpportunity(
     return false;
   }
   try {
-    await channel.send({ embeds: [embed] });
-    await pb.collection('opportunities').update(opportunity.id, { status: 'routed' });
+    const sentMessage = await channel.send({ embeds: [embed] });
+    await pb.collection('opportunities').update(opportunity.id, {
+      status: 'routed',
+      discord_message_id: sentMessage.id,
+    });
     return true;
   } catch (err) {
     try {
