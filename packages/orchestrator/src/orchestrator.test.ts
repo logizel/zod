@@ -57,11 +57,13 @@ interface FakeCollections {
 function makePb(opts: {
   scratchpadRows: TaskScratchpadRow[];
   existingOpportunities: unknown[];
+  tasteRules?: unknown[];
 }): { pb: any; collections: FakeCollections } {
   const opportunities: unknown[] = [...opts.existingOpportunities];
   const updated: Array<{ id: string; data: Record<string, unknown> }> = [];
   const rows = new Map<string, TaskScratchpadRow>();
   for (const r of opts.scratchpadRows) rows.set(r.id, r);
+  const tasteRules: unknown[] = [...(opts.tasteRules ?? [])];
 
   const collections: FakeCollections = {
     scratchpad: {
@@ -111,6 +113,12 @@ function makePb(opts: {
       }),
       __created__: [] as unknown[],
     },
+    taste_rules: {
+      getList: async (_page: number, _perPage: number, opts?: unknown) => {
+        return { items: tasteRules, totalItems: tasteRules.length };
+      },
+      __items: tasteRules,
+    },
   };
 
   const pb: any = {
@@ -118,6 +126,7 @@ function makePb(opts: {
       if (name === 'task_scratchpad') return collections.scratchpad;
       if (name === 'opportunities') return collections.opportunities;
       if (name === 'tombstone_ledger') return collections.tombstone_ledger;
+      if (name === 'taste_rules') return collections.taste_rules;
       throw new Error(`unknown collection: ${name}`);
     },
   };
@@ -630,6 +639,81 @@ describe('orchestrator drainStep2Rows events branch', () => {
     expect(collections.opportunities.create).not.toHaveBeenCalled();
     expect(collections.tombstone_ledger.create).not.toHaveBeenCalled();
     expect(collections.scratchpad.update).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it('taste BLOCK pre-scoring tombstones matching candidate before LLM runs', async () => {
+    // BLOCK rule matches the candidate title (case-insensitive substring)
+    const { pb, collections } = makePb({
+      scratchpadRows: [makeEventsScratchRow()],
+      existingOpportunities: [],
+      tasteRules: [
+        {
+          id: 'tr-1',
+          kind: 'BLOCK',
+          rule: 'CTF',
+          weight: 1.0,
+          source: 'reaction',
+          created_at: '2026-10-16T08:00:00Z',
+        },
+      ],
+    });
+
+    const router = makeRouter(() => ({ ...fullEventsVerdict }));
+
+    await drainStep2Rows({
+      pb,
+      router: router as any,
+      pageSize: 25,
+    });
+
+    // LLM must NOT be called — pre-scoring filter blocks before auditor
+    expect(router.complete).not.toHaveBeenCalled();
+
+    // Tombstone with taste_blocked status
+    expect(collections.tombstone_ledger.create).toHaveBeenCalledTimes(1);
+    const tsCall = (collections.tombstone_ledger.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(tsCall.terminal_status).toBe('taste_blocked');
+    expect(tsCall.source).toBe('taste_rule');
+
+    // No opportunities row created
+    expect(collections.opportunities.create).not.toHaveBeenCalled();
+
+    // Scratchpad advanced to STEP_3
+    expect(collections.scratchpad.update).toHaveBeenCalledWith('scratch-events-1', { step_position: 'STEP_3' });
+    vi.unstubAllGlobals();
+  });
+
+  it('taste BLOCK does not block when no rule matches', async () => {
+    installEventsFetch();
+    const { pb, collections } = makePb({
+      scratchpadRows: [makeEventsScratchRow()],
+      existingOpportunities: [],
+      tasteRules: [
+        {
+          id: 'tr-1',
+          kind: 'BLOCK',
+          rule: 'crypto',
+          weight: 1.0,
+          source: 'dm',
+          created_at: '2026-10-16T08:00:00Z',
+        },
+      ],
+    });
+
+    const router = makeRouter(() => ({ ...fullEventsVerdict }));
+
+    await drainStep2Rows({
+      pb,
+      router: router as any,
+      pageSize: 25,
+    });
+
+    // LLM IS called — no BLOCK rule matches
+    expect(router.complete).toHaveBeenCalledTimes(1);
+
+    // Opportunity created
+    expect(collections.opportunities.create).toHaveBeenCalledTimes(1);
     vi.unstubAllGlobals();
   });
 });
