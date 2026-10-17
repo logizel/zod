@@ -123,6 +123,13 @@ None - no external service configuration required. `SOCIAL_COOKIES_PATH` must po
 - Requirement ING-05 satisfied
 - Ready for subsequent phase-06 plans
 
+## Self-Check: PASSED
+
+- Created files exist: social.ts, social.test.ts, 06-07-SUMMARY.md — FOUND
+- Commits exist: 813a8f1 (task), 3967cab (SUMMARY) — FOUND
+- No stubs detected in changed files
+- Threat model mitigations (T-6-14) applied: realpathSync + ALLOWED_COOKIE_DIR confinement in readSocialCookies
+
 ---
 *Phase: 06-delivery-local-social-coverage*
 *Completed: 2026-10-17T07:41:47Z*
