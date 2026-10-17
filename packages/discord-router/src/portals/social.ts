@@ -13,7 +13,7 @@
  * any other failure (error isolation per source).
  */
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
 import type { PollCandidate, CandidateSource } from '@zod/scheduler/jobs';
 import { env } from '@zod/config';
 
@@ -40,24 +40,19 @@ export function sleep(ms: number): Promise<void> {
 
 const ALLOWED_COOKIE_DIR = '/opt/zod/social-cookies';
 
-function isSafeCookiePath(path: string): boolean {
-  // Resolve and confine to the allowed directory to prevent path traversal (CR-01/CR-06).
-  const resolved = path.replace(/\/$/, '');
-  if (!resolved.startsWith(ALLOWED_COOKIE_DIR + '/') && resolved !== ALLOWED_COOKIE_DIR) {
-    return false;
-  }
-  if (resolved.includes('..')) {
-    return false;
-  }
-  return true;
-}
-
-/** Read and parse the cookie JSON file at tick time (D-07). */
+/** Read and parse the cookie JSON file at tick time (D-07).
+ *
+ * Resolves symlinks via realpathSync BEFORE any confinement check or file read,
+ * then confines the resolved path to ALLOWED_COOKIE_DIR. This prevents symlink-
+ * based path traversal (CR-01 / WR-06). May throw — socialSource.list() catches
+ * and returns [] to keep the never-throw source contract.
+ */
 export function readSocialCookies(path: string): SocialCookie[] {
-  if (!isSafeCookiePath(path)) {
-    return [];
+  const resolved = realpathSync(path);
+  if (!resolved.startsWith(ALLOWED_COOKIE_DIR + '/')) {
+    throw new Error(`Cookie path outside allowed directory: ${resolved}`);
   }
-  const raw = readFileSync(path, 'utf8');
+  const raw = readFileSync(resolved, 'utf8');
   return JSON.parse(raw);
 }
 
