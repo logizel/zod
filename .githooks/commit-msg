@@ -1,0 +1,11 @@
+#!/bin/sh
+# Reject AI co-author trailers so no bot account is credited as a contributor.
+# GitHub resolves Co-Authored-By emails to accounts (e.g. noreply@anthropic.com
+# -> the "claude" bot), which shows up on the repo's Contributors list.
+if grep -qiE '^[[:space:]]*Co-Authored-By:.*(anthropic\.com|noreply@opencode\.ai|claude|opencode|copilot|codex)' "$1"; then
+  echo "commit-msg hook: AI co-author trailer rejected." >&2
+  echo "  Remove the 'Co-Authored-By:' line and commit as yourself only." >&2
+  echo "  (Set HUSKY=0 or commit with --no-verify to bypass if truly intended.)" >&2
+  exit 1
+fi
+exit 0
