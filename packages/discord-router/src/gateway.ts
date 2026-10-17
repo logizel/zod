@@ -2,6 +2,7 @@ import { Client, GatewayIntentBits, Partials } from 'discord.js';
 import type { Env } from '@zod/config';
 import { createLogger } from '@zod/logger';
 import { startBookmarkHandler } from './bookmark.js';
+import { startTasteIngestion } from './taste-ingest.js';
 
 // Gateway-intent contract (D-09 prerequisite, Pitfall 2):
 //   GuildMessages = 512   — receive guild message events
@@ -42,6 +43,10 @@ export function startGateway({ env, log }: GatewayDeps): Client {
   // Start bookmark reaction handler at boot (UI-02, D-05).
   // Listens for messageReactionAdd with the custom bookmark emoji.
   startBookmarkHandler({ env, log });
+
+  // Start taste rule ingestion at boot (MEM-04, D-11).
+  // Three paths: reaction (👍/👎), keyword command (!rule), DM to bot.
+  startTasteIngestion({ env, log });
 
   clientInstance = client;
   return client;
