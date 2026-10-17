@@ -94,10 +94,10 @@ export function startSchedulerRegistry(log: TickLogger): RegistryHandle {
   });
   registerGatewayJobs(log, undefined, {
     tickHandler: (def, jobLog) => {
-      if (def.name === 'relay-poll') {
+      if (def.name === 'gateway-relay-poll') {
         return relayService.tick();
       }
-      if (def.name === 'reminder-tick') {
+      if (def.name === 'gateway-reminder-tick') {
         return reminderTick({ env: env as any, log: jobLog as any });
       }
     },
