@@ -263,8 +263,10 @@
     let backoff = 1000;
     const MAX_BACKOFF = 30000;
     let reconnects = 0;
-    const MAX_STREAMS = 2;
+    // D-08: hard cap ~2 concurrent streams (env key: SSE_VIEWER_CAP, default 2)
+    const SSE_VIEWER_CAP = 2;
     let lastEvent = Date.now();
+    // D-07: staleness banner threshold (env key: STALENESS_THRESHOLD_MS, default 90000ms)
     const STALENESS_THRESHOLD_MS = 90000;
 
     /* ---------------- active-tab persistence (localStorage) ---------------- */
@@ -304,7 +306,7 @@
       };
       es.onerror = () => {
         es.close(); es = null; reconnects++;
-        if (reconnects > MAX_STREAMS) {
+        if (reconnects > SSE_VIEWER_CAP) {
           if (slotsContainer) slotsContainer.textContent = 'stream limit reached';
           return;
         }
