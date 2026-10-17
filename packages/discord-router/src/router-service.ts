@@ -180,7 +180,7 @@ export async function resolveChannel(
   }
 
   // 3. Exact-name fallback (preserved)
-  const guilds = client.guilds?.caches?.values?.() ?? [];
+  const guilds = client.guilds?.cache?.values?.() ?? [];
   for (const guild of guilds) {
     const channels = guild.channels?.cache?.values?.() ?? [];
     const named = channels.find(
