@@ -92,7 +92,12 @@ describe('SseHub', () => {
 
   it('pushes a coalesced delta containing a slot row to every connected client', () => {
     const pb = makeFakePb();
-    const hub = new SseHub(pb, makeLog());
+    const hub = new SseHub(
+      pb,
+      makeLog(),
+      [],
+      [{ provider: 'groq', model: 'llama-3.1-8b-instant', step: 'STEP_1-filter', status: 'active', batonPass: null }],
+    );
 
     const clientA = makeFakeClient();
     const clientB = makeFakeClient();

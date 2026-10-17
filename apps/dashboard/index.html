@@ -326,6 +326,9 @@
           '<span class="label">model</span><span class="val">' + esc(s.model ?? '-') + '</span>' +
           '<span class="label">step</span><span class="val">' + esc(s.step ?? '-') + '</span>' +
           '<span class="label">status</span><span class="val status-' + esc(String(s.status ?? '-').toLowerCase()) + '">' + esc(s.status ?? '-') + '</span>' +
+          (s.batonPass
+            ? '<span class="label">baton</span><span class="val" style="color:#d1a84f">429 &rarr; ' + esc(String(s.batonPass.to).split(':')[1] ?? '-') + '</span>'
+            : '') +
           (s.url ? '<span class="label">url</span><span class="val" title="' + esc(s.url) + '">' + esc(s.url).slice(0, 40) + '</span>' : '');
         slotsContainer.appendChild(div);
       }

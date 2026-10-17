@@ -222,3 +222,77 @@ export function handleBoards(
   res.writeHead(200, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(response));
 }
+
+// ---------------------------------------------------------------------------
+// Audit & rejection log "load older" — Turso tombstone_ledger point lookup (D-11)
+// ---------------------------------------------------------------------------
+
+/** Minimal statement executor surface (mirrors packages/db-cold/src/client.ts). */
+export interface StatementExecutor {
+  execute(sql: string, args?: unknown[]): Promise<{ rows: unknown[] }>;
+}
+
+/** Tombstone point-lookup SQL (read-only, no mutation endpoint exposed). */
+export const LOOKUP_TOMBSTONE_SQL =
+  'SELECT url_hash, fingerprint, terminal_status, source, decided_at FROM tombstone_ledger WHERE url_hash = ? LIMIT 1';
+
+export type ColdTombstone = {
+  url_hash: string;
+  fingerprint: string;
+  terminal_status: string;
+  source: string;
+  decided_at: string;
+};
+
+function asTombstone(row: unknown): ColdTombstone {
+  const record = row as Record<string, unknown>;
+  return {
+    url_hash: String(record['url_hash']),
+    fingerprint: String(record['fingerprint']),
+    terminal_status: String(record['terminal_status']),
+    source: String(record['source'] ?? ''),
+    decided_at: String(record['decided_at']),
+  };
+}
+
+/** Exactly one keyed statement; null when the hash is unknown. */
+export async function lookupTombstone(
+  db: StatementExecutor,
+  urlHash: string,
+): Promise<ColdTombstone | null> {
+  const { rows } = await db.execute(LOOKUP_TOMBSTONE_SQL, [urlHash]);
+  if (rows.length === 0) return null;
+  return asTombstone(rows[0]);
+}
+
+/** Handle GET /api/audit/older?url_hash=<hash> — read-only point lookup into Turso cold ledger. */
+export type HandleAuditOlderOpts = {
+  db: StatementExecutor;
+};
+
+export function handleAuditOlder(
+  _req: { url: string | null },
+  res: {
+    writeHead: (status: number, headers: Record<string, string>) => void;
+    end: (body?: string) => void;
+  },
+  opts: HandleAuditOlderOpts,
+): Promise<void> {
+  const url = _req.url ?? '';
+  const match = url.match(/[?&]url_hash=([^&]+)/);
+  const urlHash = match ? decodeURIComponent(match[1]) : '';
+  if (!urlHash) {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'url_hash required' }));
+    return Promise.resolve();
+  }
+  return lookupTombstone(opts.db, urlHash)
+    .then((tombstone) => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ tombstone }));
+    })
+    .catch((err) => {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'lookup failed', message: String(err) }));
+    });
+}

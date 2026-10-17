@@ -3,7 +3,7 @@
 // free-text, combined AND).
 
 import { describe, expect, it } from 'vitest';
-import { handleBoards } from './boards.js';
+import { handleBoards, handleAuditOlder, lookupTombstone, type StatementExecutor } from './boards.js';
 
 function mockResponse(): {
   statusCode: number;
@@ -233,5 +233,76 @@ describe('GET /api/boards combined filters (D-10)', () => {
     const parsed = JSON.parse(body) as { boards: Array<{ rows: unknown[] }> };
     const all = uniqueRows(parsed);
     expect(all.map((r) => (r as Record<string, unknown>).status).sort()).toEqual(['candidate', 'routed']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Audit log "load older" — Turso tombstone_ledger point lookup (D-11, T-07-06)
+// ---------------------------------------------------------------------------
+
+function makeFakeDb(rows: unknown[]): StatementExecutor {
+  return {
+    execute: async (_sql: string, args?: unknown[]) => ({ rows }),
+  };
+}
+
+describe('GET /api/audit/older (D-11)', () => {
+  it('returns tombstone from cold ledger by url_hash point lookup', async () => {
+    const res = mockResponse();
+    const db = makeFakeDb([{
+      url_hash: 'abc123',
+      fingerprint: 'fp-abc',
+      terminal_status: 'rejected',
+      source: 'scout-events',
+      decided_at: '2026-10-15T10:00:00Z',
+    }]);
+    await handleAuditOlder({ url: '/api/audit/older?url_hash=abc123' } as never, res as never, { db } as never);
+    expect(res.statusCode).toBe(200);
+    const parsed = JSON.parse(res.body!);
+    expect(parsed.tombstone).toMatchObject({
+      url_hash: 'abc123',
+      terminal_status: 'rejected',
+      source: 'scout-events',
+    });
+  });
+
+  it('returns null tombstone when hash is unknown', async () => {
+    const res = mockResponse();
+    const db = makeFakeDb([]);
+    await handleAuditOlder({ url: '/api/audit/older?url_hash=unknown' } as never, res as never, { db } as never);
+    expect(res.statusCode).toBe(200);
+    const parsed = JSON.parse(res.body!);
+    expect(parsed.tombstone).toBeNull();
+  });
+
+  it('rejects missing url_hash with 400', async () => {
+    const res = mockResponse();
+    const db = makeFakeDb([]);
+    await handleAuditOlder({ url: '/api/audit/older' } as never, res as never, { db } as never);
+    expect(res.statusCode).toBe(400);
+    const parsed = JSON.parse(res.body!);
+    expect(parsed.error).toBe('url_hash required');
+  });
+
+  it('lookupTombstone returns null for empty rows', async () => {
+    const db = makeFakeDb([]);
+    const result = await lookupTombstone(db, 'anything');
+    expect(result).toBeNull();
+  });
+
+  it('lookupTombstone maps row to ColdTombstone', async () => {
+    const db = makeFakeDb([{
+      url_hash: 'xyz',
+      fingerprint: 'fp-xyz',
+      terminal_status: 'tombstoned',
+      source: 'scout-local',
+      decided_at: '2026-10-16T08:00:00Z',
+    }]);
+    const result = await lookupTombstone(db, 'xyz');
+    expect(result).toMatchObject({
+      url_hash: 'xyz',
+      terminal_status: 'tombstoned',
+      source: 'scout-local',
+    });
   });
 });
