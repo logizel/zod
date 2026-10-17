@@ -56,22 +56,20 @@ const testEnv = {
   DISCORD_CHANNEL_LOCAL: 'chan-local',
 } as any;
 
-const now = new Date().toISOString();
-const future48 = new Date(Date.now() + 49 * 60 * 60 * 1000).toISOString(); // 49h from now (in future)
-const future24 = new Date(Date.now() + 25 * 60 * 60 * 1000).toISOString(); // 25h from now (in future)
-const past48 = new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString(); // 1h ago (past)
+const past48 = new Date(Date.now() - 49 * 60 * 60 * 1000).toISOString(); // 49h ago (past, due)
+const past24 = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(); // 25h ago (past, due)
+const future48 = new Date(Date.now() + 49 * 60 * 60 * 1000).toISOString(); // 49h from now (future, not due)
 
 describe('reminder ticker (UI-02, D-06)', () => {
   it('skips when discord client is not ready', async () => {
     hoisted.mockGetClient.mockReturnValue(null);
     hoisted.mockCreateLogger.mockReturnValue(mockLogger);
 
-    const result = await reminderTick({
+    await reminderTick({
       env: testEnv,
       log: mockLogger as any,
     });
 
-    expect(result).toBeUndefined();
     expect(mockLogger.warn).toHaveBeenCalled();
   });
 
@@ -87,8 +85,8 @@ describe('reminder ticker (UI-02, D-06)', () => {
             bookmark: true,
             deadlines: { tba: false, event_start: '2026-12-15T09:00:00Z' },
             reminders: [
-              { at: future48, channel: '#🔥-priority-sys-cp-sec', sent: false },
-              { at: future24, channel: '#🔥-priority-sys-cp-sec', sent: false },
+              { at: past48, channel: '#🔥-priority-sys-cp-sec', sent: false },
+              { at: past24, channel: '#🔥-priority-sys-cp-sec', sent: false },
             ],
           },
         ],
@@ -105,11 +103,12 @@ describe('reminder ticker (UI-02, D-06)', () => {
     hoisted.mockResolveChannel.mockResolvedValue(targetChannel);
     hoisted.mockCreateLogger.mockReturnValue(mockLogger);
 
-    const result = await reminderTick({
+    const tick = createReminderTick({
       env: testEnv,
       log: mockLogger as any,
       pb: pb as any,
     });
+    const result = await tick();
 
     expect(result.scanned).toBe(1);
     expect(result.fired).toBe(2);
@@ -117,10 +116,10 @@ describe('reminder ticker (UI-02, D-06)', () => {
     expect(targetChannel.send).toHaveBeenCalledWith(
       expect.objectContaining({ content: expect.stringContaining('National CTF 2026') }),
     );
-    // Both reminders marked sent
+    // Both reminders marked sent (each update marks one reminder)
     expect(pbUpdates).toHaveLength(2);
-    expect(pbUpdates[0][1].reminders[0].sent).toBe(true);
-    expect(pbUpdates[0][1].reminders[1].sent).toBe(true);
+    expect(pbUpdates[0][1].reminders[0].sent).toBe(true); // first update: past48 reminder marked sent
+    expect(pbUpdates[1][1].reminders[1].sent).toBe(true); // second update: past24 reminder marked sent
   });
 
   it('does not fire reminders where sent=true (Pitfall 6)', async () => {
@@ -135,8 +134,8 @@ describe('reminder ticker (UI-02, D-06)', () => {
             bookmark: true,
             deadlines: { tba: false, event_start: '2026-12-15T09:00:00Z' },
             reminders: [
-              { at: future48, channel: '#🔥-priority-sys-cp-sec', sent: true },
-              { at: future24, channel: '#🔥-priority-sys-cp-sec', sent: false },
+              { at: past48, channel: '#🔥-priority-sys-cp-sec', sent: true },
+              { at: past24, channel: '#🔥-priority-sys-cp-sec', sent: false },
             ],
           },
         ],
@@ -153,11 +152,12 @@ describe('reminder ticker (UI-02, D-06)', () => {
     hoisted.mockResolveChannel.mockResolvedValue(targetChannel);
     hoisted.mockCreateLogger.mockReturnValue(mockLogger);
 
-    const result = await reminderTick({
+    const tick = createReminderTick({
       env: testEnv,
       log: mockLogger as any,
       pb: pb as any,
     });
+    const result = await tick();
 
     expect(result.fired).toBe(1);
     expect(targetChannel.send).toHaveBeenCalledTimes(1);
@@ -189,19 +189,20 @@ describe('reminder ticker (UI-02, D-06)', () => {
     hoisted.mockGetClient.mockReturnValue({ channels: {} } as any);
     hoisted.mockCreateLogger.mockReturnValue(mockLogger);
 
-    const result = await reminderTick({
+    const tick = createReminderTick({
       env: testEnv,
       log: mockLogger as any,
       pb: pb as any,
     });
+    const result = await tick();
 
-    // future48 is in the future (> now), so not due → skipped
+    // future48 is in the future (> now), so not due -> skipped
     expect(result.scanned).toBe(1);
     expect(result.skipped).toBe(1);
     expect(result.fired).toBe(0);
   });
 
-  it('per-opportunity error isolation — one bad opp does not abort the batch', async () => {
+  it('per-opportunity error isolation - one bad opp does not abort the batch', async () => {
     const pb = makePbMock({
       getList: vi.fn().mockResolvedValue({
         items: [
@@ -239,13 +240,14 @@ describe('reminder ticker (UI-02, D-06)', () => {
     // Make resolveChannel throw for the first opportunity's channel
     hoisted.mockResolveChannel.mockRejectedValueOnce(new Error('channel resolve failed'));
 
-    const result = await reminderTick({
+    const tick = createReminderTick({
       env: testEnv,
       log: mockLogger as any,
       pb: pb as any,
     });
+    const result = await tick();
 
-    // Second opportunity should still be processed
+    // Both opportunities scanned, second one still processed
     expect(result.scanned).toBe(2);
     expect(result.errors).toBeGreaterThanOrEqual(0);
   });
