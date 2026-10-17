@@ -433,27 +433,31 @@ export function buildAuditCard(opp: Opportunity): EmbedBuilder {
 | A7 | `prize_cash_inr` parsing predicate and evidence-quote requirement | Pitfalls | Credit-inflated prizes leak (trust damage) or legit cash events rejected |
 | A8 | Node v26 (environment) is acceptable though AGENTS.md targets Node 22 LTS | Environment Availability | discord.js/Playwright compatibility on Node 26 unverified |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Portal listing-mode per source (api vs scrape):**
+1. **Portal listing-mode per source (api vs scrape) — RESOLVED**
    - What we know: CTFtime + CLIST.by confirmed free JSON APIs; Unstop/Devfolio/Devpost/Luma/Meetup lack confirmed free official APIs.
    - What's unclear: exact listing endpoint shape for each scrape-mode portal; whether any have an undocumented public JSON feed.
-   - Recommendation: Implement adapter mode enum; start scrape-mode portals with headless browser (shared singleton) and confirm shapes against live pages before finalizing selectors.
+   - Resolution: Plan 02 implements adapter mode enum (api vs scrape); CTFtime + CLIST.by use api mode, Unstop/Devfolio/Devpost/Luma/Meetup use scrape mode via headless browser (shared singleton) per 04-RESEARCH.md Assumptions A2/A3 and Pitfall 1.
+   - Recommendation: Confirm shapes against live portal pages before finalizing cheerio selectors.
 
-2. **Discord bot application & channel setup:**
+2. **Discord bot application & channel setup — RESOLVED**
    - What we know: `DISCORD_TOKEN` must be added to env; bot needs Message Content Intent (privileged) enabled in dev portal.
    - What's unclear: Discord application/client ID, guild ID, and channel IDs (or names to resolve) for #🔥-priority-sys-cp-sec, #💻-online-1lakh-plus, #📋-events-general.
-   - Recommendation: Resolve channels by name at runtime via `client.channels.fetch` + name match; record IDs in config after the Discord app is created.
+   - Resolution: Plan 03 user_setup declares Discord bot application creation + token + channel ID/discovery; channels resolved by name at runtime via `client.channels.fetch` + name match; IDs recorded in config after Discord app creation.
+   - Recommendation: Create Discord app before executing Plan 03.
 
-3. **Discord-router package location:**
+3. **Discord-router package location — RESOLVED**
    - What we know: `apps/bot/src/index.ts` is a skeleton; a new `@zod/discord-router` package is one option.
    - What's unclear: whether the router service lives in `apps/bot` or a new `packages/discord-router`.
-   - Recommendation: New `@zod/discord-router` package (clean separation from scheduler); `apps/bot` can remain the gateway entry or host the router.
+   - Resolution: New `@zod/discord-router` package (clean separation from scheduler); `apps/bot` remains the gateway entry option. All Phase 4 plans reference `packages/discord-router`.
+   - Recommendation: Proceed with `packages/discord-router`.
 
-4. **80/20 SWE domain list:**
+4. **80/20 SWE domain list — RESOLVED**
    - What we know: "admit all SWE domains" is locked (D-11) but the domain list isn't enumerated.
    - What's unclear: which domains count as SWE vs adjacent deep-tech vs non-technical business.
-   - Recommendation: Define the SWE domain list in config; treat unknown organizer domains as deep-tech requiring organizer≥9 AND agenda≥9.
+   - Resolution: SWE domain list defined in `packages/discord-router/src/domain-filter.ts` config; unknown organizer domains treated as deep-tech requiring organizer≥9 AND agenda≥9; thresholds organizer≥9 / agenda≥9 locked per D-11.
+   - Recommendation: Review domain list against live portal domains during Plan 02 execution.
 
 ## Environment Availability
 
