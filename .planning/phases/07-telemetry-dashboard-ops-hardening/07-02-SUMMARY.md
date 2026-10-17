@@ -24,9 +24,9 @@ affects:
 actuals:
   tokens: 13710
   tasks: 2
-  commits: 5
+  commits: 7
   plan_head_before: 61f63555c328cf4a527d37a61cb3919492f4e258
-  plan_head_after: 4df88b1be49b8b3fc5e32cabb532a0f93679af8b
+  plan_head_after: f901aeb5b300552513ec580d9fc0b785ba0b572d
 
 # Tech tracking
 tech-stack:
@@ -70,7 +70,7 @@ metrics:
 - **Duration:** ~56 min
 - **Completed:** 2026-10-17
 - **Tasks:** 2/2
-- **Commits:** 5 (measured: `git rev-list --count 61f6355..HEAD`)
+- **Commits:** 7 (measured: `git rev-list --count 61f6355..HEAD`)
 
 ## Accomplishments
 
@@ -99,13 +99,15 @@ metrics:
 
 ## Task Commits
 
-Each task committed atomically (TDD: test RED → feat GREEN):
+Each task committed atomically (TDD: test RED → feat GREEN), plus summary + type-fix commits:
 
 1. **Task 1 RED:** `85d6885` test — boards combined-filter tests (date, channel, status, prize, free-text, AND)
 2. **Task 1 GREEN:** `84f9851` feat — GET /api/boards rich combined filters + board window + tab scoping
 3. **Task 1 UI:** `0946a2d` feat — tabbed boards UI + filter controls + localStorage (index.html)
 4. **Task 2 RED:** `d03e882` test — SSE bucket states + 429 baton-pass slot tests
 5. **Task 2 GREEN:** `4df88b1` feat — SSE bucket states + 429 baton-pass + audit load-older endpoint
+6. **Summary:** `de3f807` docs — complete 07-02 plan summary
+7. **Fix:** `f901aeb` fix — TypeScript type fixes (deadlines cast, test annotations)
 
 ## Files Created/Modified
 
