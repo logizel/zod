@@ -32,8 +32,6 @@ import { getJobCandidates } from '@zod/discord-router/portals/jobs/index';
 import { getLootCandidates } from '@zod/discord-router/portals/loot/vendors';
 import { localSource } from '@zod/discord-router/portals/local';
 import { socialSource } from '@zod/discord-router/portals/social';
-import { startRelayService } from '@zod/discord-router/relay';
-import { reminderTick } from '@zod/discord-router/reminder';
 import { OrchestratorScheduler } from '@zod/orchestrator';
 
 type CandidateSource = {
@@ -94,25 +92,6 @@ export function startSchedulerRegistry(log: TickLogger): RegistryHandle {
         { agentTelemetry: [], opportunities: [] },
       );
       jobLog.info({ job: 'gc-midnight-purge', ...result }, 'gc-midnight-purge tick');
-    },
-  });
-
-  // Relay service: polls external #announcements and relays to #raw-incoming-feeds.
-  // Registered via registerGatewayJobs with a tickHandler — no setInterval scatter.
-  const relayService = startRelayService({
-    env: env as any,
-    log,
-    pb: pbPromise as any,
-    client: undefined, // gateway client injected at runtime via getClient()
-  });
-  registerGatewayJobs(log, undefined, {
-    tickHandler: (def, jobLog) => {
-      if (def.name === 'gateway-relay-poll') {
-        return relayService.tick();
-      }
-      if (def.name === 'gateway-reminder-tick') {
-        return reminderTick({ env: env as any, log: jobLog as any });
-      }
     },
   });
 
