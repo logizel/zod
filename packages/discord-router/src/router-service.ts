@@ -143,6 +143,9 @@ const CHANNEL_ID_ENV_KEYS: Record<string, keyof Env> = {
   '#⏳-early-tba-radar': 'DISCORD_CHANNEL_TBA',
   '#raw-incoming-feeds': 'DISCORD_CHANNEL_RELAY',
   '#🧠-bot-training-chat': 'DISCORD_CHANNEL_TRAINING',
+  // Phase 7: ops-health channel for GC summaries/failures, tunnel up/down,
+  // watchdog heartbeats (D-15).
+  '#🛠-ops-health': 'DISCORD_CHANNEL_OPS_HEALTH',
 };
 
 /** Resolve a text channel by env-configured ID first, then by name match across guilds. */
