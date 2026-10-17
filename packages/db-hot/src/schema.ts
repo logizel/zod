@@ -105,6 +105,10 @@ export const Opportunity = z.object({
   // Shared fields (registration links, possible dupe of)
   registration_links: z.array(z.string()).default([]),
   possible_dupe_of: z.string().default(''),
+  // D-05/D-06: Discord message ID of the audit card this opportunity was posted as.
+  // One-way migration: nullable default, no new collection. Enables bookmark lookup
+  // by reaction message ID (UI-02).
+  discord_message_id: z.string().default(''),
 });
 export type Opportunity = z.infer<typeof Opportunity>;
 
