@@ -73,7 +73,7 @@ const BOARD_TAB_DEFS: Array<{
   {
     tab: 'tba-queue',
     window: 'active/upcoming + last 7 days',
-    scope: (r) => r.deadlines?.tba === true,
+    scope: (r) => (r.deadlines as { tba?: boolean } | undefined)?.tba === true,
   },
   {
     tab: 'jobs-sys',

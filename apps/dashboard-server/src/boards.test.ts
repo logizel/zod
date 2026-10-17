@@ -64,7 +64,7 @@ function boardRow(overrides: Record<string, unknown> = {}): Record<string, unkno
 }
 
 // Count unique rows across all tabs (a row can match multiple tab scopes).
-function uniqueRows(parsed: { boards: Array<{ rows: unknown[] }> }): unknown[] {
+function uniqueRows(parsed: { boards: Array<{ rows: unknown[] }> }): Record<string, unknown>[] {
   const all = parsed.boards.flatMap((b) => b.rows);
   const seen = new Set<string>();
   return all.filter((r) => {
@@ -78,7 +78,7 @@ function uniqueRows(parsed: { boards: Array<{ rows: unknown[] }> }): unknown[] {
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
-  });
+  }) as Record<string, unknown>[];
 }
 
 describe('GET /api/boards', () => {
@@ -103,7 +103,7 @@ describe('GET /api/boards', () => {
   it('each board has tab, window, count, rows (D-09 tabbed layout)', () => {
     const res = mockResponse();
     handleBoards({ url: '/api/boards' } as never, res as never);
-    const parsed = JSON.parse(res.body!) as { boards: unknown[] };
+    const parsed = JSON.parse(res.body!) as { boards: Array<Record<string, unknown>> };
     for (const board of parsed.boards) {
       expect(board).toHaveProperty('tab');
       expect(board).toHaveProperty('window');
