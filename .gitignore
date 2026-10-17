@@ -47,3 +47,6 @@ node_modules/
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# gsd regenerable caches
+.planning/research/.cache/

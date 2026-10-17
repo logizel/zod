@@ -54,6 +54,7 @@ function makePb(opts: {
   existingOpportunities: unknown[];
 }): { pb: any; collections: FakeCollections; opportunities: unknown[] } {
   const opportunities: unknown[] = [...opts.existingOpportunities];
+  const updated: Array<{ id: string; data: Record<string, unknown> }> = [];
   const rows = new Map<string, TaskScratchpadRow>();
   for (const r of opts.scratchpadRows) rows.set(r.id, r);
 
@@ -94,10 +95,17 @@ function makePb(opts: {
               items = items.filter((o: any) => o.pipeline === match[1]);
             }
           }
+          if (filter.includes('deadlines.tba = true')) {
+            items = items.filter((o: any) => o.deadlines?.tba === true);
+          }
         }
         return { items, totalItems: items.length };
       },
+      update: vi.fn(async (id: string, data: Record<string, unknown>) => {
+        updated.push({ id, data });
+      }),
       __created__: opportunities,
+      __updated__: updated,
     },
     tombstone_ledger: {
       create: vi.fn(async (data: Record<string, unknown>) => {
@@ -271,7 +279,7 @@ describe('cross-pipeline drain: mixed batch, exact terminal ledger', () => {
     mockedAttemptMerge.mockImplementation(async (input: any, store: any) => {
       if (input.url === EVENTS_URL_6) {
         const allLinks = [EVENTS_URL_1, EVENTS_URL_6];
-        const master = collections.opportunities.__created__[0];
+        const master = collections.opportunities.__created__[0] as { id: string; registration_links?: string[] } | undefined;
         if (master) master.registration_links = allLinks;
         await store.appendLinks(master?.id ?? 'master-events-1', allLinks);
         return { merged: true, masterId: master?.id ?? 'master-events-1', links: allLinks };
@@ -404,11 +412,13 @@ describe('cross-pipeline drain: mixed batch, exact terminal ledger', () => {
 
     // loot_us_eu_only tombstone source = 'auditor'
     const lootTs = tsCalls.find((c: any[]) => c[0].terminal_status === 'loot_us_eu_only');
-    expect(lootTs[0].source).toBe('auditor');
+    expect(lootTs).toBeDefined();
+    expect(lootTs![0].source).toBe('auditor');
 
     // merged tombstone source = 'merger'
     const mergedTs = tsCalls.find((c: any[]) => c[0].terminal_status === 'merged');
-    expect(mergedTs[0].source).toBe('merger');
+    expect(mergedTs).toBeDefined();
+    expect(mergedTs![0].source).toBe('merger');
 
     // -----------------------------------------------------------------------
     // Per-pipeline opportunity assertions (explicit values, no snapshots)
@@ -453,7 +463,7 @@ describe('cross-pipeline drain: mixed batch, exact terminal ledger', () => {
     // -----------------------------------------------------------------------
     // registration_links is set on the stored copy (__created__), not the
     // original create() data object (create shallow-spreads data).
-    const masterStored = collections.opportunities.__created__[0];
+    const masterStored = collections.opportunities.__created__[0] as { registration_links?: string[] };
     expect(masterStored.registration_links).toEqual([EVENTS_URL_1, EVENTS_URL_6]);
 
     // No second events opportunity (only opp 1 is events)
