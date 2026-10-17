@@ -54,4 +54,17 @@ describe('parseEnv', () => {
     expect(parsed.DISCORD_CHANNEL_JOBS_GENERAL).toBe('222000000000000000');
     expect(parsed.DISCORD_CHANNEL_LOOT).toBe('333000000000000000');
   });
+
+  it('OPERATOR_USER_IDS defaults to empty string when absent, parseEnv still passes', () => {
+    const parsed = parseEnv({ ...REQUIRED });
+    expect(parsed.OPERATOR_USER_IDS).toBe('');
+  });
+
+  it('explicitly set OPERATOR_USER_IDS is returned as configured', () => {
+    const parsed = parseEnv({
+      ...REQUIRED,
+      OPERATOR_USER_IDS: '123456789,987654321',
+    });
+    expect(parsed.OPERATOR_USER_IDS).toBe('123456789,987654321');
+  });
 });
