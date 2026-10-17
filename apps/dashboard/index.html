@@ -1,141 +1,471 @@
 <!DOCTYPE html>
 <!--
-  Zod locked dashboard shell (Phase 1, D-17/D-22).
+  Zod locked dashboard shell (Phase 1, D-17/D-22) + Phase 7 live panels.
 
-  Static placeholder ONLY: no live-data wiring, no board markup, no dynamic
-  fetching of any kind. The page is deployed to Cloudflare Pages and gated by
-  the owner-only Zero Trust Access rule (Allow + owner-email include,
-  deny-by-default, zero bypass) BEFORE anything renders. Live slots,
-  health-grid, and boards arrive in Phase 7; until then this shell proves
-  criterion 3 (locked, reachable, static) without building telemetry UI.
+  Static page deployed to Cloudflare Pages, gated by owner-only Zero Trust
+  Access (Allow + owner-email include, deny-by-default, zero bypass) BEFORE
+  anything renders. Live agent slots arrive over SSE from the VM stream
+  origin through the Cloudflare Tunnel. Tabbed boards, rich combined filters,
+  health grid, slots ticker, and audit log land here in Phase 7 (D-02:
+  framework-free static UI — vanilla JS + EventSource + hand-rolled DOM;
+  no build step, no npm deps).
 -->
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex, nofollow">
-  <title>Zod &mdash; Locked Telemetry Shell</title>
+  <title>Zod &mdash; Locked Telemetry Dashboard</title>
   <style>
     :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
     body {
       margin: 0;
       background: #0b0e14;
       color: #e6e9f0;
       font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-      display: flex;
       min-height: 100vh;
-      align-items: center;
-      justify-content: center;
+      display: flex;
+      flex-direction: column;
     }
-    main {
-      max-width: 34rem;
-      padding: 2rem;
-      border: 1px solid #2a3342;
-      border-radius: 0.75rem;
+    header {
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid #2a3342;
       background: #11151d;
     }
-    h1 { margin: 0 0 0.5rem; font-size: 1.4rem; }
-    p { margin: 0.5rem 0; line-height: 1.5; color: #aeb6c6; }
+    header h1 { margin: 0; font-size: 1.1rem; letter-spacing: 0.05em; }
+    header .sub { font-size: 0.75rem; color: #aeb6c6; margin-top: 0.15rem; }
+    main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
     .badge {
       display: inline-block;
       padding: 0.15rem 0.6rem;
       border-radius: 999px;
       background: #1d2b1d;
       color: #8fd18f;
-      font-size: 0.8rem;
-      margin-bottom: 0.75rem;
+      font-size: 0.75rem;
+      margin-bottom: 0.5rem;
     }
     code { color: #d7dce6; }
+
+    /* Top panel: agent slots ticker */
+    #top-panel { padding: 0.75rem 1rem; border-bottom: 1px solid #2a3342; background: #11151d; }
+    #top-panel h2 { margin: 0 0 0.5rem; font-size: 0.95rem; display: flex; align-items: center; gap: 0.5rem; }
+    #slots-container {
+      display: flex; flex-direction: column; gap: 0.4rem; max-height: 12rem; overflow-y: auto;
+    }
+    .slot-row {
+      padding: 0.4rem 0.6rem; border: 1px solid #2a3342; border-radius: 0.5rem; background: #161a22;
+      font-size: 0.85rem; display: flex; gap: 0.5rem;
+    }
+    .slot-row .label { color: #aeb6c6; font-size: 0.75rem; }
+    .slot-row .val { color: #e6e9f0; }
+    .health-badge {
+      display: inline-block; padding: 0.1rem 0.4rem; border-radius: 0.3rem; font-size: 0.7rem; font-weight: 600; text-transform: uppercase;
+    }
+    .health-READY { background: #1d2b1d; color: #8fd18f; }
+    .health-ACTIVE { background: #2b2d1d; color: #d1d18f; }
+    .health-60s-COOLDOWN { background: #2d2b1d; color: #d1a84f; }
+    .health-DAILY-CAP { background: #2b1d1d; color: #d18f8f; }
+
+    /* Middle panel: health grid */
+    #middle-panel { padding: 0.75rem 1rem; border-bottom: 1px solid #2a3342; background: #11151d; flex: 0 0 auto; overflow-y: auto; min-height: 8rem; }
+    #middle-panel h2 { margin: 0 0 0.5rem; font-size: 0.95rem; }
+    .health-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); gap: 0.5rem; }
+    .health-cell {
+      border: 1px solid #2a3342; border-radius: 0.5rem; padding: 0.5rem; background: #161a22;
+    }
+    .health-cell .bucket { font-size: 0.75rem; color: #aeb6c6; margin-bottom: 0.25rem; }
+    .health-cell .state { font-size: 0.8rem; font-weight: 600; }
+
+    /* Bottom panel: tabbed boards */
+    #bottom-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; background: #11151d; }
+    .board-tabs { display: flex; gap: 0.25rem; padding: 0.5rem 1rem; border-bottom: 1px solid #2a3342; overflow-x: auto; }
+    .board-tab {
+      padding: 0.35rem 0.75rem; border: 1px solid #2a3342; border-radius: 0.4rem; background: #161a22; color: #aeb6c6;
+      font-size: 0.8rem; cursor: pointer; white-space: nowrap;
+    }
+    .board-tab:hover { color: #e6e9f0; border-color: #3a4a5a; }
+    .board-tab.active { background: #2a3342; color: #e6e9f0; border-color: #4a6a7a; }
+
+    .board-filters { display: flex; gap: 0.5rem; padding: 0.5rem 1rem; border-bottom: 1px solid #2a3342; overflow-x: auto; align-items: center; background: #161a22; }
+    .board-filters label { font-size: 0.7rem; color: #8b93a0; display: block; margin-bottom: 0.15rem; }
+    .board-filters input, .board-filters select {
+      font-size: 0.8rem; padding: 0.25rem 0.4rem; border: 1px solid #2a3342; border-radius: 0.3rem; background: #0b0e14; color: #e6e9f0;
+    }
+    .board-filters button { font-size: 0.8rem; padding: 0.25rem 0.6rem; border: 1px solid #2a3342; border-radius: 0.3rem; background: #1d2b1d; color: #8fd18f; cursor: pointer; }
+    .board-filters button:hover { background: #2a3b2a; }
+    .filter-chip {
+      display: inline-flex; align-items: center; gap: 0.3rem; background: #1d2b1d; border: 1px solid #2a3342; border-radius: 0.3rem; padding: 0.15rem 0.4rem; font-size: 0.75rem; color: #aeb6c6;
+    }
+    .filter-chip button { background: none; border: none; color: #8fd18f; cursor: pointer; padding: 0 0.2rem; font-size: 0.8rem; line-height: 1; }
+
+    .boards-scroll { flex: 1; overflow-y: auto; padding: 0.75rem 1rem; }
+    .board-section { display: none; }
+    .board-section.active { display: block; }
+    .board-section h3 { margin: 0 0 0.5rem; font-size: 0.9rem; color: #aeb6c6; }
+    .board-empty { color: #8b93a0; font-size: 0.85rem; font-style: italic; padding: 1rem; }
+    .board-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+    .board-table th { text-align: left; color: #8b93a0; padding: 0.3rem 0.2rem; border-bottom: 1px solid #2a3342; font-size: 0.7rem; }
+    .board-table td { padding: 0.3rem 0.2rem; border-bottom: 1px solid #1a2028; color: #e6e9f0; }
+    .board-table tr:hover td { background: #161a22; }
+    .status-chip { display: inline-block; padding: 0.05rem 0.3rem; border-radius: 0.25rem; font-size: 0.7rem; border: 1px solid #2a3342; }
+    .status-candidate { color: #aeb6c6; }
+    .status-audited { color: #8fd18f; }
+    .status-routed { color: #8fd1d1; }
+    .status-rejected { color: #d18f8f; }
+    .status-tombstoned { color: #d1a88f; }
+    .status-expired { color: #8b8b8b; }
+
+    /* Staleness banner */
+    #staleness-banner {
+      display: none; padding: 0.5rem 1rem; background: #2d2b1d; color: #d1a84f; font-size: 0.8rem; border-bottom: 1px solid #3a331d;
+    }
+
+    /* Load older (audit log) */
+    #load-older-btn { font-size: 0.75rem; padding: 0.2rem 0.5rem; border: 1px solid #2a3342; border-radius: 0.3rem; background: #161a22; color: #aeb6c6; cursor: pointer; margin-left: auto; }
+    #load-older-btn:hover { border-color: #4a6a7a; color: #e6e9f0; }
+    #load-older-btn.loading { opacity: 0.6; }
+    #older-results { margin-top: 0.5rem; font-size: 0.75rem; color: #8b93a0; }
   </style>
 </head>
 <body>
-  <main>
-    <span class="badge">Locked shell &mdash; Phase 1 + Phase 7 live</span>
-    <h1>Zod telemetry shell</h1>
-    <p>
-      This is the locked static shell behind the owner-only access wall. Live
-      agent slots arrive over SSE from the VM stream origin (localhost:3000)
-      through the Cloudflare Tunnel. Zero Trust Access gates both the shell
-      and the SSE stream before anything renders.
-    </p>
+  <header>
+    <h1>Zod Telemetry</h1>
+    <div class="sub">Locked read-only dashboard &mdash; Cloudflare Zero Trust &middot; SSE from VM stream origin</div>
+  </header>
+  <div id="staleness-banner">Stream stale &mdash; last update over 90s ago</div>
 
-    <!-- Top panel: rolling agent slots (one slot row rendered from SSE data) -->
+  <main>
+    <!-- Top panel: rolling agent slots ticker -->
     <section id="top-panel">
-      <h2>Agent Slots</h2>
+      <h2>Agent Slots &middot; <span id="slot-count">0</span></h2>
       <div id="slots-container">connecting&hellip;</div>
     </section>
 
-    <p>
-      Rolling agent slots, the pool health grid, and the read-only opportunity
-      boards land via SSE. Until then, verification happens in Discord and in
-      the drill scripts under <code>infra/oracle/drills/</code>.
-    </p>
+    <!-- Middle panel: 2D pool health grid -->
+    <section id="middle-panel">
+      <h2>Pool Health Grid &middot; <span id="health-count">0</span> buckets</h2>
+      <div id="health-grid" class="health-grid"></div>
+    </section>
+
+    <!-- Bottom panel: tabbed boards -->
+    <section id="bottom-panel">
+      <div class="board-tabs" id="board-tabs"></div>
+      <div class="board-filters" id="board-filters">
+        <div>
+          <label>Date from</label><input type="datetime-local" id="f-start_date">
+        </div>
+        <div>
+          <label>Date to</label><input type="datetime-local" id="f-end_date">
+        </div>
+        <div>
+          <label>Channel</label><input type="text" id="f-channel" placeholder="e.g. #-online-1lakh-plus">
+        </div>
+        <div>
+          <label>Status</label><select id="f-status"><option value="">any</option><option>candidate</option><option>audited</option><option>routed</option><option>rejected</option><option>tombstoned</option><option>expired</option></select>
+        </div>
+        <div>
+          <label>Prize min (₹)</label><input type="number" id="f-prize_min" min="0" placeholder="0">
+        </div>
+        <div>
+          <label>Prize max (₹)</label><input type="number" id="f-prize_max" min="0" placeholder="999999999">
+        </div>
+        <div>
+          <label>Search (title/organizer)</label><input type="text" id="f-q" placeholder="free-text">
+        </div>
+        <button id="f-apply">Apply</button>
+      </div>
+      <div class="boards-scroll" id="boards-scroll">
+        <div class="board-section active" id="tab-events-local">
+          <h3>Events &middot; Local <button id="load-older-btn">Load older</button></h3>
+          <div id="older-results"></div>
+          <table class="board-table" id="tbl-events-local">
+            <thead><tr><th>Title</th><th>Organizer</th><th>Channel</th><th>Status</th><th>Prize (₹)</th><th>Ends</th></tr></thead>
+            <tbody id="tbody-events-local"></tbody>
+          </table>
+        </div>
+        <div class="board-section" id="tab-events-travel">
+          <h3>Events &middot; Travel</h3>
+          <table class="board-table" id="tbl-events-travel">
+            <thead><tr><th>Title</th><th>Organizer</th><th>Channel</th><th>Status</th><th>Prize (₹)</th><th>Ends</th></tr></thead>
+            <tbody id="tbody-events-travel"></tbody>
+          </table>
+        </div>
+        <div class="board-section" id="tab-events-online">
+          <h3>Events &middot; Online</h3>
+          <table class="board-table" id="tbl-events-online">
+            <thead><tr><th>Title</th><th>Organizer</th><th>Channel</th><th>Status</th><th>Prize (₹)</th><th>Ends</th></tr></thead>
+            <tbody id="tbody-events-online"></tbody>
+          </table>
+        </div>
+        <div class="board-section" id="tab-tba-queue">
+          <h3>TBA Queue</h3>
+          <table class="board-table" id="tbl-tba-queue">
+            <thead><tr><th>Title</th><th>Organizer</th><th>Channel</th><th>Status</th><th>Prize (₹)</th><th>Ends</th></tr></thead>
+            <tbody id="tbody-tba-queue"></tbody>
+          </table>
+        </div>
+        <div class="board-section" id="tab-jobs-sys">
+          <h3>Jobs &middot; Sys/CP/Sec</h3>
+          <table class="board-table" id="tbl-jobs-sys">
+            <thead><tr><th>Title</th><th>Organizer</th><th>Channel</th><th>Status</th><th>Prize (₹)</th><th>Ends</th></tr></thead>
+            <tbody id="tbody-jobs-sys"></tbody>
+          </table>
+        </div>
+        <div class="board-section" id="tab-jobs-general">
+          <h3>Jobs &middot; General SWE</h3>
+          <table class="board-table" id="tbl-jobs-general">
+            <thead><tr><th>Title</th><th>Organizer</th><th>Channel</th><th>Status</th><th>Prize (₹)</th><th>Ends</th></tr></thead>
+            <tbody id="tbody-jobs-general"></tbody>
+          </table>
+        </div>
+        <div class="board-section" id="tab-loot">
+          <h3>Loot</h3>
+          <table class="board-table" id="tbl-loot">
+            <thead><tr><th>Title</th><th>Organizer</th><th>Channel</th><th>Status</th><th>Prize (₹)</th><th>Ends</th></tr></thead>
+            <tbody id="tbody-loot"></tbody>
+          </table>
+        </div>
+        <div class="board-section" id="tab-audit-log">
+          <h3>Audit &amp; Rejection Log <button id="load-older-audit-btn">Load older</button></h3>
+          <div id="older-results-audit"></div>
+          <table class="board-table" id="tbl-audit-log">
+            <thead><tr><th>Title</th><th>Organizer</th><th>Channel</th><th>Status</th><th>Prize (₹)</th><th>Ends</th></tr></thead>
+            <tbody id="tbody-audit-log"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
   </main>
 
   <script>
-    // D-02: vanilla JS EventSource client, no build step, no npm deps.
-    // D-08: exponential backoff + jitter reconnect, hard cap ~2 streams.
-    (function () {
-      const STREAM_URL = '/api/stream';
-      const container = document.getElementById('slots-container');
-      let es = null;
-      let backoff = 1000;
-      const MAX_BACKOFF = 30000;
-      let reconnects = 0;
-      const MAX_STREAMS = 2;
+    /* ------------------------------------------------------------------ */
+    /* D-02: vanilla JS, no build step, no npm deps.                      */
+    /* D-08: exponential backoff + jitter reconnect, hard cap ~2 streams. */
+    /* ------------------------------------------------------------------ */
 
-      function renderSlot(row) {
-        if (!container) return;
-        container.innerHTML = '';
+    const STREAM_URL = '/api/stream';
+    const BOARDS_URL = '/api/boards';
+    const slotsContainer = document.getElementById('slots-container');
+    const healthGrid = document.getElementById('health-grid');
+    const slotCountEl = document.getElementById('slot-count');
+    const healthCountEl = document.getElementById('health-count');
+    const stalenessBanner = document.getElementById('staleness-banner');
+    const boardTabsEl = document.getElementById('board-tabs');
+    const boardsScroll = document.getElementById('boards-scroll');
+
+    let es = null;
+    let backoff = 1000;
+    const MAX_BACKOFF = 30000;
+    let reconnects = 0;
+    const MAX_STREAMS = 2;
+    let lastEvent = Date.now();
+    const STALENESS_THRESHOLD_MS = 90000;
+
+    /* ---------------- active-tab persistence (localStorage) ---------------- */
+    const TAB_STORAGE_KEY = 'zod:dashboard:activeTab';
+    const TABS = [
+      { id: 'events-local', label: 'Events &middot; Local' },
+      { id: 'events-travel', label: 'Events &middot; Travel' },
+      { id: 'events-online', label: 'Events &middot; Online' },
+      { id: 'tba-queue', label: 'TBA Queue' },
+      { id: 'jobs-sys', label: 'Jobs &middot; Sys/CP/Sec' },
+      { id: 'jobs-general', label: 'Jobs &middot; General SWE' },
+      { id: 'loot', label: 'Loot' },
+      { id: 'audit-log', label: 'Audit &amp; Rejection Log' },
+    ];
+    let activeTab = localStorage.getItem(TAB_STORAGE_KEY) || TABS[0].id;
+    if (!TABS.some((t) => t.id === activeTab)) activeTab = TABS[0].id;
+
+    function saveActiveTab() { localStorage.setItem(TAB_STORAGE_KEY, activeTab); }
+
+    /* ---------------- SSE client ---------------- */
+    function connect() {
+      es = new EventSource(STREAM_URL);
+      es.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          lastEvent = Date.now();
+          stalenessBanner.style.display = 'none';
+          if (data.type === 'connected') {
+            if (slotsContainer) slotsContainer.textContent = 'stream connected';
+            backoff = 1000; reconnects = 0;
+          } else if (data.type === 'delta') {
+            renderSlots(Array.isArray(data.slots) ? data.slots : []);
+            renderHealthGrid(Array.isArray(data.bucketStates) ? data.bucketStates : []);
+          }
+          // heartbeat: keep alive, no UI change
+        } catch { /* ignore malformed SSE data */ }
+      };
+      es.onerror = () => {
+        es.close(); es = null; reconnects++;
+        if (reconnects > MAX_STREAMS) {
+          if (slotsContainer) slotsContainer.textContent = 'stream limit reached';
+          return;
+        }
+        setTimeout(connect, backoff + Math.random() * 1000);
+        backoff = Math.min(backoff * 2, MAX_BACKOFF);
+      };
+    }
+
+    function renderSlots(slots) {
+      if (!slotsContainer) return;
+      if (slots.length === 0) { slotsContainer.textContent = 'no active slots'; slotCountEl.textContent = '0'; return; }
+      slotsContainer.innerHTML = '';
+      slotCountEl.textContent = String(slots.length);
+      for (const s of slots) {
         const div = document.createElement('div');
-        div.style.padding = '0.5rem';
-        div.style.border = '1px solid #2a3342';
-        div.style.borderRadius = '0.5rem';
-        div.style.background = '#11151d';
-        div.textContent =
-          (row.provider ?? '-') +
-          '/' +
-          (row.model ?? '-') +
-          ' &middot; step: ' +
-          (row.step ?? '-') +
-          ' &middot; status: ' +
-          (row.status ?? '-');
-        container.appendChild(div);
+        div.className = 'slot-row';
+        div.innerHTML =
+          '<span class="label">provider</span><span class="val">' + esc(s.provider ?? '-') + '</span>' +
+          '<span class="label">model</span><span class="val">' + esc(s.model ?? '-') + '</span>' +
+          '<span class="label">step</span><span class="val">' + esc(s.step ?? '-') + '</span>' +
+          '<span class="label">status</span><span class="val status-' + esc(String(s.status ?? '-').toLowerCase()) + '">' + esc(s.status ?? '-') + '</span>' +
+          (s.batonPass
+            ? '<span class="label">baton</span><span class="val" style="color:#d1a84f">429 &rarr; ' + esc(String(s.batonPass.to).split(':')[1] ?? '-') + '</span>'
+            : '') +
+          (s.url ? '<span class="label">url</span><span class="val" title="' + esc(s.url) + '">' + esc(s.url).slice(0, 40) + '</span>' : '');
+        slotsContainer.appendChild(div);
       }
+    }
 
-      function connect() {
-        es = new EventSource(STREAM_URL);
-        es.onmessage = (event) => {
-          try {
-            const data = JSON.parse(event.data);
-            if (data.type === 'connected') {
-              if (container) container.textContent = 'stream connected';
-              backoff = 1000;
-              reconnects = 0;
-            } else if (data.type === 'delta') {
-              // Render one top-panel slot row (provider/model/step/status).
-              renderSlot(Array.isArray(data.slots) ? data.slots[0] : data);
+    function renderHealthGrid(bucketStates) {
+      if (!healthGrid) return;
+      healthGrid.innerHTML = '';
+      healthCountEl.textContent = String(bucketStates.length);
+      for (const b of bucketStates) {
+        const cell = document.createElement('div');
+        cell.className = 'health-cell';
+        const cls = 'health-' + esc(String(b.state ?? 'READY'));
+        cell.innerHTML =
+          '<div class="bucket">' + esc(b.provider ?? '-') + ' / ' + esc(b.model ?? '-') + '</div>' +
+          '<div class="state ' + cls + '">' + esc(b.state ?? 'READY') + '</div>' +
+          (b.cooldownUntil ? '<div style="font-size:0.65rem;color:#8b93a0;margin-top:0.2rem">cooldown until ' + new Date(b.cooldownUntil).toLocaleTimeString() + '</div>' : '') +
+          (b.dailyCapRemaining != null ? '<div style="font-size:0.65rem;color:#8b93a0">cap left: ' + b.dailyCapRemaining + '</div>' : '');
+        healthGrid.appendChild(cell);
+      }
+    }
+
+    /* ---------------- boards (GET /api/boards + filters) ---------------- */
+    function renderTabs() {
+      boardTabsEl.innerHTML = '';
+      for (const t of TABS) {
+        const btn = document.createElement('button');
+        btn.className = 'board-tab' + (t.id === activeTab ? ' active' : '');
+        btn.textContent = t.label;
+        btn.onclick = () => { activeTab = t.id; saveActiveTab(); renderTabs(); loadBoards(); };
+        boardTabsEl.appendChild(btn);
+      }
+    }
+
+    function buildFilterQuery() {
+      const params = new URLSearchParams();
+      const g = (id) => document.getElementById(id);
+      const v = (id) => { const el = g(id); return el ? el.value : ''; };
+      if (v('f-start_date')) params.set('start_date', v('f-start_date'));
+      if (v('f-end_date')) params.set('end_date', v('f-end_date'));
+      if (v('f-channel')) params.set('channel', v('f-channel'));
+      if (v('f-status')) params.set('status', v('f-status'));
+      if (v('f-prize_min')) params.set('prize_min', v('f-prize_min'));
+      if (v('f-prize_max')) params.set('prize_max', v('f-prize_max'));
+      if (v('f-q')) params.set('q', v('f-q'));
+      return params.toString();
+    }
+
+    function loadBoards() {
+      const query = buildFilterQuery();
+      fetch(BOARDS_URL + (query ? '?' + query : ''))
+        .then((r) => { if (!r.ok) throw new Error('boards ' + r.status); return r.json(); })
+        .then((data) => renderBoard(activeTab, data))
+        .catch((err) => { console.error('boards fetch failed', err); });
+    }
+
+    function renderBoard(tabId, data) {
+      const section = document.getElementById('tab-' + tabId);
+      if (!section || !data || !data.boards) return;
+      const board = data.boards.find((b) => b.tab === tabId);
+      const tbodyId = 'tbody-' + tabId;
+      const tbody = document.getElementById(tbodyId);
+      if (!tbody) return;
+      tbody.innerHTML = '';
+      const rows = board ? board.rows : [];
+      if (rows.length === 0) {
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = 6;
+        td.className = 'board-empty';
+        td.textContent = 'No rows matching filters.';
+        tr.appendChild(td); tbody.appendChild(tr);
+        return;
+      }
+      for (const r of rows) {
+        const tr = document.createElement('tr');
+        tr.innerHTML =
+          '<td>' + esc(r.title ?? '-') + '</td>' +
+          '<td>' + esc(r.organizer ?? '-') + '</td>' +
+          '<td>' + esc(r.bucket_channel ?? '-') + '</td>' +
+          '<td><span class="status-chip status-' + esc(String(r.status ?? '').toLowerCase()) + '">' + esc(r.status ?? '-') + '</span></td>' +
+          '<td>' + (r.prize_cash_inr != null ? esc(String(r.prize_cash_inr)) : '-') + '</td>' +
+          '<td>' + esc(r.end_date ?? '-') + '</td>';
+        tbody.appendChild(tr);
+      }
+    }
+
+    function esc(s) { return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]); }
+
+    /* Filter wiring */
+    document.getElementById('f-apply').onclick = loadBoards;
+    document.getElementById('f-start_date').onchange = loadBoards;
+    document.getElementById('f-end_date').onchange = loadBoards;
+    document.getElementById('f-channel').oninput = loadBoards;
+    document.getElementById('f-status').onchange = loadBoards;
+    document.getElementById('f-prize_min').oninput = loadBoards;
+    document.getElementById('f-prize_max').oninput = loadBoards;
+    document.getElementById('f-q').oninput = loadBoards;
+
+    /* Staleness banner heartbeat */
+    setInterval(() => {
+      if (Date.now() - lastEvent > STALENESS_THRESHOLD_MS) stalenessBanner.style.display = 'block';
+    }, 15000);
+
+    /* Load older (audit log & rejection log) &gt; Turso tombstone_ledger via lookupTombstone */
+    function setupLoadOlder(btnId, tbodyId, resultsId) {
+      const btn = document.getElementById(btnId);
+      const results = document.getElementById(resultsId);
+      if (!btn || !results) return;
+      btn.onclick = () => {
+        btn.classList.add('loading');
+        btn.textContent = 'loading&hellip;';
+        // The last row's url_hash drives the point lookup into the cold ledger.
+        const tbody = document.getElementById(tbodyId);
+        const lastRow = tbody ? tbody.lastElementChild : null;
+        const urlHash = lastRow ? lastRow.getAttribute('data-hash') : '';
+        if (!urlHash) { results.textContent = 'no row hash to look up'; btn.classList.remove('loading'); btn.textContent = 'Load older'; return; }
+        fetch('/api/audit/older?url_hash=' + encodeURIComponent(urlHash))
+          .then((r) => r.json())
+          .then((data) => {
+            if (data.tombstone) {
+              results.innerHTML = '<div>Older: ' + esc(data.tombstone.terminal_status) + ' &middot; ' + esc(data.tombstone.source) + ' &middot; ' + esc(data.tombstone.decided_at) + '</div>';
+            } else {
+              results.textContent = 'no older tombstone found';
             }
-            // heartbeat: keep alive, no UI change
-          } catch {
-            // ignore malformed SSE data
-          }
-        };
-        es.onerror = () => {
-          es.close();
-          es = null;
-          reconnects++;
-          if (reconnects > MAX_STREAMS) {
-            if (container) container.textContent = 'stream limit reached';
-            return;
-          }
-          setTimeout(connect, backoff + Math.random() * 1000);
-          backoff = Math.min(backoff * 2, MAX_BACKOFF);
-        };
-      }
+            btn.classList.remove('loading'); btn.textContent = 'Load older';
+          })
+          .catch((err) => { results.textContent = 'load-older failed'; btn.classList.remove('loading'); btn.textContent = 'Load older'; });
+      };
+    }
+    setupLoadOlder('load-older-btn', 'tbody-events-local', 'older-results');
+    setupLoadOlder('load-older-audit-btn', 'tbody-audit-log', 'older-results-audit');
 
-      connect();
-    })();
+    /* Boot */
+    renderTabs();
+    loadBoards();
+    connect();
   </script>
 </body>
 </html>

@@ -23,18 +23,57 @@ export type LogLike = {
   warn: (...args: any[]) => void;
 };
 
+/** Per-bucket state snapshot for the health grid (DSH-03). */
+export type BucketStateSnapshot = {
+  provider: string;
+  model: string;
+  state: string; // READY | ACTIVE | 60s-COOLDOWN | DAILY-CAP
+};
+
+/** Agent slot with optional 429 baton-pass transition marker (DSH-02). */
+export type SseSlot = {
+  provider: string;
+  model: string;
+  step: string;
+  status: string;
+  batonPass?: { from: string; to: string; reason: string } | null;
+};
+
 /**
  * SSE hub: one shared PB realtime subscription on agent_telemetry +
  * opportunities, coalesced push every ~4s to all connected SSE clients,
  * heartbeat every ~15s.
+ *
+ * Deltas carry (a) per-bucket states for the 2D pool health grid and
+ * (b) agent slots with 429 baton-pass transition markers for the ticker.
  */
 export class SseHub {
   private readonly clients = new Set<SseClient>();
   private pushTimer: ReturnType<typeof setInterval> | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private lastEventTime = Date.now();
+  private bucketStates: BucketStateSnapshot[];
+  private slots: SseSlot[];
 
-  constructor(private readonly pb: PbLike, private readonly log: LogLike) {}
+  constructor(
+    private readonly pb: PbLike,
+    private readonly log: LogLike,
+    bucketStates: BucketStateSnapshot[] = [],
+    slots: SseSlot[] = [],
+  ) {
+    this.bucketStates = bucketStates;
+    this.slots = slots;
+  }
+
+  /** Replace bucket states (called when the BucketRegistry state changes). */
+  setBucketStates(states: BucketStateSnapshot[]): void {
+    this.bucketStates = states;
+  }
+
+  /** Replace agent slots (called when telemetry rows change). */
+  setSlots(slots: SseSlot[]): void {
+    this.slots = slots;
+  }
 
   /** Subscribe once to both collections (single shared bus), then start push + heartbeat timers. */
   start(): void {
@@ -80,9 +119,14 @@ export class SseHub {
       type: 'delta',
       ts: Date.now(),
       lastEventAgeMs: this.lastEventAgeMs,
-      slots: [
-        { provider: 'groq', model: 'llama-3.1-8b-instant', step: 'STEP_1-filter', status: 'active' },
-      ],
+      bucketStates: this.bucketStates,
+      slots: this.slots.map((s) => ({
+        provider: s.provider,
+        model: s.model,
+        step: s.step,
+        status: s.status,
+        batonPass: s.batonPass ?? null,
+      })),
     })}\n\n`;
     for (const client of this.clients) {
       client.write(payload);

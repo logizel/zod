@@ -92,7 +92,12 @@ describe('SseHub', () => {
 
   it('pushes a coalesced delta containing a slot row to every connected client', () => {
     const pb = makeFakePb();
-    const hub = new SseHub(pb, makeLog());
+    const hub = new SseHub(
+      pb,
+      makeLog(),
+      [],
+      [{ provider: 'groq', model: 'llama-3.1-8b-instant', step: 'STEP_1-filter', status: 'active', batonPass: null }],
+    );
 
     const clientA = makeFakeClient();
     const clientB = makeFakeClient();
@@ -139,5 +144,105 @@ describe('SseHub', () => {
     expect(typeof hub.lastEventAgeMs).toBe('number');
     expect(hub.lastEventAgeMs).toBeGreaterThanOrEqual(0);
     hub.stop();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Bucket states + 429 baton-pass slots (D-02, DSH-02, DSH-03)
+// ---------------------------------------------------------------------------
+
+describe('SseHub bucket states + 429 baton-pass slots', () => {
+  it('delta includes bucketStates with READY/ACTIVE/60s-COOLDOWN/DAILY-CAP per bucket', () => {
+    const pb = makeFakePb();
+    const hub = new SseHub(
+      pb,
+      makeLog(),
+      [
+        { provider: 'groq', model: 'llama-3.1-8b-instant', state: 'READY' },
+        { provider: 'cerebras', model: 'llama3.1-8b', state: 'ACTIVE' },
+        { provider: 'sambanova', model: 'llama-3.3-70B', state: '60s-COOLDOWN' },
+        { provider: 'mistral', model: 'mixtral-8x7b', state: 'DAILY-CAP' },
+      ],
+      [],
+    );
+    const client = makeFakeClient();
+    hub.addClient(client);
+    (hub as any).pushDelta();
+
+    const parsed = JSON.parse(client.written[0].replace(/^data: /, ''));
+    expect(Array.isArray(parsed.bucketStates)).toBe(true);
+    expect(parsed.bucketStates.length).toBe(4);
+    const states = parsed.bucketStates.map((b: any) => b.state);
+    expect(states).toContain('READY');
+    expect(states).toContain('ACTIVE');
+    expect(states).toContain('60s-COOLDOWN');
+    expect(states).toContain('DAILY-CAP');
+    // Each bucket state carries provider + model for the health grid cell.
+    const groq = parsed.bucketStates.find((b: any) => b.provider === 'groq' && b.model === 'llama-3.1-8b-instant');
+    expect(groq.state).toBe('READY');
+  });
+
+  it('slots include 429 baton-pass transition markers between model buckets', () => {
+    const pb = makeFakePb();
+    const hub = new SseHub(
+      pb,
+      makeLog(),
+      [],
+      [
+        {
+          provider: 'groq',
+          model: 'llama-3.1-8b-instant',
+          step: 'STEP_3-audit',
+          status: 'done',
+          batonPass: { from: 'groq:llama-3.1-8b-instant', to: 'cerebras:llama3.1-8b', reason: '429' },
+        },
+        {
+          provider: 'cerebras',
+          model: 'llama3.1-8b',
+          step: 'STEP_4-curate',
+          status: 'active',
+          batonPass: null,
+        },
+      ],
+    );
+    const client = makeFakeClient();
+    hub.addClient(client);
+    (hub as any).pushDelta();
+
+    const parsed = JSON.parse(client.written[0].replace(/^data: /, ''));
+    expect(Array.isArray(parsed.slots)).toBe(true);
+    expect(parsed.slots.length).toBe(2);
+    const first = parsed.slots[0];
+    expect(first.provider).toBe('groq');
+    expect(first.model).toBe('llama-3.1-8b-instant');
+    expect(first.step).toBe('STEP_3-audit');
+    expect(first.status).toBe('done');
+    // 429 baton-pass marker present on the slot that handed off.
+    expect(first.batonPass).toMatchObject({ reason: '429' });
+    expect(first.batonPass.from).toBe('groq:llama-3.1-8b-instant');
+    expect(first.batonPass.to).toBe('cerebras:llama3.1-8b');
+    // Slot that received the baton has no outgoing 429 marker.
+    expect(parsed.slots[1].batonPass).toBeNull();
+  });
+
+  it('delta carries both bucket states and slots together (single SSE event)', () => {
+    const pb = makeFakePb();
+    const hub = new SseHub(
+      pb,
+      makeLog(),
+      [{ provider: 'groq', model: 'llama-3.1-8b-instant', state: 'READY' }],
+      [{ provider: 'groq', model: 'llama-3.1-8b-instant', step: 'STEP_1-filter', status: 'active', batonPass: null }],
+    );
+    const client = makeFakeClient();
+    hub.addClient(client);
+    (hub as any).pushDelta();
+
+    const parsed = JSON.parse(client.written[0].replace(/^data: /, ''));
+    expect(parsed.type).toBe('delta');
+    expect(typeof parsed.ts).toBe('number');
+    expect(Array.isArray(parsed.bucketStates)).toBe(true);
+    expect(Array.isArray(parsed.slots)).toBe(true);
+    expect(parsed.bucketStates[0].state).toBe('READY');
+    expect(parsed.slots[0].step).toBe('STEP_1-filter');
   });
 });

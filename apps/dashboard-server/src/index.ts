@@ -11,7 +11,12 @@ import { createLogger } from '@zod/logger';
 import { createPbClient } from '@zod/db-hot';
 import type { HotEnv } from '@zod/db-hot/client';
 import { SseHub } from './sse.js';
-import { handleBoards } from './boards.js';
+import { handleBoards, handleAuditOlder, type StatementExecutor } from './boards.js';
+
+/** In-memory statement executor — no Turso configured yet. Read-only stub. */
+const STUB_DB: StatementExecutor = {
+  execute: async (_sql: string, _args?: unknown[]) => ({ rows: [] }),
+};
 
 async function main(): Promise<void> {
   // Fail-fast env gate first (D-06).
@@ -42,7 +47,19 @@ async function main(): Promise<void> {
       res.write(`data: ${JSON.stringify({ type: 'connected', ts: Date.now() })}\n\n`);
       req.on('close', () => hub.removeClient(client));
     } else if (url === '/api/boards') {
-      handleBoards(req, res);
+      // Fetch opportunities from PocketBase (hot store) and apply filters
+      // server-side in handleBoards. Read-only: getFullList only, no writes.
+      let rows: Array<Record<string, unknown>> = [];
+      try {
+        const records = await pb.collection('opportunities').getFullList<Record<string, unknown>>();
+        rows = records as unknown as Array<Record<string, unknown>>;
+      } catch {
+        rows = [];
+      }
+      handleBoards(req, res, { rows });
+    } else if (url.startsWith('/api/audit/older')) {
+      // Read-only point lookup into Turso cold tombstone_ledger (D-11).
+      handleAuditOlder(req, res, { db: STUB_DB });
     } else {
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'not found' }));
