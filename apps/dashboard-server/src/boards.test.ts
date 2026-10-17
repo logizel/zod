@@ -91,3 +91,136 @@ describe('GET /api/boards', () => {
     ]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Combined filter tests (D-10): date range, channel, status, prize range,
+// free-text, combined AND — rows passed in via opts.rows (server-side filter)
+// ---------------------------------------------------------------------------
+
+function boardRow(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    fingerprint_hash: 'fp-1',
+    url_hash: 'url-1',
+    pipeline: 'events',
+    bucket_channel: '#-online-1lakh-plus',
+    status: 'audited',
+    title: 'Hackathon 2026',
+    organizer: 'Tech Org',
+    links: { official: 'https://example.com' },
+    prize_cash_inr: 150000,
+    prize_text: '₹1,50,000',
+    deadlines: { tba: false, apply_by: '2026-11-01T00:00:00Z', event_start: '2026-11-01T00:00:00Z', event_end: '2026-11-02T00:00:00Z' },
+    end_date: '2026-11-02T00:00:00Z',
+    reminders: [],
+    bookmark: false,
+    audit_summary: '',
+    description_raw: '',
+    ...overrides,
+  } as Record<string, unknown>;
+}
+
+function handleWithRows(url: string, rows: Record<string, unknown>[]): string {
+  const res = mockResponse();
+  handleBoards({ url } as never, res as never, { rows } as never);
+  return res.body!;
+}
+
+describe('GET /api/boards combined filters (D-10)', () => {
+  const NOW = '2026-10-17T00:00:00Z';
+
+  it('start_date filter excludes rows ending before the range', () => {
+    const rows = [boardRow({ end_date: '2026-09-01T00:00:00Z' }), boardRow({ end_date: '2026-10-20T00:00:00Z' })];
+    const body = handleWithRows('/api/boards?start_date=2026-10-01T00:00:00Z', rows);
+    const parsed = JSON.parse(body) as BoardsResponse;
+    const allRows = parsed.boards.flatMap((b) => b.rows);
+    expect(allRows.length).toBe(1);
+    expect(allRows[0].end_date).toBe('2026-10-20T00:00:00Z');
+  });
+
+  it('end_date filter excludes rows ending after the range', () => {
+    const rows = [boardRow({ end_date: '2026-10-10T00:00:00Z' }), boardRow({ end_date: '2026-10-30T00:00:00Z' })];
+    const body = handleWithRows('/api/boards?end_date=2026-10-20T00:00:00Z', rows);
+    const parsed = JSON.parse(body) as BoardsResponse;
+    const allRows = parsed.boards.flatMap((b) => b.rows);
+    expect(allRows.length).toBe(1);
+    expect(allRows[0].end_date).toBe('2026-10-10T00:00:00Z');
+  });
+
+  it('channel filter returns only matching bucket_channel rows', () => {
+    const rows = [boardRow({ bucket_channel: '#-online-1lakh-plus' }), boardRow({ bucket_channel: '#-travel-events' })];
+    const body = handleWithRows('/api/boards?channel=#-online-1lakh-plus', rows);
+    const parsed = JSON.parse(body) as BoardsResponse;
+    const allRows = parsed.boards.flatMap((b) => b.rows);
+    expect(allRows.length).toBe(1);
+    expect(allRows[0].bucket_channel).toBe('#-online-1lakh-plus');
+  });
+
+  it('status filter returns only matching status rows', () => {
+    const rows = [boardRow({ status: 'audited' }), boardRow({ status: 'rejected' })];
+    const body = handleWithRows('/api/boards?status=audited', rows);
+    const parsed = JSON.parse(body) as BoardsResponse;
+    const allRows = parsed.boards.flatMap((b) => b.rows);
+    expect(allRows.length).toBe(1);
+    expect(allRows[0].status).toBe('audited');
+  });
+
+  it('prize_min filter excludes rows below the minimum', () => {
+    const rows = [boardRow({ prize_cash_inr: 50000 }), boardRow({ prize_cash_inr: 150000 })];
+    const body = handleWithRows('/api/boards?prize_min=100000', rows);
+    const parsed = JSON.parse(body) as BoardsResponse;
+    const allRows = parsed.boards.flatMap((b) => b.rows);
+    expect(allRows.length).toBe(1);
+    expect(allRows[0].prize_cash_inr).toBe(150000);
+  });
+
+  it('prize_max filter excludes rows above the maximum', () => {
+    const rows = [boardRow({ prize_cash_inr: 50000 }), boardRow({ prize_cash_inr: 150000 })];
+    const body = handleWithRows('/api/boards?prize_max=100000', rows);
+    const parsed = JSON.parse(body) as BoardsResponse;
+    const allRows = parsed.boards.flatMap((b) => b.rows);
+    expect(allRows.length).toBe(1);
+    expect(allRows[0].prize_cash_inr).toBe(50000);
+  });
+
+  it('free-text q matches title or organizer case-insensitive', () => {
+    const rows = [boardRow({ title: 'Hackathon 2026', organizer: 'Tech Org' }), boardRow({ title: 'Job Fair', organizer: 'Hiring Co' })];
+    const body = handleWithRows('/api/boards?q=hackathon', rows);
+    const parsed = JSON.parse(body) as BoardsResponse;
+    const allRows = parsed.boards.flatMap((b) => b.rows);
+    expect(allRows.length).toBe(1);
+    expect(allRows[0].title).toBe('Hackathon 2026');
+  });
+
+  it('combined AND: date + channel + status + prize + q all applied together', () => {
+    const rows = [
+      boardRow({ end_date: '2026-10-20T00:00:00Z', bucket_channel: '#-online-1lakh-plus', status: 'audited', prize_cash_inr: 150000, title: 'Hackathon 2026' }),
+      boardRow({ end_date: '2026-10-20T00:00:00Z', bucket_channel: '#-travel-events', status: 'audited', prize_cash_inr: 150000, title: 'Travel Conf' }),
+      boardRow({ end_date: '2026-09-01T00:00:00Z', bucket_channel: '#-online-1lakh-plus', status: 'audited', prize_cash_inr: 150000, title: 'Old Event' }),
+    ];
+    const body = handleWithRows(
+      '/api/boards?start_date=2026-10-01T00:00:00Z&channel=#-online-1lakh-plus&status=audited&prize_min=100000&q=hackathon',
+      rows,
+    );
+    const parsed = JSON.parse(body) as BoardsResponse;
+    const allRows = parsed.boards.flatMap((b) => b.rows);
+    expect(allRows.length).toBe(1);
+    expect(allRows[0].title).toBe('Hackathon 2026');
+  });
+
+  it('invalid status parameter is rejected with 400 (T-07-05)', () => {
+    const res = mockResponse();
+    handleBoards({ url: '/api/boards?status=not-a-status' } as never, res as never, { rows: [] } as never);
+    expect(res.statusCode).toBe(400);
+    expect(res.headers['Content-Type']).toBe('application/json');
+    const parsed = JSON.parse(res.body!);
+    expect(parsed.error).toBe('invalid filter parameters');
+  });
+
+  it('board window: active/upcoming statuses always in window (D-12)', () => {
+    const rows = [boardRow({ status: 'candidate' }), boardRow({ status: 'routed' }), boardRow({ status: 'expired', end_date: '2026-01-01T00:00:00Z' })];
+    const body = handleWithRows('/api/boards', rows);
+    const parsed = JSON.parse(body) as BoardsResponse;
+    const allRows = parsed.boards.flatMap((b) => b.rows);
+    expect(allRows.map((r) => r.status).sort()).toEqual(['candidate', 'routed']);
+  });
+});
