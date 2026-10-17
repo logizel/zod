@@ -3,18 +3,21 @@ import type { PollCandidate } from '@zod/scheduler/jobs';
 
 const mockFetch = vi.fn();
 const mockReadFileSync = vi.fn();
+const mockRealpathSync = vi.fn();
 const mockEnv = { SOCIAL_COOKIES_PATH: '' };
 
 const hoisted = vi.hoisted(() => ({
   mockFetch: vi.fn(),
   mockReadFileSync: vi.fn(),
+  mockRealpathSync: vi.fn(),
   mockEnv: { SOCIAL_COOKIES_PATH: '' },
 }));
 
-const { mockFetch: gMockFetch, mockReadFileSync: gMockReadFileSync, mockEnv: gMockEnv } = hoisted;
+const { mockFetch: gMockFetch, mockReadFileSync: gMockReadFileSync, mockRealpathSync: gMockRealpathSync, mockEnv: gMockEnv } = hoisted;
 
 vi.mock('node:fs', () => ({
   readFileSync: hoisted.mockReadFileSync as unknown,
+  realpathSync: hoisted.mockRealpathSync as unknown,
 }));
 
 vi.mock('@zod/config', () => ({
@@ -32,7 +35,10 @@ import {
 beforeEach(() => {
   gMockFetch.mockReset();
   gMockReadFileSync.mockReset();
+  gMockRealpathSync.mockReset();
   gMockEnv.SOCIAL_COOKIES_PATH = '';
+  // Default: realpathSync resolves to the input path (identity)
+  gMockRealpathSync.mockImplementation((p: string) => p);
   vi.stubGlobal('fetch', gMockFetch as unknown);
 });
 
@@ -65,7 +71,8 @@ describe('social source (X/LinkedIn CandidateSource)', () => {
   });
 
   it('returns [] when cookie file is missing', async () => {
-    gMockEnv.SOCIAL_COOKIES_PATH = '/tmp/nonexistent-cookies.json';
+    gMockEnv.SOCIAL_COOKIES_PATH = '/opt/zod/social-cookies/missing.json';
+    gMockRealpathSync.mockImplementation(() => '/opt/zod/social-cookies/missing.json');
     gMockReadFileSync.mockImplementation(() => {
       throw new Error('ENOENT: no such file');
     });
@@ -75,7 +82,8 @@ describe('social source (X/LinkedIn CandidateSource)', () => {
   });
 
   it('reads cookies at tick time and sends Cookie header', async () => {
-    gMockEnv.SOCIAL_COOKIES_PATH = '/tmp/cookies.json';
+    gMockEnv.SOCIAL_COOKIES_PATH = '/opt/zod/social-cookies/cookies.json';
+    gMockRealpathSync.mockImplementation(() => '/opt/zod/social-cookies/cookies.json');
     gMockReadFileSync.mockReturnValue(JSON.stringify(sampleCookies));
     gMockFetch.mockResolvedValueOnce(
       new Response('<html><body>NITK Hackathon 2026 — ₹1L cash prize</body></html>', {
@@ -84,7 +92,7 @@ describe('social source (X/LinkedIn CandidateSource)', () => {
     );
 
     const result = await runWithFakeTimers();
-    expect(gMockReadFileSync).toHaveBeenCalledWith('/tmp/cookies.json', 'utf8');
+    expect(gMockReadFileSync).toHaveBeenCalledWith('/opt/zod/social-cookies/cookies.json', 'utf8');
     expect(gMockFetch).toHaveBeenCalled();
     const fetchCall = gMockFetch.mock.calls[0];
     expect(fetchCall[1].headers).toHaveProperty('Cookie');
@@ -92,7 +100,8 @@ describe('social source (X/LinkedIn CandidateSource)', () => {
   });
 
   it('enforces 30-90s jitter per request (D-08)', async () => {
-    gMockEnv.SOCIAL_COOKIES_PATH = '/tmp/cookies.json';
+    gMockEnv.SOCIAL_COOKIES_PATH = '/opt/zod/social-cookies/cookies.json';
+    gMockRealpathSync.mockImplementation(() => '/opt/zod/social-cookies/cookies.json');
     gMockReadFileSync.mockReturnValue(JSON.stringify(sampleCookies));
     gMockFetch.mockResolvedValue(
       new Response('<html><body>Test post content</body></html>', { status: 200 }),
@@ -100,12 +109,9 @@ describe('social source (X/LinkedIn CandidateSource)', () => {
 
     vi.useFakeTimers();
     const promise = socialSource.list();
-    // Before any timer advance, sleep hasn't fired, fetch should NOT be called
     expect(gMockFetch).not.toHaveBeenCalled();
-    // Advance past max jitter for first URL
     vi.advanceTimersByTime(100_000);
     await new Promise((resolve) => process.nextTick(resolve));
-    // First URL processed, now waiting on second sleep
     vi.advanceTimersByTime(100_000);
     await new Promise((resolve) => process.nextTick(resolve));
     vi.useRealTimers();
@@ -115,7 +121,8 @@ describe('social source (X/LinkedIn CandidateSource)', () => {
   });
 
   it('enforces max 5 actions per tick (D-08)', async () => {
-    gMockEnv.SOCIAL_COOKIES_PATH = '/tmp/cookies.json';
+    gMockEnv.SOCIAL_COOKIES_PATH = '/opt/zod/social-cookies/cookies.json';
+    gMockRealpathSync.mockImplementation(() => '/opt/zod/social-cookies/cookies.json');
     gMockReadFileSync.mockReturnValue(JSON.stringify(sampleCookies));
     gMockFetch.mockResolvedValue(
       new Response('<html><body>Test post content about hackathon event</body></html>', {
@@ -124,22 +131,23 @@ describe('social source (X/LinkedIn CandidateSource)', () => {
     );
 
     const result = await runWithFakeTimers();
-    // Only 2 default URLs → 2 fetches (well under 5)
     expect(gMockFetch).toHaveBeenCalledTimes(2);
   });
 
   it('returns [] on non-ok responses (error isolation)', async () => {
-    gMockEnv.SOCIAL_COOKIES_PATH = '/tmp/cookies.json';
+    gMockEnv.SOCIAL_COOKIES_PATH = '/opt/zod/social-cookies/cookies.json';
+    gMockRealpathSync.mockImplementation(() => '/opt/zod/social-cookies/cookies.json');
     gMockReadFileSync.mockReturnValue(JSON.stringify(sampleCookies));
     gMockFetch.mockResolvedValue(new Response('error', { status: 403 }));
 
     const result = await runWithFakeTimers();
-    expect(gMockFetch).toHaveBeenCalledTimes(2); // both URLs attempted
+    expect(gMockFetch).toHaveBeenCalledTimes(2);
     expect(result).toEqual([]);
   });
 
   it('maps response data to PollCandidate shape', async () => {
-    gMockEnv.SOCIAL_COOKIES_PATH = '/tmp/cookies.json';
+    gMockEnv.SOCIAL_COOKIES_PATH = '/opt/zod/social-cookies/cookies.json';
+    gMockRealpathSync.mockImplementation(() => '/opt/zod/social-cookies/cookies.json');
     gMockReadFileSync.mockReturnValue(JSON.stringify(sampleCookies));
     gMockFetch.mockResolvedValueOnce(
       new Response(
@@ -157,11 +165,33 @@ describe('social source (X/LinkedIn CandidateSource)', () => {
     });
   });
 
-  it('readSocialCookies parses JSON array of cookie objects', () => {
+  // --- readSocialCookies unit tests (realpathSync + ALLOWED_COOKIE_DIR confinement) ---
+
+  it('readSocialCookies parses JSON array of cookie objects within allowed dir', () => {
+    const cookiePath = '/opt/zod/social-cookies/cookies.json';
+    gMockRealpathSync.mockReturnValue(cookiePath);
     gMockReadFileSync.mockReturnValue(JSON.stringify(sampleCookies));
-    const cookies = readSocialCookies('/tmp/cookies.json');
+    const cookies = readSocialCookies(cookiePath);
     expect(cookies).toHaveLength(2);
     expect(cookies[0]).toMatchObject({ name: 'auth_token', value: 'abc123' });
+    expect(gMockReadFileSync).toHaveBeenCalledWith(cookiePath, 'utf8');
+  });
+
+  it('readSocialCookies throws when resolved path is outside ALLOWED_COOKIE_DIR', () => {
+    gMockRealpathSync.mockReturnValue('/etc/passwd');
+    expect(() => readSocialCookies('/opt/zod/social-cookies/cookies.json')).toThrow();
+    expect(gMockReadFileSync).not.toHaveBeenCalled();
+  });
+
+  it('readSocialCookies uses resolved realpath path for readFileSync (symlink)', () => {
+    const linkPath = '/opt/zod/social-cookies/cookies.json';
+    const realPath = '/opt/zod/social-cookies/real-cookies.json';
+    gMockRealpathSync.mockReturnValue(realPath);
+    gMockReadFileSync.mockReturnValue(JSON.stringify(sampleCookies));
+    const cookies = readSocialCookies(linkPath);
+    expect(cookies).toHaveLength(2);
+    expect(gMockReadFileSync).toHaveBeenCalledWith(realPath, 'utf8');
+    expect(gMockReadFileSync).not.toHaveBeenCalledWith(linkPath, 'utf8');
   });
 
   it('buildCookieHeader constructs Cookie header string', () => {
