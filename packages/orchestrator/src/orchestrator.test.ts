@@ -59,6 +59,7 @@ function makePb(opts: {
   existingOpportunities: unknown[];
 }): { pb: any; collections: FakeCollections } {
   const opportunities: unknown[] = [...opts.existingOpportunities];
+  const updated: Array<{ id: string; data: Record<string, unknown> }> = [];
   const rows = new Map<string, TaskScratchpadRow>();
   for (const r of opts.scratchpadRows) rows.set(r.id, r);
 
@@ -88,9 +89,21 @@ function makePb(opts: {
           const matched = opportunities.filter((o: any) => o.url_hash === urlHash);
           return { items: matched, totalItems: matched.length };
         }
+        if (filter && filter.includes('deadlines.tba = true')) {
+          const tbaItems = opportunities.filter((o: any) => o.deadlines?.tba === true);
+          return { items: tbaItems, totalItems: tbaItems.length };
+        }
         return { items: opportunities, totalItems: opportunities.length };
       },
+      update: vi.fn(async (id: string, data: Record<string, unknown>) => {
+        updated.push({ id, data });
+        const idx = opportunities.findIndex((o: any) => o.id === id);
+        if (idx >= 0) {
+          opportunities[idx] = { ...opportunities[idx], ...data };
+        }
+      }),
       __created__: opportunities,
+      __updated__: updated,
     },
     tombstone_ledger: {
       create: vi.fn(async (data: Record<string, unknown>) => {
@@ -962,11 +975,11 @@ describe('orchestrator drainStep2Rows local branch', () => {
       hasSelectionRound: false,
       organizer_score: 6,
       category: 'general',
-      prize_cash_inr: null,
-      prize_text: 'TBA',
+      prize_cash_inr: 250000,
+      prize_text: '₹2,50,000 cash',
       perk_hint: null,
-      dates: null,
-      audit_summary: 'Manipal fest, Udupi, TBA prize',
+      dates: { start: '2026-12-15T09:00:00Z', end: '2026-12-16T18:00:00Z' },
+      audit_summary: 'Manipal fest, Udupi, ₹2.5L cash prize',
     }));
 
     await drainStep2Rows({
@@ -998,7 +1011,7 @@ describe('orchestrator drainStep2Rows local branch', () => {
       prize_cash_inr: null,
       prize_text: 'TBA',
       perk_hint: null,
-      dates: null,
+      dates: { start: '2026-12-15T09:00:00Z', end: '2026-12-16T18:00:00Z' },
       audit_summary: 'IIT Bombay hackathon, selection round, travel-curated',
     }));
 
@@ -1032,7 +1045,7 @@ describe('orchestrator drainStep2Rows local branch', () => {
       prize_cash_inr: null,
       prize_text: 'TBA',
       perk_hint: null,
-      dates: null,
+      dates: { start: '2026-12-15T09:00:00Z', end: '2026-12-16T18:00:00Z' },
       audit_summary: 'BITS Pilani fest, Goa, quality threshold met',
     }));
 
@@ -1065,7 +1078,7 @@ describe('orchestrator drainStep2Rows local branch', () => {
       prize_cash_inr: null,
       prize_text: 'TBA',
       perk_hint: null,
-      dates: null,
+      dates: { start: '2026-12-15T09:00:00Z', end: '2026-12-16T18:00:00Z' },
       audit_summary: 'Unknown college meetup, low quality',
     }));
 
@@ -1100,7 +1113,7 @@ describe('orchestrator drainStep2Rows local branch', () => {
       prize_cash_inr: null,
       prize_text: 'TBA',
       perk_hint: null,
-      dates: null,
+      dates: { start: '2026-12-15T09:00:00Z', end: '2026-12-16T18:00:00Z' },
       audit_summary: 'Bangalore workshop, walk-in, no selection round',
     }));
 
@@ -1236,6 +1249,81 @@ describe('orchestrator drainStep2Rows local branch', () => {
     const tsCall = (collections.tombstone_ledger.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(tsCall.terminal_status).toBe('verdict_parse_failed');
     expect(collections.scratchpad.update).toHaveBeenCalledWith('scratch-local-1', { step_position: 'STEP_3' });
+    vi.unstubAllGlobals();
+  });
+
+  it('events TBA verdict → Ping #1 routes to #⏳-early-tba-radar, deadlines.tba=true, skips prize gate', async () => {
+    const { pb, collections } = makePb({
+      scratchpadRows: [makeEventsScratchRow({ pipeline: 'events' })],
+      existingOpportunities: [],
+    });
+
+    const router = makeRouter(() => ({
+      title: 'TBA Hackathon',
+      organizer: 'Test Org',
+      location: 'Online',
+      isOffline: false,
+      hasSelectionRound: false,
+      organizer_score: 5,
+      category: 'general',
+      prize_cash_inr: null,
+      prize_text: 'TBA',
+      perk_hint: null,
+      dates: null,
+      agenda_score: 5,
+      audit_summary: 'TBA event, prize and date unknown',
+    }));
+
+    await drainStep2Rows({
+      pb,
+      router: router as any,
+      pageSize: 25,
+    });
+
+    expect(collections.opportunities.create).toHaveBeenCalledTimes(1);
+    const opp = (collections.opportunities.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(opp.bucket_channel).toBe('#⏳-early-tba-radar');
+    expect(opp.deadlines.tba).toBe(true);
+    expect(opp.status).toBe('audited');
+    expect(collections.scratchpad.update).toHaveBeenCalledWith('scratch-events-1', { step_position: 'STEP_3' });
+    expect(collections.tombstone_ledger.create).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it('local TBA verdict → Ping #1 routes to #⏳-early-tba-radar, skips geo classification', async () => {
+    const { pb, collections } = makePb({
+      scratchpadRows: [makeLocalScratchRow()],
+      existingOpportunities: [],
+    });
+
+    const router = makeRouter(() => ({
+      title: 'Local TBA Event',
+      organizer: 'Test Org',
+      location: 'DK',
+      isOffline: true,
+      hasSelectionRound: false,
+      organizer_score: 5,
+      category: 'general',
+      prize_cash_inr: null,
+      prize_text: 'TBA',
+      perk_hint: null,
+      dates: null,
+      audit_summary: 'Local DK event, TBA prize and date',
+    }));
+
+    await drainStep2Rows({
+      pb,
+      router: router as any,
+      pageSize: 25,
+    });
+
+    expect(collections.opportunities.create).toHaveBeenCalledTimes(1);
+    const opp = (collections.opportunities.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(opp.bucket_channel).toBe('#⏳-early-tba-radar');
+    expect(opp.deadlines.tba).toBe(true);
+    expect(opp.pipeline).toBe('local');
+    expect(collections.scratchpad.update).toHaveBeenCalledWith('scratch-local-1', { step_position: 'STEP_3' });
+    expect(collections.tombstone_ledger.create).not.toHaveBeenCalled();
     vi.unstubAllGlobals();
   });
 });

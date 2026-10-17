@@ -31,6 +31,7 @@ import {
 } from './rule-packs/local.js';
 import { evaluateLootGates, BUCKET_LOOT, type LootGateResult } from './gates/loot.js';
 import { readLootRules } from './loot-faq.js';
+import { tbaReauditScan } from './tba-loop.js';
 import { passesPrizeGate } from '@zod/discord-router/prize-gate';
 import { resolveOfficialDomain } from '@zod/discord-router/link-hop';
 import { prefilter as domainPrefilter } from '@zod/discord-router/domain-filter';
@@ -116,6 +117,9 @@ export async function drainStep2Rows(opts: DrainOpts): Promise<void> {
       rowLog.warn({ stage: 'row', error: String(err) }, 'row failed, continuing');
     }
   }
+
+  // TBA re-audit scan within the existing audit-drain tick (D-10 — no new scheduler job).
+  await tbaReauditScan({ pb, router, log: drainLog });
 
   drainLog.info({ processed: rows.length }, 'drain done');
 }
@@ -449,6 +453,31 @@ async function processEventsRow(
     return;
   }
 
+  // Ping #1: TBA detection — prize and date both null → route to #⏳-early-tba-radar,
+  // set deadlines.tba: true, do NOT apply prize gate (per D-10).
+  if (verdict.prize_cash_inr === null && verdict.dates === null) {
+    rowLog.info({ stage: 'tba-ping1' }, 'Ping #1: TBA detected');
+    const urlHash = hashUrl(normalizeUrl(candidateUrl));
+    await createOpportunityIfAbsent(pb, {
+      url_hash: urlHash,
+      fingerprint_hash: urlHash,
+      pipeline: 'events',
+      bucket_channel: '#⏳-early-tba-radar',
+      status: 'audited',
+      title: candidateTitle,
+      organizer: verdict.organizer,
+      links: { official: candidateUrl },
+      prize_cash_inr: null,
+      prize_text: verdict.prize_text,
+      audit_summary: verdict.audit_summary,
+      deadlines: { tba: true },
+      description_raw: fetchedText.slice(0, 8000),
+    });
+    await scratchpadColl(pb).update(row.id, { step_position: 'STEP_3' });
+    rowLog.info({ bucketChannel: '#⏳-early-tba-radar' }, 'events TBA opportunity written (Ping #1)');
+    return;
+  }
+
   // Step 3: resolve official domain within the 2-hop cap (SSRF-guarded).
   const hop = await resolveOfficialDomain(candidateUrl, 2);
   if (!hop.ok) {
@@ -600,6 +629,31 @@ async function drainLocalRow(
     rowLog.warn({ stage: 'verdict_parse' }, 'verdict parse failed; tombstoning');
     await writeTombstone(pb, candidateUrl, 'verdict_parse_failed', 'auditor');
     await scratchpadColl(pb).update(row.id, { step_position: 'STEP_3' });
+    return;
+  }
+
+  // Ping #1: TBA detection — prize and date both null → route to #⏳-early-tba-radar,
+  // set deadlines.tba: true, do NOT apply geo classification or prize gate (per D-10).
+  if (verdict.prize_cash_inr === null && verdict.dates === null) {
+    rowLog.info({ stage: 'tba-ping1' }, 'Ping #1: TBA detected (local)');
+    const urlHash = hashUrl(normalizeUrl(candidateUrl));
+    await createOpportunityIfAbsent(pb, {
+      url_hash: urlHash,
+      fingerprint_hash: urlHash,
+      pipeline: 'local',
+      bucket_channel: '#⏳-early-tba-radar',
+      status: 'audited',
+      title: candidateTitle,
+      organizer: verdict.organizer,
+      links: { official: candidateUrl },
+      prize_cash_inr: null,
+      prize_text: verdict.prize_text,
+      audit_summary: verdict.audit_summary,
+      deadlines: { tba: true },
+      description_raw: fetchedText.slice(0, 8000),
+    });
+    await scratchpadColl(pb).update(row.id, { step_position: 'STEP_3' });
+    rowLog.info({ bucketChannel: '#⏳-early-tba-radar' }, 'local TBA opportunity written (Ping #1)');
     return;
   }
 
