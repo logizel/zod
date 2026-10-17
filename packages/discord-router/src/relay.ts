@@ -9,7 +9,7 @@
  * The last relayed message ID is persisted in PocketBase agent_telemetry
  * (slot: 'relay-cursor') for crash recovery — survives bot restarts.
  *
- * Registered as a gateway job (relay-poll) via registerGatewayJobs with a
+ * Registered as a gateway job (gateway-relay-poll) via registerGatewayJobs with a
  * tickHandler — no setInterval scatter.
  */
 

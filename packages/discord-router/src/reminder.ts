@@ -6,7 +6,7 @@
  * Reminders are stored in `opportunities.reminders[]` with `{ at, channel, sent }`
  * shape; the `sent` flag prevents double-firing (Pitfall 6).
  *
- * Registered as a gateway job (reminder-tick, every 15m + 5m jitter) through
+ * Registered as a gateway job (gateway-reminder-tick, every 15m + 5m jitter) through
  * the single scheduler registry — no setInterval scatter.
  */
 

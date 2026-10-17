@@ -174,13 +174,13 @@ export const GATEWAY_JOBS: readonly StubJobDef[] = [
     description: 'validates ladder + env keys at gateway boot (idempotent)',
   },
   {
-    name: 'relay-poll',
+    name: 'gateway-relay-poll',
     expression: '*/15 * * * *',
     maxRandomDelayMs: 5 * 60_000,
     description: 'Discord #announcements relay poll (ING-04)',
   },
   {
-    name: 'reminder-tick',
+    name: 'gateway-reminder-tick',
     expression: '*/15 * * * *',
     maxRandomDelayMs: 5 * 60_000,
     description: 'bookmark deadline reminder scan (UI-02)',
