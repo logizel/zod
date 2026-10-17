@@ -199,6 +199,7 @@ export const TasteRule = z.object({
   kind: z.string().min(1),
   rule: z.string().min(1),
   weight: z.number().default(1.0),
+  source: z.string().default(''), // 'reaction' | 'keyword' | 'dm' — tracks rule origin (D-11)
   created_at: z.iso.datetime().default(() => new Date().toISOString()),
 });
 export type TasteRule = z.infer<typeof TasteRule>;
