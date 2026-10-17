@@ -138,7 +138,7 @@ describe('processOpportunity', () => {
       channels: {
         fetch: async () => null,
       },
-      guilds: { caches: { values: () => [] } },
+      guilds: { cache: { values: () => [] } },
     };
 
     const ok = await processOpportunity(pb, testEnv, client, fixture, makeLog());
@@ -169,7 +169,7 @@ describe('processOpportunity', () => {
         },
       },
       guilds: {
-        caches: {
+        cache: {
           values: () => [
             {
               channels: {
@@ -219,7 +219,7 @@ describe('processOpportunity', () => {
           return null;
         },
       },
-      guilds: { caches: { values: () => [] } },
+      guilds: { cache: { values: () => [] } },
     };
 
     const ok = await processOpportunity(pb, testEnv, client, opp, makeLog());
@@ -247,7 +247,7 @@ describe('processOpportunity', () => {
           return null;
         },
       },
-      guilds: { caches: { values: () => [] } },
+      guilds: { cache: { values: () => [] } },
     };
 
     const ok = await processOpportunity(pb, testEnv, client, opp, makeLog());
@@ -271,7 +271,7 @@ describe('processOpportunity', () => {
         fetch: async () => null, // ID fetch: empty env ID skipped, bucket ID fetch returns null
       },
       guilds: {
-        caches: {
+        cache: {
           values: () => [
             {
               channels: {
@@ -312,7 +312,7 @@ describe('processOpportunity', () => {
       channels: {
         fetch: async () => null,
       },
-      guilds: { caches: { values: () => [] } },
+      guilds: { cache: { values: () => [] } },
     };
 
     const ok = await processOpportunity(pb, testEnv, client, opp, makeLog());
