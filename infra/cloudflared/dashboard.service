@@ -1,0 +1,27 @@
+# Dashboard stream server supervision (D-05).
+#
+# Installed on the VM as /etc/systemd/system/zod-dashboard.service by
+# infra/oracle/rebuild.sh (which clones + builds the repo at /home/zod/zod
+# and keeps the secrets at /etc/zod/env, owner-only 0600).
+# Restart=always: the stream origin must survive crashes and VM reboots so
+# the dashboard can reconnect through the tunnel. Tunnel death is a
+# dashboard-only outage (Pitfall 13) — pipelines never depend on the tunnel.
+# Production runs the compiled tsc emit, never tsx watch.
+
+[Unit]
+Description=Zod dashboard stream server (SSE + boards API on localhost:3000)
+After=network-online.target zod-pocketbase.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/zod/zod
+ExecStart=/usr/bin/node /home/zod/zod/apps/dashboard-server/dist/index.js
+EnvironmentFile=/etc/zod/env
+Restart=always
+RestartSec=10
+User=zod
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

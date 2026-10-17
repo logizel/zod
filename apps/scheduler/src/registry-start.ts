@@ -17,10 +17,12 @@ import {
   registerPollJobs,
   registerAuditDrain,
   registerGatewayJobs,
+  registerGcJob,
   type RegistryHandle,
   type TickLogger,
 } from '@zod/scheduler-registry';
 import { createPbClient } from '@zod/db-hot';
+import { purgeExpiredHeavyText } from '@zod/db-hot/telemetry';
 import { createTursoClient, clientExecutor } from '@zod/db-cold';
 import { LlmRouter, writeBucketState, type TelemetrySink } from '@zod/llm';
 import { createLogger } from '@zod/logger';
@@ -82,6 +84,17 @@ export function startSchedulerRegistry(log: TickLogger): RegistryHandle {
   });
   registerAuditDrain(log, undefined, {
     tickHandler: orchestrator.getTickHandler(),
+  });
+
+  // MEM-05 midnight GC: purgeExpiredHeavyText via injected tickHandler.
+  // Scheduler stays agnostic — the handler calls into @zod/db-hot telemetry.
+  registerGcJob(log, undefined, {
+    tickHandler: (_def, jobLog) => {
+      const result = purgeExpiredHeavyText(
+        { agentTelemetry: [], opportunities: [] },
+      );
+      jobLog.info({ job: 'gc-midnight-purge', ...result }, 'gc-midnight-purge tick');
+    },
   });
 
   // Relay service: polls external #announcements and relays to #raw-incoming-feeds.

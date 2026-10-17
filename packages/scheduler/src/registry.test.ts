@@ -8,9 +8,11 @@ import {
   JOB_POLL_JOBS,
   AUDIT_JOBS,
   STUB_JOBS,
+  GC_JOBS,
   registerGatewayJobs,
   registerPollJobs,
   registerAuditDrain,
+  registerGcJob,
   registerStubJobs,
   runGatewayTick,
   SCHEDULER_TIMEZONE,
@@ -255,6 +257,52 @@ describe('job poll jobs registered via single registry', () => {
     for (const call of jobCalls) {
       expect(call.stopped).toBe(true);
     }
+  });
+
+  it('schedules GC_JOBS via registerGcJob with injected tickHandler', () => {
+    const { log } = makeFakeLogger();
+    const { mod, calls } = makeFakeScheduler();
+    let tickHandlerInvoked = false;
+
+    const handle = registerGcJob(log, mod, {
+      tickHandler: () => {
+        tickHandlerInvoked = true;
+      },
+    });
+
+    const jobCalls = calls.filter((c) => c.options['name'] !== 'guard-probe');
+    expect(handle.tasks).toHaveLength(GC_JOBS.length);
+    expect(jobCalls).toHaveLength(GC_JOBS.length);
+    expect(jobCalls.map((c) => c.options['name'])).toEqual(
+      GC_JOBS.map((j) => j.name),
+    );
+    expect(jobCalls.map((c) => c.expression)).toEqual(
+      GC_JOBS.map((j) => j.expression),
+    );
+    for (const call of jobCalls) {
+      expect(call.options['timezone']).toBe(SCHEDULER_TIMEZONE);
+      expect(call.options['timezone']).toBe('Asia/Kolkata');
+      expect(call.options['noOverlap']).toBe(true);
+      expect(call.options['maxRandomDelay']).toBe(GC_JOBS[0]?.maxRandomDelayMs);
+      expect(call.started).toBe(true);
+      expect(call.handlers['execution:overlap']).toBeTypeOf('function');
+    }
+
+    handle.stop();
+    for (const call of jobCalls) {
+      expect(call.stopped).toBe(true);
+    }
+  });
+
+  it('GC_JOBS exact contents: gc-midnight-purge at IST midnight + jitter', () => {
+    expect(GC_JOBS).toHaveLength(1);
+    expect(GC_JOBS[0]).toMatchObject({
+      name: 'gc-midnight-purge',
+      expression: '0 0 * * *',
+      maxRandomDelayMs: 15 * 60_000,
+      description: expect.stringContaining('midnight GC purge'),
+    });
+    expect(GC_JOBS[0].expression).toBe('0 0 * * *');
   });
 
   it('JOB_POLL_JOBS exact contents: name, expression, maxRandomDelayMs, candidateSource', () => {

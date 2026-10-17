@@ -50,18 +50,92 @@
 </head>
 <body>
   <main>
-    <span class="badge">Locked shell &mdash; Phase 1</span>
+    <span class="badge">Locked shell &mdash; Phase 1 + Phase 7 live</span>
     <h1>Zod telemetry shell</h1>
     <p>
-      This is the locked static placeholder behind the owner-only access wall.
-      You are seeing it because your identity passed the edge rule; nothing on
-      this page reads live data.
+      This is the locked static shell behind the owner-only access wall. Live
+      agent slots arrive over SSE from the VM stream origin (localhost:3000)
+      through the Cloudflare Tunnel. Zero Trust Access gates both the shell
+      and the SSE stream before anything renders.
     </p>
+
+    <!-- Top panel: rolling agent slots (one slot row rendered from SSE data) -->
+    <section id="top-panel">
+      <h2>Agent Slots</h2>
+      <div id="slots-container">connecting&hellip;</div>
+    </section>
+
     <p>
       Rolling agent slots, the pool health grid, and the read-only opportunity
-      boards land in <code>Phase 7</code>. Until then, verification happens in
-      Discord and in the drill scripts under <code>infra/oracle/drills/</code>.
+      boards land via SSE. Until then, verification happens in Discord and in
+      the drill scripts under <code>infra/oracle/drills/</code>.
     </p>
   </main>
+
+  <script>
+    // D-02: vanilla JS EventSource client, no build step, no npm deps.
+    // D-08: exponential backoff + jitter reconnect, hard cap ~2 streams.
+    (function () {
+      const STREAM_URL = '/api/stream';
+      const container = document.getElementById('slots-container');
+      let es = null;
+      let backoff = 1000;
+      const MAX_BACKOFF = 30000;
+      let reconnects = 0;
+      const MAX_STREAMS = 2;
+
+      function renderSlot(row) {
+        if (!container) return;
+        container.innerHTML = '';
+        const div = document.createElement('div');
+        div.style.padding = '0.5rem';
+        div.style.border = '1px solid #2a3342';
+        div.style.borderRadius = '0.5rem';
+        div.style.background = '#11151d';
+        div.textContent =
+          (row.provider ?? '-') +
+          '/' +
+          (row.model ?? '-') +
+          ' &middot; step: ' +
+          (row.step ?? '-') +
+          ' &middot; status: ' +
+          (row.status ?? '-');
+        container.appendChild(div);
+      }
+
+      function connect() {
+        es = new EventSource(STREAM_URL);
+        es.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data.type === 'connected') {
+              if (container) container.textContent = 'stream connected';
+              backoff = 1000;
+              reconnects = 0;
+            } else if (data.type === 'delta') {
+              // Render one top-panel slot row (provider/model/step/status).
+              renderSlot(Array.isArray(data.slots) ? data.slots[0] : data);
+            }
+            // heartbeat: keep alive, no UI change
+          } catch {
+            // ignore malformed SSE data
+          }
+        };
+        es.onerror = () => {
+          es.close();
+          es = null;
+          reconnects++;
+          if (reconnects > MAX_STREAMS) {
+            if (container) container.textContent = 'stream limit reached';
+            return;
+          }
+          setTimeout(connect, backoff + Math.random() * 1000);
+          backoff = Math.min(backoff * 2, MAX_BACKOFF);
+        };
+      }
+
+      connect();
+    })();
+  </script>
 </body>
 </html>
