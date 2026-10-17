@@ -15,6 +15,7 @@ import {
   GATEWAY_JOBS,
   JOB_POLL_JOBS,
   AUDIT_JOBS,
+  GC_JOBS,
   computeBufferHoldMiB,
   runStubTick,
   runGatewayTick,
@@ -32,6 +33,7 @@ export {
   GATEWAY_JOBS,
   JOB_POLL_JOBS,
   AUDIT_JOBS,
+  GC_JOBS,
   computeBufferHoldMiB,
   runStubTick,
   runGatewayTick,
@@ -266,6 +268,49 @@ export function registerAuditDrain(
   assertSchedulerGuards(mod);
   const heartbeatDir = opts.heartbeatDir ?? process.env['SCHEDULER_HEARTBEAT_DIR'];
   const tasks = AUDIT_JOBS.map((def) => {
+    const task = mod.schedule(
+      def.expression,
+      () => runGatewayTick(def, log, { sink: opts.sink, heartbeatDir, tickHandler: opts.tickHandler }),
+      {
+        name: def.name,
+        timezone: SCHEDULER_TIMEZONE,
+        noOverlap: true,
+        maxRandomDelay: def.maxRandomDelayMs,
+      },
+    );
+    task.on('execution:overlap', () => {
+      log.child({ job: def.name }).warn('tick skipped: previous run pending');
+      opts.sink?.record({ job: def.name, phase: 'skip', at: new Date().toISOString() });
+    });
+    void task.start();
+    return task;
+  });
+  return {
+    tasks,
+    stop: () => {
+      for (const task of tasks) {
+        void task.stop();
+      }
+    },
+  };
+}
+
+/** Register the MEM-05 midnight GC job via an injected tickHandler.
+ *
+ * The tickHandler (provided by the caller, e.g. registry-start.ts) calls
+ * purgeExpiredHeavyText in @zod/db-hot. Scheduler stays agnostic of GC
+ * internals — cycle-free, same as registerAuditDrain/registerGatewayJobs.
+ */
+export function registerGcJob(
+  log: TickLogger,
+  mod: SchedulerModule = cron,
+  opts: RegisterOptions & {
+    tickHandler?: (def: StubJobDef, log: TickLogger) => Promise<void> | void;
+  } = {},
+): RegistryHandle {
+  assertSchedulerGuards(mod);
+  const heartbeatDir = opts.heartbeatDir ?? process.env['SCHEDULER_HEARTBEAT_DIR'];
+  const tasks = GC_JOBS.map((def) => {
     const task = mod.schedule(
       def.expression,
       () => runGatewayTick(def, log, { sink: opts.sink, heartbeatDir, tickHandler: opts.tickHandler }),

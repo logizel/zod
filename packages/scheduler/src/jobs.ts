@@ -219,6 +219,22 @@ export const AUDIT_JOBS: readonly StubJobDef[] = [
   },
 ];
 
+/** MEM-05 midnight GC job registered through the single scheduler registry.
+ *
+ * Runs at IST midnight (+ jitter) with noOverlap single-flight semantics.
+ * tickHandler calls purgeExpiredHeavyText in @zod/db-hot (telemetry.ts).
+ * The 25h-missing alert and Discord #🛠-ops-health wiring are deferred to
+ * Wave 3 (D-14).
+ */
+export const GC_JOBS: readonly StubJobDef[] = [
+  {
+    name: 'gc-midnight-purge',
+    expression: '0 0 * * *',
+    maxRandomDelayMs: 15 * 60_000,
+    description: 'midnight GC purge heavy-text columns (description_raw/detail); retain tombstones + taste rules',
+  },
+];
+
 export interface PollCandidate {
   url: string;
   title: string;
