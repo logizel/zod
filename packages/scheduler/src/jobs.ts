@@ -179,6 +179,12 @@ export const GATEWAY_JOBS: readonly StubJobDef[] = [
     maxRandomDelayMs: 5 * 60_000,
     description: 'Discord #announcements relay poll (ING-04)',
   },
+  {
+    name: 'reminder-tick',
+    expression: '*/15 * * * *',
+    maxRandomDelayMs: 5 * 60_000,
+    description: 'bookmark deadline reminder scan (UI-02)',
+  },
 ];
 
 /** Job pipeline poll + audit-drain jobs (Phase 5, D-01 / D-14).
