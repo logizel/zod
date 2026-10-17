@@ -30,3 +30,41 @@ export function isTelemetryExpired(
   }
   return nowMs - createdMs > TELEMETRY_RETENTION_MS;
 }
+
+// ---------------------------------------------------------------------------
+// MEM-05 midnight GC: heavy-text purge (stub — implementation lands below)
+// ---------------------------------------------------------------------------
+
+export interface TelemetryRow {
+  id: string;
+  created: string;
+  detail: string;
+}
+
+export interface OpportunityRow {
+  id: string;
+  end_date: string | null;
+  description_raw: string;
+}
+
+export interface PurgeResult {
+  purged: number; // heavy-text cells cleared
+  compacted: number; // rows visited that were purge-eligible
+  errors: number; // rows that threw during expiry evaluation
+}
+
+/**
+ * Purge-eligible heavy-text columns only: `detail` on agent_telemetry rows
+ * older than TELEMETRY_RETENTION_MS, and `description_raw` on opportunities
+ * whose end_date is older than TELEMETRY_RETENTION_MS. Row metadata (id,
+ * created, status, end_date) is retained. tombstone_ledger and taste_rules
+ * are never touched by this function. Idempotent: re-running on already
+ * purged rows is a no-op (clearing an already-empty string is a no-op).
+ */
+export function purgeExpiredHeavyText(
+  rows: { agentTelemetry: TelemetryRow[]; opportunities: OpportunityRow[] },
+  nowMs: number = Date.now(),
+): PurgeResult {
+  // STUB: replaced by real implementation in Phase 7 Task 3 GREEN step.
+  return { purged: 0, compacted: 0, errors: 0 };
+}
