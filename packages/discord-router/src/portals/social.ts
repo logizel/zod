@@ -38,8 +38,25 @@ export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+const ALLOWED_COOKIE_DIR = '/opt/zod/social-cookies';
+
+function isSafeCookiePath(path: string): boolean {
+  // Resolve and confine to the allowed directory to prevent path traversal (CR-01/CR-06).
+  const resolved = path.replace(/\/$/, '');
+  if (!resolved.startsWith(ALLOWED_COOKIE_DIR + '/') && resolved !== ALLOWED_COOKIE_DIR) {
+    return false;
+  }
+  if (resolved.includes('..')) {
+    return false;
+  }
+  return true;
+}
+
 /** Read and parse the cookie JSON file at tick time (D-07). */
 export function readSocialCookies(path: string): SocialCookie[] {
+  if (!isSafeCookiePath(path)) {
+    return [];
+  }
   const raw = readFileSync(path, 'utf8');
   return JSON.parse(raw);
 }
