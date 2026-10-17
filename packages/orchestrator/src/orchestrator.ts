@@ -32,6 +32,13 @@ import {
 import { evaluateLootGates, BUCKET_LOOT, type LootGateResult } from './gates/loot.js';
 import { readLootRules } from './loot-faq.js';
 import { tbaReauditScan } from './tba-loop.js';
+import {
+  loadTasteRules,
+  checkBlockRules,
+  buildTastePromptInjection,
+  applyTastePreScoring,
+  checkHardComplianceGates,
+} from './taste-apply.js';
 import { passesPrizeGate } from '@zod/discord-router/prize-gate';
 import { resolveOfficialDomain } from '@zod/discord-router/link-hop';
 import { prefilter as domainPrefilter } from '@zod/discord-router/domain-filter';
@@ -156,6 +163,29 @@ async function processJobsRow(
   const candidateUrl = row.candidate_url;
   const candidateTitle = row.candidate_title ?? '';
   const fetchedText = row.partial_buffer ?? '';
+
+  // D-13: Hard compliance gates FIRST (before taste rules, before LLM).
+  const hardGate = checkHardComplianceGates(candidateTitle, fetchedText);
+  if (hardGate?.blocked) {
+    await writeTombstone(pb, candidateUrl, hardGate.reason, 'hard_compliance');
+    await scratchpadColl(pb).update(row.id, { step_position: 'STEP_3' });
+    rowLog.info({ reasonCode: hardGate.reason }, 'tombstone written (hard compliance gate)');
+    return;
+  }
+
+  // D-12: Taste BLOCK pre-scoring filter — before LLM call.
+  const tasteRules = await loadTasteRules(pb);
+  const passed = await applyTastePreScoring(
+    [{ url: candidateUrl, title: candidateTitle, snippet: fetchedText }],
+    tasteRules,
+    pb,
+    candidateUrl,
+  );
+  if (passed.length === 0) {
+    await scratchpadColl(pb).update(row.id, { step_position: 'STEP_3' });
+    rowLog.info({ reasonCode: 'taste_blocked' }, 'tombstone written (taste BLOCK pre-scoring)');
+    return;
+  }
 
   // Build rule-pack messages (jobs pipeline).
   const messages = buildJobsMessages({
@@ -285,6 +315,29 @@ export async function drainLootRow(
     await writeTombstone(pb, candidateUrl, 'link_hop_failed', 'auditor');
     await scratchpadColl(pb).update(row.id, { step_position: 'STEP_3' });
     rowLog.info({ reasonCode: 'link_hop_failed' }, 'tombstone written (hop failure)');
+    return;
+  }
+
+  // D-13: Hard compliance gates FIRST (before taste rules, before LLM).
+  const hardGate = checkHardComplianceGates(candidateTitle, faqText);
+  if (hardGate?.blocked) {
+    await writeTombstone(pb, candidateUrl, hardGate.reason, 'hard_compliance');
+    await scratchpadColl(pb).update(row.id, { step_position: 'STEP_3' });
+    rowLog.info({ reasonCode: hardGate.reason }, 'tombstone written (hard compliance gate)');
+    return;
+  }
+
+  // D-12: Taste BLOCK pre-scoring filter — before LLM call.
+  const tasteRules = await loadTasteRules(pb);
+  const passed = await applyTastePreScoring(
+    [{ url: candidateUrl, title: candidateTitle, snippet: faqText }],
+    tasteRules,
+    pb,
+    candidateUrl,
+  );
+  if (passed.length === 0) {
+    await scratchpadColl(pb).update(row.id, { step_position: 'STEP_3' });
+    rowLog.info({ reasonCode: 'taste_blocked' }, 'tombstone written (taste BLOCK pre-scoring)');
     return;
   }
 
@@ -420,12 +473,41 @@ async function processEventsRow(
   const candidateTitle = row.candidate_title ?? '';
   const fetchedText = row.partial_buffer ?? '';
 
+  // D-13: Hard compliance gates FIRST (before taste rules, before LLM).
+  // 2+yr roles, unpaid non-fellowships, pay-to-training, US/EU-only swag
+  // are mission-non-negotiable — cannot be overridden by taste rules.
+  const hardGate = checkHardComplianceGates(candidateTitle, fetchedText);
+  if (hardGate?.blocked) {
+    await writeTombstone(pb, candidateUrl, hardGate.reason, 'hard_compliance');
+    await scratchpadColl(pb).update(row.id, { step_position: 'STEP_3' });
+    rowLog.info({ reasonCode: hardGate.reason }, 'tombstone written (hard compliance gate)');
+    return;
+  }
+
+  // D-12: Taste BLOCK pre-scoring filter — before LLM call (saves quota).
+  const tasteRules = await loadTasteRules(pb);
+  const passed = await applyTastePreScoring(
+    [{ url: candidateUrl, title: candidateTitle, snippet: fetchedText }],
+    tasteRules,
+    pb,
+    candidateUrl,
+  );
+  if (passed.length === 0) {
+    await scratchpadColl(pb).update(row.id, { step_position: 'STEP_3' });
+    rowLog.info({ reasonCode: 'taste_blocked' }, 'tombstone written (taste BLOCK pre-scoring)');
+    return;
+  }
+
+  // D-12: Advisory system-prompt injection from BOOST/WEIGHT/CUSTOM rules.
+  const tasteInjection = buildTastePromptInjection(tasteRules);
+
   // Step 1: build events audit messages + call LlmRouter (auditor-events-1).
   const messages = buildEventsMessages({
     pipeline: 'events',
     candidateUrl,
     candidateTitle,
     fetchedText,
+    tasteInjection,
   });
 
   const result = await router.complete({
@@ -598,6 +680,29 @@ async function drainLocalRow(
   const candidateUrl = row.candidate_url;
   const candidateTitle = row.candidate_title ?? '';
   const fetchedText = row.partial_buffer ?? '';
+
+  // D-13: Hard compliance gates FIRST (before taste rules, before LLM).
+  const hardGate = checkHardComplianceGates(candidateTitle, fetchedText);
+  if (hardGate?.blocked) {
+    await writeTombstone(pb, candidateUrl, hardGate.reason, 'hard_compliance');
+    await scratchpadColl(pb).update(row.id, { step_position: 'STEP_3' });
+    rowLog.info({ reasonCode: hardGate.reason }, 'tombstone written (hard compliance gate)');
+    return;
+  }
+
+  // D-12: Taste BLOCK pre-scoring filter — before LLM call.
+  const tasteRules = await loadTasteRules(pb);
+  const passed = await applyTastePreScoring(
+    [{ url: candidateUrl, title: candidateTitle, snippet: fetchedText }],
+    tasteRules,
+    pb,
+    candidateUrl,
+  );
+  if (passed.length === 0) {
+    await scratchpadColl(pb).update(row.id, { step_position: 'STEP_3' });
+    rowLog.info({ reasonCode: 'taste_blocked' }, 'tombstone written (taste BLOCK pre-scoring)');
+    return;
+  }
 
   // Step 1: build local messages + call LlmRouter (auditor-local-1).
   const messages = buildLocalMessages({
