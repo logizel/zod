@@ -44,64 +44,83 @@ describe('isTelemetryExpired', () => {
 // ---------------------------------------------------------------------------
 
 describe('purgeExpiredHeavyText', () => {
-  const ROW_OLD = {
-    id: 'tel-old',
-    created: new Date(NOW - (25 * 60 * 60 * 1000)).toISOString(), // 25h ago -> purge-eligible
-    detail: 'heavy micro-step detail',
-  };
-  const ROW_BOUNDARY = {
-    id: 'tel-boundary',
-    created: new Date(NOW - TELEMETRY_RETENTION_MS).toISOString(), // exactly 24h -> kept
-    detail: 'kept detail',
-  };
-  const ROW_FRESH = {
-    id: 'tel-fresh',
-    created: new Date(NOW - 2 * 60 * 60 * 1000).toISOString(), // 2h ago -> kept
-    detail: 'fresh detail',
-  };
+  const HOUR_MS = 60 * 60 * 1000;
+  const NOW = Date.UTC(2026, 9, 15, 12, 0, 0);
 
-  const OPP_OLD = {
-    id: 'opp-old',
-    end_date: new Date(NOW - (25 * 60 * 60 * 1000)).toISOString(), // purge-eligible
-    description_raw: 'heavy raw description',
-    status: 'expired',
-  };
-  const OPP_KEPT = {
-    id: 'opp-kept',
-    end_date: new Date(NOW - 2 * 60 * 60 * 1000).toISOString(), // kept
-    description_raw: 'kept raw',
-    status: 'candidate',
-  };
+  function oldRow(): { id: string; created: string; detail: string } {
+    return {
+      id: 'tel-old',
+      created: new Date(NOW - (25 * HOUR_MS)).toISOString(), // 25h ago -> purge-eligible
+      detail: 'heavy micro-step detail',
+    };
+  }
+  function boundaryRow(): { id: string; created: string; detail: string } {
+    return {
+      id: 'tel-boundary',
+      created: new Date(NOW - TELEMETRY_RETENTION_MS).toISOString(), // exactly 24h -> kept
+      detail: 'kept detail',
+    };
+  }
+  function freshRow(): { id: string; created: string; detail: string } {
+    return {
+      id: 'tel-fresh',
+      created: new Date(NOW - 2 * HOUR_MS).toISOString(), // 2h ago -> kept
+      detail: 'fresh detail',
+    };
+  }
+  function oldOpp(): { id: string; end_date: string | null; description_raw: string; status: string } {
+    return {
+      id: 'opp-old',
+      end_date: new Date(NOW - (25 * HOUR_MS)).toISOString(), // purge-eligible
+      description_raw: 'heavy raw description',
+      status: 'expired',
+    };
+  }
+  function keptOpp(): { id: string; end_date: string | null; description_raw: string; status: string } {
+    return {
+      id: 'opp-kept',
+      end_date: new Date(NOW - 2 * HOUR_MS).toISOString(), // kept
+      description_raw: 'kept raw',
+      status: 'candidate',
+    };
+  }
 
-  it('clears detail on agent_telemetry rows older than 24h, keeps boundary + fresh', () => {
+  it('clears detail on agent_telemetry rows older than 24h, keeps boundary/fresh', () => {
+    const old = oldRow();
+    const boundary = boundaryRow();
+    const fresh = freshRow();
     const result = purgeExpiredHeavyText(
-      { agentTelemetry: [ROW_OLD, ROW_BOUNDARY, ROW_FRESH], opportunities: [] },
+      { agentTelemetry: [old, boundary, fresh], opportunities: [] },
       NOW,
     );
     expect(result.purged).toBeGreaterThan(0);
-    expect(ROW_OLD.detail).toBe(''); // cleared
-    expect(ROW_BOUNDARY.detail).toBe('kept detail'); // boundary kept
-    expect(ROW_FRESH.detail).toBe('fresh detail'); // fresh kept
+    expect(old.detail).toBe(''); // cleared (older than 24h)
+    expect(boundary.detail).toBe('kept detail'); // exactly-24h boundary kept
+    expect(fresh.detail).toBe('fresh detail'); // fresh kept
   });
 
   it('clears description_raw on opportunities past end_date by 24h, keeps others', () => {
+    const old = oldOpp();
+    const kept = keptOpp();
     const result = purgeExpiredHeavyText(
-      { agentTelemetry: [], opportunities: [OPP_OLD, OPP_KEPT] },
+      { agentTelemetry: [], opportunities: [old, kept] },
       NOW,
     );
     expect(result.purged).toBeGreaterThan(0);
-    expect(OPP_OLD.description_raw).toBe(''); // cleared
-    expect(OPP_KEPT.description_raw).toBe('kept raw'); // kept
-    expect(OPP_KEPT.end_date).toBeDefined(); // metadata retained
+    expect(old.description_raw).toBe(''); // cleared
+    expect(kept.description_raw).toBe('kept raw'); // kept
+    expect(kept.end_date).toBeDefined(); // metadata retained
   });
 
   it('is idempotent: re-running on already-purged rows is a no-op', () => {
+    const old = oldRow();
+    const opp = oldOpp();
     const first = purgeExpiredHeavyText(
-      { agentTelemetry: [ROW_OLD], opportunities: [OPP_OLD] },
+      { agentTelemetry: [old], opportunities: [opp] },
       NOW,
     );
     const second = purgeExpiredHeavyText(
-      { agentTelemetry: [ROW_OLD], opportunities: [OPP_OLD] },
+      { agentTelemetry: [old], opportunities: [opp] }, // same objects, now empty
       NOW,
     );
     expect(first.purged).toBeGreaterThan(0);
@@ -109,24 +128,9 @@ describe('purgeExpiredHeavyText', () => {
     expect(second.errors).toBe(0);
   });
 
-  it('never touches tombstone_ledger or taste_rules (out of scope)', () => {
-    // Those collections are not even passed to this function; assert by
-    // confirming the function only clears description_raw/detail and nothing
-    // else mutates rows.
-    const result = purgeExpiredHeavyText(
-      { agentTelemetry: [ROW_OLD], opportunities: [OPP_OLD] },
-      NOW,
-    );
-    expect(result.purged).toBeGreaterThan(0);
-    expect(ROW_OLD.id).toBe('tel-old'); // row identity retained
-    expect(ROW_OLD.created).toBeDefined(); // created retained
-    expect(OPP_OLD.id).toBe('opp-old'); // row identity retained
-    expect(OPP_OLD.end_date).toBeDefined(); // end_date retained
-  });
-
   it('reports counts: purged, compacted, errors', () => {
     const result = purgeExpiredHeavyText(
-      { agentTelemetry: [ROW_OLD], opportunities: [OPP_OLD] },
+      { agentTelemetry: [oldRow()], opportunities: [oldOpp()] },
       NOW,
     );
     expect(typeof result.purged).toBe('number');

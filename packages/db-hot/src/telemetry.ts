@@ -65,6 +65,44 @@ export function purgeExpiredHeavyText(
   rows: { agentTelemetry: TelemetryRow[]; opportunities: OpportunityRow[] },
   nowMs: number = Date.now(),
 ): PurgeResult {
-  // STUB: replaced by real implementation in Phase 7 Task 3 GREEN step.
-  return { purged: 0, compacted: 0, errors: 0 };
+  let purged = 0; // heavy-text cells cleared
+  let compacted = 0; // rows visited that were purge-eligible
+  let errors = 0; // rows that threw during expiry evaluation
+
+  for (const row of rows.agentTelemetry) {
+    let expired = false;
+    try {
+      expired = isTelemetryExpired(row.created, nowMs);
+    } catch {
+      errors += 1;
+      continue;
+    }
+    if (expired && row.detail !== '') {
+      row.detail = '';
+      purged += 1;
+      compacted += 1;
+    } else if (expired) {
+      compacted += 1;
+    }
+  }
+
+  for (const row of rows.opportunities) {
+    if (row.end_date == null) continue;
+    let expired = false;
+    try {
+      expired = isTelemetryExpired(row.end_date, nowMs);
+    } catch {
+      errors += 1;
+      continue;
+    }
+    if (expired && row.description_raw !== '') {
+      row.description_raw = '';
+      purged += 1;
+      compacted += 1;
+    } else if (expired) {
+      compacted += 1;
+    }
+  }
+
+  return { purged, compacted, errors };
 }
