@@ -31,6 +31,7 @@ import { getLootCandidates } from '@zod/discord-router/portals/loot/vendors';
 import { localSource } from '@zod/discord-router/portals/local';
 import { socialSource } from '@zod/discord-router/portals/social';
 import { startRelayService } from '@zod/discord-router/relay';
+import { reminderTick } from '@zod/discord-router/reminder';
 import { OrchestratorScheduler } from '@zod/orchestrator';
 
 type CandidateSource = {
@@ -95,6 +96,9 @@ export function startSchedulerRegistry(log: TickLogger): RegistryHandle {
     tickHandler: (def, jobLog) => {
       if (def.name === 'relay-poll') {
         return relayService.tick();
+      }
+      if (def.name === 'reminder-tick') {
+        return reminderTick({ env: env as any, log: jobLog as any });
       }
     },
   });
