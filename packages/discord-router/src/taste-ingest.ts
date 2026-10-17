@@ -175,6 +175,12 @@ export function createTasteIngestionHandler(deps: TasteIngestionDeps): TasteInge
         msg.channelId === env.DISCORD_CHANNEL_TRAINING &&
         msg.content.startsWith('!rule')
       ) {
+        // CR-04 / G-06-2: only authorized operators may create system-wide
+        // taste rules via keyword command in the training channel.
+        if (!OPERATOR_USER_IDS.has(msg.author.id)) {
+          await msg.reply('❌ You are not authorized to create taste rules.');
+          return;
+        }
         const parsed = parseRuleCommand(msg.content);
         const tasteRule = TasteRule.parse({
           kind: parsed.kind,

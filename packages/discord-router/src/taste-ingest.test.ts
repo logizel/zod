@@ -316,7 +316,7 @@ describe('taste ingestion handler (D-11, T-6-10, Pitfall 9)', () => {
     const handlerFn = client.on.mock.calls.find((c: any[]) => c[0] === 'messageCreate')?.[1];
 
     const msg = {
-      author: { bot: false },
+      author: { bot: false, id: 'op-123' },
       channelId: 'channel-training-123',
       content: '!rule BLOCK pay-to-join scams',
       reply: vi.fn().mockResolvedValue(undefined),
@@ -332,6 +332,70 @@ describe('taste ingestion handler (D-11, T-6-10, Pitfall 9)', () => {
     });
     expect(msg.reply).toHaveBeenCalledWith(
       '✅ Taste rule created: BLOCK — pay-to-join scams',
+    );
+  });
+
+  it('rejects !rule keyword command from unauthorized user in training channel (no taste rule created)', async () => {
+    const pb = makePbMock();
+    hoisted.mockCreatePbClient.mockReturnValue(pb);
+
+    const client = { on: vi.fn() } as any;
+    hoisted.mockGetClient.mockReturnValue(client);
+    hoisted.mockCreateLogger.mockReturnValue(mockLogger);
+
+    createTasteIngestionHandler({
+      env: testEnv,
+      log: mockLogger as any,
+      pb: pb as any,
+      client,
+    });
+
+    const handlerFn = client.on.mock.calls.find((c: any[]) => c[0] === 'messageCreate')?.[1];
+
+    const msg = {
+      author: { bot: false, id: 'user-456' },
+      channelId: 'channel-training-123',
+      content: '!rule BLOCK pay-to-join scams',
+      reply: vi.fn().mockResolvedValue(undefined),
+    };
+
+    await handlerFn(msg);
+
+    expect(pb.collection('taste_rules').create).not.toHaveBeenCalled();
+    expect(msg.reply).toHaveBeenCalledWith(
+      '❌ You are not authorized to create taste rules.',
+    );
+  });
+
+  it('rejects !rule keyword command when OPERATOR_USER_IDS is empty (fail-closed)', async () => {
+    const pb = makePbMock();
+    hoisted.mockCreatePbClient.mockReturnValue(pb);
+
+    const client = { on: vi.fn() } as any;
+    hoisted.mockGetClient.mockReturnValue(client);
+    hoisted.mockCreateLogger.mockReturnValue(mockLogger);
+
+    createTasteIngestionHandler({
+      env: { ...testEnv, OPERATOR_USER_IDS: '' } as any,
+      log: mockLogger as any,
+      pb: pb as any,
+      client,
+    });
+
+    const handlerFn = client.on.mock.calls.find((c: any[]) => c[0] === 'messageCreate')?.[1];
+
+    const msg = {
+      author: { bot: false, id: 'op-123' },
+      channelId: 'channel-training-123',
+      content: '!rule BOOST student hackathons',
+      reply: vi.fn().mockResolvedValue(undefined),
+    };
+
+    await handlerFn(msg);
+
+    expect(pb.collection('taste_rules').create).not.toHaveBeenCalled();
+    expect(msg.reply).toHaveBeenCalledWith(
+      '❌ You are not authorized to create taste rules.',
     );
   });
 
@@ -517,7 +581,7 @@ describe('taste ingestion handler (D-11, T-6-10, Pitfall 9)', () => {
     const handlerFn = client.on.mock.calls.find((c: any[]) => c[0] === 'messageCreate')?.[1];
 
     const msg = {
-      author: { bot: false },
+      author: { bot: false, id: 'op-123' },
       channelId: 'channel-training-123',
       content: '!rule WEIGHT 1.5 prioritize NITK events',
       reply: vi.fn().mockResolvedValue(undefined),
