@@ -93,6 +93,12 @@ export function createTasteIngestionHandler(deps: TasteIngestionDeps): TasteInge
   const { env, log, pb: pbDeps, client: clientDeps } = deps;
   const pbLog = log.child({ component: 'discord-router/taste-ingest' });
 
+  // CR-02 / G-06-1: operator allowlist for DM taste-rule creation (Path 3).
+  // Empty OPERATOR_USER_IDS => fail-closed: no DM user is authorized.
+  const OPERATOR_USER_IDS = new Set(
+    (env.OPERATOR_USER_IDS ?? '').split(',').filter(Boolean),
+  );
+
   let pbPromise: Promise<any> | null = null;
   const getPb = async () => {
     if (!pbPromise) {
@@ -193,6 +199,11 @@ export function createTasteIngestionHandler(deps: TasteIngestionDeps): TasteInge
       // Path 3: DM to bot
       const isDM = msg.channel?.type === 'DM' || msg.guild === null;
       if (isDM && msg.content.startsWith('!rule')) {
+        // CR-02: only authorized operators may create system-wide taste rules via DM.
+        if (!OPERATOR_USER_IDS.has(msg.author.id)) {
+          await msg.reply('❌ You are not authorized to create taste rules.');
+          return;
+        }
         const parsed = parseRuleCommand(msg.content);
         const tasteRule = TasteRule.parse({
           kind: parsed.kind,
