@@ -53,6 +53,7 @@ function makePbMock(collectionOverrides: Record<string, any> = {}): any {
 const testEnv = {
   DISCORD_TOKEN: 'test-token',
   DISCORD_CHANNEL_TRAINING: 'channel-training-123',
+  OPERATOR_USER_IDS: 'op-123',
 } as any;
 
 // ---------------------------------------------------------------------------
@@ -382,7 +383,7 @@ describe('taste ingestion handler (D-11, T-6-10, Pitfall 9)', () => {
     const handlerFn = client.on.mock.calls.find((c: any[]) => c[0] === 'messageCreate')?.[1];
 
     const msg = {
-      author: { bot: false },
+      author: { bot: false, id: 'op-123' },
       channel: { type: 'DM' },
       guild: null,
       content: '!rule BOOST student hackathons',
@@ -399,6 +400,72 @@ describe('taste ingestion handler (D-11, T-6-10, Pitfall 9)', () => {
     });
     expect(msg.reply).toHaveBeenCalledWith(
       '✅ Taste rule created: BOOST — student hackathons',
+    );
+  });
+
+  it('rejects DM !rule from unauthorized user (no taste rule created)', async () => {
+    const pb = makePbMock();
+    hoisted.mockCreatePbClient.mockReturnValue(pb);
+
+    const client = { on: vi.fn() } as any;
+    hoisted.mockGetClient.mockReturnValue(client);
+    hoisted.mockCreateLogger.mockReturnValue(mockLogger);
+
+    createTasteIngestionHandler({
+      env: { ...testEnv, OPERATOR_USER_IDS: 'op-other' } as any,
+      log: mockLogger as any,
+      pb: pb as any,
+      client,
+    });
+
+    const handlerFn = client.on.mock.calls.find((c: any[]) => c[0] === 'messageCreate')?.[1];
+
+    const msg = {
+      author: { bot: false, id: 'user-456' },
+      channel: { type: 'DM' },
+      guild: null,
+      content: '!rule BOOST student hackathons',
+      reply: vi.fn().mockResolvedValue(undefined),
+    };
+
+    await handlerFn(msg);
+
+    expect(pb.collection('taste_rules').create).not.toHaveBeenCalled();
+    expect(msg.reply).toHaveBeenCalledWith(
+      '❌ You are not authorized to create taste rules.',
+    );
+  });
+
+  it('rejects DM !rule when OPERATOR_USER_IDS is empty (fail-closed)', async () => {
+    const pb = makePbMock();
+    hoisted.mockCreatePbClient.mockReturnValue(pb);
+
+    const client = { on: vi.fn() } as any;
+    hoisted.mockGetClient.mockReturnValue(client);
+    hoisted.mockCreateLogger.mockReturnValue(mockLogger);
+
+    createTasteIngestionHandler({
+      env: { ...testEnv, OPERATOR_USER_IDS: '' } as any,
+      log: mockLogger as any,
+      pb: pb as any,
+      client,
+    });
+
+    const handlerFn = client.on.mock.calls.find((c: any[]) => c[0] === 'messageCreate')?.[1];
+
+    const msg = {
+      author: { bot: false, id: 'op-123' },
+      channel: { type: 'DM' },
+      guild: null,
+      content: '!rule BOOST student hackathons',
+      reply: vi.fn().mockResolvedValue(undefined),
+    };
+
+    await handlerFn(msg);
+
+    expect(pb.collection('taste_rules').create).not.toHaveBeenCalled();
+    expect(msg.reply).toHaveBeenCalledWith(
+      '❌ You are not authorized to create taste rules.',
     );
   });
 
