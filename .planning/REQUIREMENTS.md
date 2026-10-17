@@ -54,16 +54,16 @@
 - [x] **MEM-02**: Hot `agent_telemetry` ring streams slot/provider/model/step/url/status over SSE with 24h retention
 - [x] **MEM-03**: Cold Turso `tombstone_ledger` (url_hash PK, fingerprint, terminal status) is checked pre-scrape in <5ms and never deleted
 - [ ] **MEM-04**: Cold `taste_rules` (BLOCK/BOOST/WEIGHT/CUSTOM) inject into Auditor/Curator prompts from #🧠-bot-training-chat feedback with confirmation reply
-- [ ] **MEM-05**: Midnight garbage collector purges heavy text 24h after end_date (48h after rejection), retaining tombstones + taste rules
+- [x] **MEM-05**: Midnight garbage collector purges heavy text 24h after end_date (48h after rejection), retaining tombstones + taste rules
 
 ### Delivery & Dashboard
 
 - [x] **UI-01**: Discord router posts audit cards (title, organizer, dates, mode, prize breakdown, merged links, 1-line audit) to the 10-channel matrix with 48h/24h deadline reminders for bookmarked/priority items
 - [ ] **UI-02**: 📌 reaction bookmarks an opportunity and arms its deadline reminders
-- [ ] **DSH-01**: Cloudflare Zero Trust gate rejects unauthenticated requests before any UI or SSE stream renders; dashboard is read-only v1
-- [ ] **DSH-02**: Top panel shows rolling agent slots (provider/model reel + micro-step ticker incl. 429 baton-pass) live from PocketBase SSE
-- [ ] **DSH-03**: Middle panel shows 2D pool health grid (READY/ACTIVE/60s-COOLDOWN/DAILY-CAP per provider-model bucket)
-- [ ] **DSH-04**: Bottom panel shows filterable read-only boards (Events Local/Travel/Online, TBA queue, Jobs Sys vs General, Loot, live audit & rejection log) served via cloudflared tunnel with zero open inbound ports
+- [x] **DSH-01**: Cloudflare Zero Trust gate rejects unauthenticated requests before any UI or SSE stream renders; dashboard is read-only v1
+- [x] **DSH-02**: Top panel shows rolling agent slots (provider/model reel + micro-step ticker incl. 429 baton-pass) live from PocketBase SSE
+- [x] **DSH-03**: Middle panel shows 2D pool health grid (READY/ACTIVE/60s-COOLDOWN/DAILY-CAP per provider-model bucket)
+- [x] **DSH-04**: Bottom panel shows filterable read-only boards (Events Local/Travel/Online, TBA queue, Jobs Sys vs General, Loot, live audit & rejection log) served via cloudflared tunnel with zero open inbound ports
 - [x] **OPS-01**: Oracle VM holds 22–30% baseline RAM via 2.5GB cache buffer to avoid 7-day idle reclaim; single shared browser capped at 2–3 tabs with media loading disabled
 
 ## v2 Requirements
@@ -131,13 +131,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MEM-02 | Phase 1 | Complete |
 | MEM-03 | Phase 1 | Complete |
 | MEM-04 | Phase 6 | Pending |
-| MEM-05 | Phase 7 | Pending |
+| MEM-05 | Phase 7 | Complete |
 | UI-01 | Phase 4 | Complete |
 | UI-02 | Phase 6 | Pending |
-| DSH-01 | Phase 7 | Pending |
-| DSH-02 | Phase 7 | Pending |
-| DSH-03 | Phase 7 | Pending |
-| DSH-04 | Phase 7 | Pending |
+| DSH-01 | Phase 7 | Complete |
+| DSH-02 | Phase 7 | Complete |
+| DSH-03 | Phase 7 | Complete |
+| DSH-04 | Phase 7 | Complete |
 | OPS-01 | Phase 1 | Complete |
 
 **Coverage:**
