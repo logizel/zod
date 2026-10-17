@@ -24,6 +24,10 @@ export const EnvSchema = z.object({
   // D-06: fellowship allowlist extension — operator-extensible without a
   // release. getFellowshipAllowlist() merges this into the config default.
   FELLOWSHIP_ALLOWLIST_EXTRA: z.string().default(''),
+  // CR-02 / G-06-1: operator allowlist for DM taste-rule creation (Path 3).
+  // Empty default = no operators authorized (fail-closed). Comma-separated
+  // Discord user IDs.
+  OPERATOR_USER_IDS: z.string().default(''),
   // Phase 6: local DK/Udupi domain inventory env override (D-01).
   LOCAL_WATCHLIST_DOMAINS: z.string().default(''),
   // Phase 6: X/LinkedIn session-cookie file path (D-07).
