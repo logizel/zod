@@ -42,7 +42,16 @@ async function main(): Promise<void> {
       res.write(`data: ${JSON.stringify({ type: 'connected', ts: Date.now() })}\n\n`);
       req.on('close', () => hub.removeClient(client));
     } else if (url === '/api/boards') {
-      handleBoards(req, res);
+      // Fetch opportunities from PocketBase (hot store) and apply filters
+      // server-side in handleBoards. Read-only: getFullList only, no writes.
+      let rows: Array<Record<string, unknown>> = [];
+      try {
+        const records = await pb.collection('opportunities').getFullList<Record<string, unknown>>();
+        rows = records as unknown as Array<Record<string, unknown>>;
+      } catch {
+        rows = [];
+      }
+      handleBoards(req, res, { rows });
     } else {
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'not found' }));
