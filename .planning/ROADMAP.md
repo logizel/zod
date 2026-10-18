@@ -192,7 +192,7 @@ Plans:
   3. An unauthenticated request to the dashboard or its SSE stream is rejected before anything renders
   4. Killing cloudflared leaves pipelines running with alerts queued, and heavy text is purged on schedule while tombstones and taste rules survive
 
-**Plans**: 3/3 plans executed
+**Plans**: 3/3 plans executed + 4 gap-closure plans executed (--gaps-only)
 
 **Wave 1**
 - [x] 07-01-PLAN.md — Tracer: stream server + SSE + one board + Zero Trust gate + GC stub (DSH-01, DSH-02, DSH-03, MEM-05)
@@ -202,6 +202,12 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 - [x] 07-03-PLAN.md — Ops hardening: kill-tests + GC telemetry + 25h alert + #🛠-ops-health + staleness banner + backoff + viewer cap + secrets hygiene (DSH-01, DSH-04, MEM-05)
+
+**Gap-closure plans (--gaps-only, executed 2026-10-18):**
+- [x] 07-FIX-CR-01-PLAN.md (plan 05, wave 1) — G-07-CR-01 blocker: data-stream-url/data-boards-url on dashboard <script> tag → tunnel origin
+- [x] 07-FIX-WR-01-PLAN.md (plan 04, wave 1) — G-07-WR-01 major: application-layer auth authorizeStream() on /api/stream before hub.addClient
+- [x] 07-FIX-WR-04-PLAN.md (plan 06, wave 2) — G-07-WR-04 minor: remove client-side reconnect-as-cap viewer logic
+- [x] 07-FIX-WR-05-PLAN.md (plan 07, wave 3) — G-07-WR-05 minor: user-visible 'Boards failed to load' error in loadBoards .catch
 
 **UI hint**: yes
 
