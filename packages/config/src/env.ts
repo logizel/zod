@@ -47,6 +47,8 @@ export const EnvSchema = z.object({
   STALENESS_THRESHOLD_MS: z.string().default('90000'),
   // Phase 7: hard cap on concurrent SSE streams (D-08, ~2 viewers).
   SSE_VIEWER_CAP: z.string().default('2'),
+  // Phase 7: SSE connection timeout in ms (CR-04, reap stalled sockets).
+  SSE_CONNECTION_TIMEOUT_MS: z.string().default('120000'),
   // Phase 7: GC 25h-missing alert threshold in hours (D-14).
   GC_ALERT_HOURS: z.string().default('25'),
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),

@@ -91,6 +91,7 @@ export function assertSchedulerGuards(mod: SchedulerModule = cron): void {
     ...GATEWAY_JOBS,
     ...JOB_POLL_JOBS,
     ...AUDIT_JOBS,
+    ...GC_JOBS,
   ]) {
     if (!mod.validate(def.expression)) {
       throw new Error(

@@ -52,6 +52,13 @@ async function main(): Promise<void> {
         'Cache-Control': 'no-cache',
         'Connection': 'keep-alive',
       });
+      const streamTimeoutMs = Number(env.SSE_CONNECTION_TIMEOUT_MS ?? 120000);
+      const onStreamTimeout = () => {
+        hub.removeClient(client);
+        res.end();
+      };
+      res.setTimeout(streamTimeoutMs, onStreamTimeout);
+      req.on('timeout', onStreamTimeout);
       const client: {
         write: (chunk: string) => boolean;
         close: () => void;

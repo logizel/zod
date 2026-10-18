@@ -80,6 +80,7 @@ const requiredEnv = {
   STALENESS_THRESHOLD_MS: '90000',
   SSE_VIEWER_CAP: '2',
   GC_ALERT_HOURS: '25',
+  SSE_CONNECTION_TIMEOUT_MS: '120000',
   LOG_LEVEL: 'info' as const,
 };
 
