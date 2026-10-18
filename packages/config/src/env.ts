@@ -51,6 +51,8 @@ export const EnvSchema = z.object({
   SSE_CONNECTION_TIMEOUT_MS: z.string().default('120000'),
   // Phase 7: GC 25h-missing alert threshold in hours (D-14).
   GC_ALERT_HOURS: z.string().default('25'),
+  // G-07-WR-01: owner email for application-layer /api/stream auth check.
+  ACCESS_OWNER_EMAIL: z.email().default(''),
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
 });
 

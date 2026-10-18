@@ -6,7 +6,7 @@
 // Owned by dashboard.service systemd unit (Restart=always).
 
 import { createServer } from 'node:http';
-import { parseEnv } from '@zod/config';
+import { parseEnv, type Env } from '@zod/config';
 import { createLogger } from '@zod/logger';
 import { createPbClient, type HotEnv } from '@zod/db-hot';
 import { SseHub } from './sse.js';
@@ -16,6 +16,19 @@ import { handleBoards, handleAuditOlder, type StatementExecutor } from './boards
 const STUB_DB: StatementExecutor = {
   execute: async (_sql: string, _args?: unknown[]) => ({ rows: [] }),
 };
+
+// G-07-WR-01: application-layer auth check on /api/stream before hub.addClient.
+// Reads the Cloudflare Access identity header injected on tunneled requests;
+// permits the SSE connection only when it equals env.ACCESS_OWNER_EMAIL.
+// Cloudflare Access edge policy remains the outer gate (D-04); this is
+// defense-in-depth, not a replacement for Zero Trust.
+function authorizeStream(req: import('http').IncomingMessage, env: Env): boolean {
+  const email = req.headers['cf-access-authenticated-user-email'];
+  if (!email || typeof email !== 'string' || email !== env.ACCESS_OWNER_EMAIL) {
+    return false;
+  }
+  return true;
+}
 
 async function main(): Promise<void> {
   // Fail-fast env gate first (D-06).
@@ -45,6 +58,12 @@ async function main(): Promise<void> {
   const server = createServer(async (req, res) => {
     const url = req.url ?? '';
     if (url === '/api/stream') {
+      // Application-layer defense-in-depth (G-07-WR-01): reject unauth before hub.addClient.
+      if (!authorizeStream(req, env)) {
+        res.writeHead(401, { 'WWW-Authenticate': 'Bearer realm="dashboard"' });
+        res.end('unauthorized');
+        return;
+      }
       // Zero Trust Access already rejected unauth at the edge (D-04).
       // Defense-in-depth: connection timeout reaps stalled sockets (CR-04).
       res.writeHead(200, {

@@ -243,7 +243,7 @@
     </section>
   </main>
 
-  <script>
+  <script data-stream-url="https://dash.example.com/api/stream" data-boards-url="https://dash.example.com/api/boards">
     /* ------------------------------------------------------------------ */
     /* D-02: vanilla JS, no build step, no npm deps.                      */
     /* D-08: exponential backoff + jitter reconnect, hard cap ~2 streams. */
@@ -262,9 +262,6 @@
     let es = null;
     let backoff = 1000;
     const MAX_BACKOFF = 30000;
-    let reconnects = 0;
-    // D-08: hard cap ~2 concurrent streams (env key: SSE_VIEWER_CAP, default 2)
-    const SSE_VIEWER_CAP = 2;
     let lastEvent = Date.now();
     // D-07: staleness banner threshold (env key: STALENESS_THRESHOLD_MS, default 90000ms)
     const STALENESS_THRESHOLD_MS = 90000;
@@ -296,7 +293,7 @@
           stalenessBanner.style.display = 'none';
           if (data.type === 'connected') {
             if (slotsContainer) slotsContainer.textContent = 'stream connected';
-            backoff = 1000; reconnects = 0;
+            backoff = 1000;
           } else if (data.type === 'delta') {
             renderSlots(Array.isArray(data.slots) ? data.slots : []);
             renderHealthGrid(Array.isArray(data.bucketStates) ? data.bucketStates : []);
@@ -305,11 +302,7 @@
         } catch { /* ignore malformed SSE data */ }
       };
       es.onerror = () => {
-        es.close(); es = null; reconnects++;
-        if (reconnects > SSE_VIEWER_CAP) {
-          if (slotsContainer) slotsContainer.textContent = 'stream limit reached';
-          return;
-        }
+        es.close(); es = null;
         setTimeout(connect, backoff + Math.random() * 1000);
         backoff = Math.min(backoff * 2, MAX_BACKOFF);
       };
@@ -384,7 +377,16 @@
       fetch(BOARDS_URL + (query ? '?' + query : ''))
         .then((r) => { if (!r.ok) throw new Error('boards ' + r.status); return r.json(); })
         .then((data) => renderBoard(activeTab, data))
-        .catch((err) => { console.error('boards fetch failed', err); });
+        .catch((err) => {
+          const msg = 'Boards failed to load: ' + (err?.message ?? String(err));
+          const section = document.getElementById('tab-' + activeTab);
+          if (section) {
+            const tbody = section.querySelector('tbody');
+            if (tbody) {
+              tbody.innerHTML = '<tr><td colspan="6" class="board-empty" style="color:#d18f8f">' + esc(msg) + '</td></tr>';
+            }
+          }
+        });
     }
 
     function renderBoard(tabId, data) {
