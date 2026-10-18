@@ -249,8 +249,8 @@
     /* D-08: exponential backoff + jitter reconnect, hard cap ~2 streams. */
     /* ------------------------------------------------------------------ */
 
-    const STREAM_URL = '/api/stream';
-    const BOARDS_URL = '/api/boards';
+    const STREAM_URL = (document.currentScript?.dataset?.streamUrl) || '/api/stream';
+    const BOARDS_URL = (document.currentScript?.dataset?.boardsUrl) || '/api/boards';
     const slotsContainer = document.getElementById('slots-container');
     const healthGrid = document.getElementById('health-grid');
     const slotCountEl = document.getElementById('slot-count');

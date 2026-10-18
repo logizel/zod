@@ -61,6 +61,26 @@ const requiredEnv = {
   GROQ_API_KEY: 'groq-test',
   GITHUB_TOKEN: 'github-test',
   DISCORD_TOKEN: 'discord-test',
+  SAMBANOVA_API_KEY: '',
+  DISCORD_CHANNEL_JOBS_SYS_CLOUD: '',
+  DISCORD_CHANNEL_JOBS_GENERAL: '',
+  DISCORD_CHANNEL_LOOT: '',
+  FELLOWSHIP_ALLOWLIST_EXTRA: '',
+  OPERATOR_USER_IDS: '',
+  LOCAL_WATCHLIST_DOMAINS: '',
+  SOCIAL_COOKIES_PATH: '',
+  DISCORD_RELAY_SOURCE_CHANNEL_ID: '',
+  BOOKMARK_EMOJI_ID: '',
+  DISCORD_CHANNEL_LOCAL: '',
+  DISCORD_CHANNEL_TRAVEL: '',
+  DISCORD_CHANNEL_TBA: '',
+  DISCORD_CHANNEL_RELAY: '',
+  DISCORD_CHANNEL_TRAINING: '',
+  DISCORD_CHANNEL_OPS_HEALTH: '',
+  STALENESS_THRESHOLD_MS: '90000',
+  SSE_VIEWER_CAP: '2',
+  GC_ALERT_HOURS: '25',
+  LOG_LEVEL: 'info' as const,
 };
 
 beforeEach(() => {
@@ -101,7 +121,7 @@ describe('runMidnightGc', () => {
     const sendAlert = vi.fn().mockResolvedValue(true);
     const first = await runMidnightGc(makeRows(), NOW, { sendAlert });
     expect(first.lastSuccessMs).toBe(NOW);
-    expect(first.alertRaised).toBe(true); // first run after reset: gap since never
+    expect(first.alertRaised).toBe(false); // first run after reset: no previous success to go stale
 
     sendAlert.mockClear();
     const second = await runMidnightGc(makeRows(), NOW + 1000, { sendAlert }); // 1s later
@@ -109,17 +129,13 @@ describe('runMidnightGc', () => {
     expect(sendAlert).not.toHaveBeenCalled();
   });
 
-  it('raises 25h-missing alert when GC has never succeeded', async () => {
+  it('does not raise 25h-missing alert when GC has never succeeded', async () => {
     const sendAlert = vi.fn().mockResolvedValue(true);
     // resetGcState already called in beforeEach -> lastSuccessfulGcMs is null
     const result = await runMidnightGc(makeRows(), NOW, { sendAlert });
 
-    expect(result.alertRaised).toBe(true);
-    expect(sendAlert).toHaveBeenCalledTimes(1);
-    const alertText = sendAlert.mock.calls[0][0];
-    expect(alertText).toContain('25h');
-    expect(alertText).toContain('GC');
-    expect(alertText).toContain('never');
+    expect(result.alertRaised).toBe(false); // no previous success to go stale
+    expect(sendAlert).not.toHaveBeenCalled();
   });
 
   it('raises 25h-missing alert when 25h have passed since last success', async () => {
@@ -162,9 +178,9 @@ describe('runMidnightGc', () => {
   it('uses GC_ALERT_HOURS from env (default 25h)', async () => {
     const sendAlert = vi.fn().mockResolvedValue(true);
     const env = { ...requiredEnv, GC_ALERT_HOURS: '1' };
-    // 2 hours have passed, alertHours=1 -> alert should fire
+    // First run: no previous success to go stale, so no alert even with short threshold
     const result = await runMidnightGc(makeRows(), NOW + (2 * HOUR_MS), { env, sendAlert });
-    expect(result.alertRaised).toBe(true);
-    expect(sendAlert).toHaveBeenCalledTimes(1);
+    expect(result.alertRaised).toBe(false); // no prior success to go stale
+    expect(sendAlert).not.toHaveBeenCalled();
   });
 });

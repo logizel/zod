@@ -5,6 +5,20 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./gc": {
+      "types": "./dist/gc.d.ts",
+      "default": "./dist/gc.js"
+    },
+    "./alerts": {
+      "types": "./dist/alerts.d.ts",
+      "default": "./dist/alerts.js"
+    }
+  },
   "scripts": {
     "build": "tsc -b",
     "test": "vitest run",

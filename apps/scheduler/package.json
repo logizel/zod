@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@zod/config": "workspace:*",
+    "@zod/dashboard-server": "workspace:*",
     "@zod/logger": "workspace:*",
     "@zod/scheduler-registry": "workspace:*",
     "@zod/db-hot": "workspace:*",

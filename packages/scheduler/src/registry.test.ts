@@ -354,22 +354,22 @@ describe('job poll jobs registered via single registry', () => {
   });
 });
 
-describe('assertSchedulerGuards covers all four job tables', () => {
-  it('assertSchedulerGuards passes against real cron for all four tables', () => {
+describe('assertSchedulerGuards covers all five job tables', () => {
+  it('assertSchedulerGuards passes against real cron for all five tables', () => {
     expect(() => assertSchedulerGuards(cron)).not.toThrow();
-    for (const def of [...STUB_JOBS, ...GATEWAY_JOBS, ...JOB_POLL_JOBS, ...AUDIT_JOBS]) {
+    for (const def of [...STUB_JOBS, ...GATEWAY_JOBS, ...JOB_POLL_JOBS, ...AUDIT_JOBS, ...GC_JOBS]) {
       expect(cron.validate(def.expression)).toBe(true);
     }
   });
 
-  it('assertSchedulerGuards iterates all four tables — rejecting one fails loudly', () => {
+  it('assertSchedulerGuards iterates all five tables — rejecting one fails loudly', () => {
     const { mod } = makeFakeScheduler();
     const rejecting = { ...mod, validate: () => false };
     expect(() => assertSchedulerGuards(rejecting)).toThrow(/scheduler-guard/);
   });
 
-  it('all four tables have noOverlap + jitter on every entry', () => {
-    for (const def of [...STUB_JOBS, ...GATEWAY_JOBS, ...JOB_POLL_JOBS, ...AUDIT_JOBS]) {
+  it('all five tables have noOverlap + jitter on every entry', () => {
+    for (const def of [...STUB_JOBS, ...GATEWAY_JOBS, ...JOB_POLL_JOBS, ...AUDIT_JOBS, ...GC_JOBS]) {
       expect(def.maxRandomDelayMs).toBeGreaterThan(0);
       expect(def.expression).toBeTruthy();
       expect(def.name).toMatch(/\S/);

@@ -69,6 +69,9 @@ importers:
       '@zod/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@zod/dashboard-server':
+        specifier: workspace:*
+        version: link:../dashboard-server
       '@zod/db-cold':
         specifier: workspace:*
         version: link:../../packages/db-cold

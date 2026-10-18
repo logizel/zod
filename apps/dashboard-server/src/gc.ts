@@ -61,10 +61,12 @@ export async function runMidnightGc(
   const gcAlertHours =
     env && env.GC_ALERT_HOURS != null ? Number(env.GC_ALERT_HOURS) : DEFAULT_GC_ALERT_HOURS;
 
-  // 25h-missing check: alert if never succeeded or past the threshold
+  // 25h-missing check: alert only when there was a previous successful run
+  // that has gone stale. Skip the alert on the very first successful run
+  // (lastSuccessfulGcMs === null) to avoid a false-positive on boot/reset.
   const msSinceLastSuccess =
     lastSuccessfulGcMs === null ? Infinity : nowMs - lastSuccessfulGcMs;
-  const alertNeeded = msSinceLastSuccess > gcAlertHours * 60 * 60 * 1000;
+  const alertNeeded = lastSuccessfulGcMs !== null && msSinceLastSuccess > gcAlertHours * 60 * 60 * 1000;
 
   // Purge heavy-text columns (idempotent: already-empty cells are no-ops)
   const purge = purgeExpiredHeavyText(rows, nowMs);

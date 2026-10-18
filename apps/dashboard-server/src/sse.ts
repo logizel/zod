@@ -8,6 +8,7 @@
 export type SseClient = {
   write: (chunk: string) => boolean;
   close?: () => void;
+  req?: { setTimeout: (ms: number) => void; on: (event: string, handler: () => void) => void };
 };
 
 export type PbCollection = {
@@ -54,15 +55,18 @@ export class SseHub {
   private lastEventTime = Date.now();
   private bucketStates: BucketStateSnapshot[];
   private slots: SseSlot[];
+  private readonly viewerCap: number;
 
   constructor(
     private readonly pb: PbLike,
     private readonly log: LogLike,
     bucketStates: BucketStateSnapshot[] = [],
     slots: SseSlot[] = [],
+    viewerCap: number = 2,
   ) {
     this.bucketStates = bucketStates;
     this.slots = slots;
+    this.viewerCap = viewerCap;
   }
 
   /** Replace bucket states (called when the BucketRegistry state changes). */
@@ -129,14 +133,23 @@ export class SseHub {
       })),
     })}\n\n`;
     for (const client of this.clients) {
-      client.write(payload);
+      try {
+        client.write(payload);
+      } catch {
+        // Isolate: one bad client must not deny others
+        this.clients.delete(client);
+      }
     }
   }
 
   private pushHeartbeat(): void {
     const payload = `data: ${JSON.stringify({ type: 'heartbeat', ts: Date.now() })}\n\n`;
     for (const client of this.clients) {
-      client.write(payload);
+      try {
+        client.write(payload);
+      } catch {
+        this.clients.delete(client);
+      }
     }
   }
 }

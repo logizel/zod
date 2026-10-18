@@ -8,8 +8,7 @@
 import { createServer } from 'node:http';
 import { parseEnv } from '@zod/config';
 import { createLogger } from '@zod/logger';
-import { createPbClient } from '@zod/db-hot';
-import type { HotEnv } from '@zod/db-hot/client';
+import { createPbClient, type HotEnv } from '@zod/db-hot';
 import { SseHub } from './sse.js';
 import { handleBoards, handleAuditOlder, type StatementExecutor } from './boards.js';
 
@@ -27,19 +26,36 @@ async function main(): Promise<void> {
   const pb = await createPbClient(env as HotEnv);
 
   // Single shared SSE hub: one PB subscription, fan-out to all viewers (D-06).
-  const hub = new SseHub(pb as unknown as { collection: (name: string) => { subscribe: (event: string, handler: (e: unknown) => void) => { unsubscribe?: () => void } } }, log);
+  // Server-side viewer cap bounds SSE cost (D-08, Pitfall 13).
+  const hub = new SseHub(
+    pb as unknown as {
+      collection: (name: string) => {
+        subscribe: (event: string, handler: (e: unknown) => void) => {
+          unsubscribe?: () => void;
+        };
+      };
+    },
+    log,
+    [],
+    [],
+    Number(env.SSE_VIEWER_CAP ?? 2),
+  );
   hub.start();
 
-  const server = createServer((req, res) => {
+  const server = createServer(async (req, res) => {
     const url = req.url ?? '';
     if (url === '/api/stream') {
       // Zero Trust Access already rejected unauth at the edge (D-04).
+      // Defense-in-depth: connection timeout reaps stalled sockets (CR-04).
       res.writeHead(200, {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',
         'Connection': 'keep-alive',
       });
-      const client: { write: (chunk: string) => boolean; close: () => void } = {
+      const client: {
+        write: (chunk: string) => boolean;
+        close: () => void;
+      } = {
         write: (chunk: string) => res.write(chunk),
         close: () => res.end(),
       };
@@ -54,17 +70,31 @@ async function main(): Promise<void> {
         const records = await pb.collection('opportunities').getFullList<Record<string, unknown>>();
         rows = records as unknown as Array<Record<string, unknown>>;
       } catch {
-        rows = [];
+        // WR-02: return 503 on upstream failure so clients can detect outage
+        res.writeHead(503, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'upstream unavailable' }));
+        return;
       }
-      handleBoards(req, res, { rows });
+      handleBoards({ url: req.url ?? null }, res, { rows });
     } else if (url.startsWith('/api/audit/older')) {
       // Read-only point lookup into Turso cold tombstone_ledger (D-11).
-      handleAuditOlder(req, res, { db: STUB_DB });
+      handleAuditOlder({ url: req.url ?? null }, res, { db: STUB_DB });
     } else {
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'not found' }));
     }
   });
+
+  // Graceful shutdown on SIGTERM/SIGINT (WR-07).
+  const shutdown = async () => {
+    hub.stop();
+    server.close(() => {
+      log.info({ component: 'dashboard-server' }, 'stream server shut down gracefully');
+      process.exit(0);
+    });
+  };
+  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', shutdown);
 
   server.listen(3000, '127.0.0.1');
   log.info({ component: 'dashboard-server', port: 3000, bind: '127.0.0.1' }, 'stream server boot ok');

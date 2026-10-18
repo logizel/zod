@@ -21,8 +21,9 @@ import {
   type RegistryHandle,
   type TickLogger,
 } from '@zod/scheduler-registry';
-import { createPbClient } from '@zod/db-hot';
-import { purgeExpiredHeavyText } from '@zod/db-hot/telemetry';
+import { createPbClient, type HotEnv } from '@zod/db-hot';
+import type { TelemetryRow, OpportunityRow } from '@zod/db-hot/telemetry';
+import { runMidnightGc } from '@zod/dashboard-server/gc';
 import { createTursoClient, clientExecutor } from '@zod/db-cold';
 import { LlmRouter, writeBucketState, type TelemetrySink } from '@zod/llm';
 import { createLogger } from '@zod/logger';
@@ -85,11 +86,22 @@ export function startSchedulerRegistry(log: TickLogger): RegistryHandle {
   });
 
   // MEM-05 midnight GC: purgeExpiredHeavyText via injected tickHandler.
-  // Scheduler stays agnostic — the handler calls into @zod/db-hot telemetry.
+  // Scheduler stays agnostic — the handler calls into @zod/dashboard-server/gc.
   registerGcJob(log, undefined, {
-    tickHandler: (_def, jobLog) => {
-      const result = purgeExpiredHeavyText(
-        { agentTelemetry: [], opportunities: [] },
+    tickHandler: async (_def, jobLog) => {
+      const pb = await createPbClient(env as HotEnv);
+      const [telemetryRows, oppRows] = await Promise.all([
+        pb.collection('agent_telemetry').getFullList() as unknown as TelemetryRow[],
+        pb.collection('opportunities').getFullList() as unknown as OpportunityRow[],
+      ]);
+      const sendAlert = async (text: string): Promise<boolean> => {
+        jobLog.warn({ alert: 'gc-25h-missing', text }, 'GC 25h-missing alert');
+        return false;
+      };
+      const result = await runMidnightGc(
+        { agentTelemetry: telemetryRows, opportunities: oppRows },
+        Date.now(),
+        { env, log: jobLog, sendAlert },
       );
       jobLog.info({ job: 'gc-midnight-purge', ...result }, 'gc-midnight-purge tick');
     },
