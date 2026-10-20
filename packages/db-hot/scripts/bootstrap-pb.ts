@@ -91,6 +91,25 @@ function dateField(name: string, required = false): FieldSpec {
   return { name, type: 'date', required, hidden: false, presentable: false, system: false };
 }
 
+/**
+ * PocketBase 0.40 base collections do not auto-add audit timestamps. The
+ * schema contract's *Row types require `created`/`updated`, so every hot
+ * collection declares them explicitly as autodate fields (the same shape PB
+ * uses on its built-in auth collections).
+ */
+function autodateField(name: 'created' | 'updated'): FieldSpec {
+  return {
+    name,
+    type: 'autodate',
+    required: false,
+    onCreate: true,
+    onUpdate: name === 'updated',
+    hidden: false,
+    presentable: false,
+    system: false,
+  };
+}
+
 function jsonField(name: string, required = false): FieldSpec {
   return { name, type: 'json', required, hidden: false, presentable: false, system: false };
 }
@@ -148,6 +167,8 @@ const OPPORTUNITY_FIELDS: FieldSpec[] = [
   jsonField('registration_links'),
   text('possible_dupe_of'),
   text('discord_message_id'),
+  autodateField('created'),
+  autodateField('updated'),
 ];
 
 const AGENT_TELEMETRY_FIELDS: FieldSpec[] = [
@@ -159,6 +180,8 @@ const AGENT_TELEMETRY_FIELDS: FieldSpec[] = [
   selectField('status', TELEMETRY_STATUSES, true),
   numberField('duration_ms'),
   text('detail'),
+  autodateField('created'),
+  autodateField('updated'),
 ];
 
 const TASK_SCRATCHPAD_FIELDS: FieldSpec[] = [
@@ -169,6 +192,8 @@ const TASK_SCRATCHPAD_FIELDS: FieldSpec[] = [
   text('partial_buffer'),
   numberField('attempts', false, true),
   text('last_error'),
+  autodateField('created'),
+  autodateField('updated'),
 ];
 
 const TOMBSTONE_LEDGER_FIELDS: FieldSpec[] = [
@@ -177,6 +202,8 @@ const TOMBSTONE_LEDGER_FIELDS: FieldSpec[] = [
   text('terminal_status', true),
   text('source'),
   dateField('decided_at', true),
+  autodateField('created'),
+  autodateField('updated'),
 ];
 
 const TASTE_RULES_FIELDS: FieldSpec[] = [
@@ -185,6 +212,8 @@ const TASTE_RULES_FIELDS: FieldSpec[] = [
   numberField('weight'),
   text('source'),
   dateField('created_at'),
+  autodateField('created'),
+  autodateField('updated'),
 ];
 
 const COLLECTION_SPECS: Record<HotCollection, CollectionSpec> = {
