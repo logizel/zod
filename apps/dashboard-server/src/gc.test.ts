@@ -81,6 +81,7 @@ const requiredEnv = {
   SSE_VIEWER_CAP: '2',
   GC_ALERT_HOURS: '25',
   SSE_CONNECTION_TIMEOUT_MS: '120000',
+  ACCESS_OWNER_EMAIL: '',
   LOG_LEVEL: 'info' as const,
 };
 
