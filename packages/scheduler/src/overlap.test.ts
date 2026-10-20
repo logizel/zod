@@ -110,7 +110,7 @@ describe('registry registers stub + portal jobs', () => {
     const handle = registerStubJobs(log, mod);
 
     // The boot probe ('guard-probe') also flows through schedule() — all jobs
-    // in STUB_JOBS (4 stub + 7 portal) are the calls carrying job names.
+    // in STUB_JOBS (2 local/social + 7 portal) are the calls carrying job names.
     const jobCalls = calls.filter((c) => c.options['name'] !== 'guard-probe');
     expect(handle.tasks).toHaveLength(STUB_JOBS.length);
     expect(jobCalls).toHaveLength(STUB_JOBS.length);
@@ -155,18 +155,16 @@ describe('registry registers stub + portal jobs', () => {
 
   it('registers the required per-job cadence and jitter table', () => {
     const table = STUB_JOBS.map((j) => [j.name, j.expression, j.maxRandomDelayMs]);
-    // 4 stub jobs + 7 portal jobs = 11 total
-    expect(table).toHaveLength(11);
+    // 2 local/social jobs + 7 portal jobs = 9 total
+    expect(table).toHaveLength(9);
     // All portal jobs have maxRandomDelayMs = 5 minutes
     for (const row of table) {
       if (String(row[0]).startsWith('portal-')) {
         expect(row[2]).toBe(5 * 60_000);
       }
     }
-    // Stub jobs retain their original cadence
+    // Local/social live jobs retain their cadence
     const names = table.map((row) => row[0]);
-    expect(names).toContain('events-stub');
-    expect(names).toContain('jobs-stub');
     expect(names).toContain('local-stub');
     expect(names).toContain('social-stub');
     expect(names).toContain('portal-ctftime');
@@ -266,12 +264,13 @@ describe('stub tick metrics sink', () => {
       },
     };
 
+    const firstJob = STUB_JOBS[0]!.name;
     const outcome = await runStubTick(STUB_JOBS[0] as (typeof STUB_JOBS)[number], log, { sink });
 
     expect(records.map((r) => r.phase)).toEqual(['start', 'done']);
-    expect(records[0]?.job).toBe('events-stub');
+    expect(records[0]?.job).toBe(firstJob);
     const done = records[1] as TickRecord;
-    expect(done.job).toBe('events-stub');
+    expect(done.job).toBe(firstJob);
     expect(typeof done.durationMs).toBe('number');
     expect(done.durationMs as number).toBeGreaterThanOrEqual(0);
     expect(done.durationMs).toBe(outcome.durationMs);
@@ -281,12 +280,13 @@ describe('stub tick metrics sink', () => {
     const { log } = makeFakeLogger();
     const dir = join(tmpdir(), `sched-heartbeat-${Date.now()}`);
 
+    const firstJob = STUB_JOBS[0]!.name;
     await runStubTick(STUB_JOBS[0] as (typeof STUB_JOBS)[number], log, { heartbeatDir: dir });
 
     const body = JSON.parse(
-      readFileSync(join(dir, 'events-stub.heartbeat'), 'utf8'),
+      readFileSync(join(dir, `${firstJob}.heartbeat`), 'utf8'),
     ) as { job: string; at: string; durationMs: number };
-    expect(body.job).toBe('events-stub');
+    expect(body.job).toBe(firstJob);
     expect(typeof body.durationMs).toBe('number');
     expect(Number.isNaN(Date.parse(body.at))).toBe(false);
   });

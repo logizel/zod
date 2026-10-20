@@ -21,6 +21,7 @@ import {
   type TickLogger,
   type TickRecord,
 } from './registry.js';
+import { PORTAL_SOURCES } from './jobs.js';
 
 /** In-memory TickLogger: records every call with its child bindings. */
 function makeFakeLogger(): { log: TickLogger; records: any[] } {
@@ -349,7 +350,9 @@ describe('job poll jobs registered via single registry', () => {
     for (const job of portalJobs) {
       expect(cron.validate(job.expression)).toBe(true);
       expect(job.maxRandomDelayMs).toBe(5 * 60_000);
-      expect(job.candidateSource).toBe('events');
+      // Each portal tick resolves only its own source, not all seven.
+      expect(job.candidateSource).toBe(job.name);
+      expect(PORTAL_SOURCES[job.name]).toBeTypeOf('function');
       expect(job.description).toContain('portal poll');
     }
   });

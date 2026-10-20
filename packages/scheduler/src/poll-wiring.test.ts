@@ -111,7 +111,7 @@ describe('scheduler poll wiring (tracer order)', () => {
 // ---------------------------------------------------------------------------
 
 describe('candidate source injection', () => {
-  it('injected fake source list() drives candidates for events source', async () => {
+  it('injected fake source list() drives candidates for a per-portal source key', async () => {
     const pb = makePb();
     const hot = { hasFingerprint: async () => false };
     const cold = { findTombstone: async () => null };
@@ -133,12 +133,13 @@ describe('candidate source injection', () => {
       name: 'portal-ctftime',
       expression: '*/15 * * * *',
       maxRandomDelayMs: 0,
-      candidateSource: 'events',
+      candidateSource: 'portal-ctftime',
       description: 'portal',
     } as any;
 
     await runPollTick(def, logger.log as any, {
-      pb, hot, cold, fetch: fetchFn, candidateSources: { events: fakeSource },
+      pb, hot, cold, fetch: fetchFn,
+      candidateSources: { 'portal-ctftime': fakeSource },
     });
 
     expect(fetchCalls).toHaveLength(1);

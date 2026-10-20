@@ -17,8 +17,7 @@
       "@zod/scheduler-registry": ["./packages/scheduler/src/registry.ts"],
       "@zod/dedup": ["./packages/dedup/src/fingerprint.ts"],
       "@zod/dedup/precheck": ["./packages/dedup/src/precheck.ts"],
-      "@zod/dedup/merger": ["./packages/dedup/src/merger.ts"],
-      "@zod/scheduler/jobs": ["./packages/scheduler/src/jobs.ts"]
+      "@zod/dedup/merger": ["./packages/dedup/src/merger.ts"]
     }
   }
 }

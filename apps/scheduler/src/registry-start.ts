@@ -8,7 +8,7 @@
 // Live deps injected into the registry:
 //   pb / hot / cold → PocketBase + Turso dedup ports (live-stores.ts)
 //   router          → LlmRouter with telemetry sink (writeBucketState)
-//   candidateSources → events → getPortalCandidates, jobs → getJobCandidates
+//   candidateSources → per-portal sources, jobs → getJobCandidates, etc.
 //
 // OrchestratorScheduler registers the audit-drain job via its own tickHandler
 // — scheduler never imports @zod/orchestrator internals (cycle-free).
@@ -25,7 +25,11 @@ import { runMidnightGc } from '@zod/dashboard-server/gc';
 import { createTursoClient, clientExecutor } from '@zod/db-cold';
 import { LlmRouter, writeBucketState, type TelemetrySink } from '@zod/llm';
 import { parseEnv } from '@zod/config';
-import { getPortalCandidates } from '@zod/scheduler/jobs';
+import {
+  getPortalCandidates,
+  PORTAL_SOURCES,
+  type CandidateSource,
+} from '@zod/scheduler-registry/jobs';
 import { getJobCandidates } from '@zod/discord-router/portals/jobs/index';
 import { fetchDetailText } from '@zod/discord-router/portals/jobs/greenhouse';
 import { getLootCandidates } from '@zod/discord-router/portals/loot/vendors';
@@ -33,13 +37,6 @@ import { localSource } from '@zod/discord-router/portals/local';
 import { socialSource } from '@zod/discord-router/portals/social';
 import { OrchestratorScheduler } from '@zod/orchestrator';
 import { createColdStore, createHotStore } from './live-stores.js';
-
-type CandidateSource = {
-  pipeline: string;
-  list(): Promise<unknown[]>;
-  fetch?: 'ats-json';
-  detail?: (cand: unknown) => Promise<string | null>;
-};
 
 export async function startSchedulerRegistry(log: TickLogger): Promise<RegistryHandle> {
   const env = parseEnv();
@@ -69,8 +66,16 @@ export async function startSchedulerRegistry(log: TickLogger): Promise<RegistryH
   const router = new LlmRouter(telemetrySink);
 
   // Candidate sources (code-owned table — candidate-controlled data never sets pipeline).
+  // Each portal job owns one source; `events` remains an aggregate fallback.
+  const portalSources = Object.fromEntries(
+    Object.entries(PORTAL_SOURCES).map(([name, list]) => [
+      name,
+      { pipeline: 'events', list } satisfies CandidateSource,
+    ]),
+  );
   const candidateSources: Record<string, CandidateSource> = {
     events: { pipeline: 'events', list: getPortalCandidates },
+    ...portalSources,
     jobs: {
       pipeline: 'jobs',
       list: getJobCandidates,

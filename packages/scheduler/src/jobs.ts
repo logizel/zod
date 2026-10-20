@@ -73,26 +73,18 @@ export interface StubJobDef {
 }
 
 /**
- * Exactly four stub jobs per D-23 (events 15-30m, jobs 30-60m, local 2-4h,
- * social 45-90m jitter):
- * - events-stub every 20m + 5m jitter
- * - jobs-stub every 45m (:00 + :45) + 10m jitter
+ * Live pipeline jobs owned by this registry.
+ *
+ * Cadences (D-23): events 15-30m, local 2-4h, social 45-90m jitter.
+ * - seven portal-* jobs, each bound to its own candidate source so one tick
+ *   crawls one portal instead of fanning out to all seven
  * - local-stub every 3h + 20m jitter
  * - social-stub hourly + 25m jitter
+ *
+ * The old events-stub/jobs-stub no-op entries were removed: portal-* and
+ * jobs-poll now own those pipelines.
  */
 export const STUB_JOBS: readonly StubJobDef[] = [
-  {
-    name: 'events-stub',
-    expression: '*/20 * * * *',
-    maxRandomDelayMs: 5 * 60_000,
-    description: 'events pipeline cadence stub (real polling lands Phase 2+)',
-  },
-  {
-    name: 'jobs-stub',
-    expression: '*/45 * * * *',
-    maxRandomDelayMs: 10 * 60_000,
-    description: 'jobs pipeline cadence stub (real polling lands Phase 2+)',
-  },
   {
     name: 'local-stub',
     expression: '0 */3 * * *',
@@ -105,7 +97,7 @@ export const STUB_JOBS: readonly StubJobDef[] = [
     expression: '0 * * * *',
     maxRandomDelayMs: 25 * 60_000,
     candidateSource: 'social',
-    description: 'social X/LI cadence stub (real polling lands Phase 2+)',
+    description: 'social X/LI poll (ING-05)',
   },
   // 7 portal-poll jobs (D-01, D-02): staggered across 15-30m window with
   // 5-minute offsets in Asia/Kolkata timezone, noOverlap + jitter per job.
@@ -113,49 +105,49 @@ export const STUB_JOBS: readonly StubJobDef[] = [
     name: 'portal-ctftime',
     expression: '*/15 * * * *',
     maxRandomDelayMs: 5 * 60_000,
-    candidateSource: 'events',
+    candidateSource: 'portal-ctftime',
     description: 'CTFtime portal poll — api mode, every 15m + 5m jitter',
   },
   {
     name: 'portal-clist',
     expression: '*/20 * * * *',
     maxRandomDelayMs: 5 * 60_000,
-    candidateSource: 'events',
+    candidateSource: 'portal-clist',
     description: 'CLIST.by portal poll — api mode, every 20m + 5m jitter',
   },
   {
     name: 'portal-unstop',
     expression: '*/25 * * * *',
     maxRandomDelayMs: 5 * 60_000,
-    candidateSource: 'events',
+    candidateSource: 'portal-unstop',
     description: 'Unstop portal poll — scrape mode, every 25m + 5m jitter',
   },
   {
     name: 'portal-devfolio',
     expression: '*/15 * * * *',
     maxRandomDelayMs: 5 * 60_000,
-    candidateSource: 'events',
+    candidateSource: 'portal-devfolio',
     description: 'Devfolio portal poll — scrape mode, every 15m + 5m jitter',
   },
   {
     name: 'portal-devpost',
     expression: '*/20 * * * *',
     maxRandomDelayMs: 5 * 60_000,
-    candidateSource: 'events',
+    candidateSource: 'portal-devpost',
     description: 'Devpost portal poll — scrape mode, every 20m + 5m jitter',
   },
   {
     name: 'portal-luma',
     expression: '*/25 * * * *',
     maxRandomDelayMs: 5 * 60_000,
-    candidateSource: 'events',
+    candidateSource: 'portal-luma',
     description: 'Luma portal poll — scrape mode, every 25m + 5m jitter',
   },
   {
     name: 'portal-meetup',
     expression: '*/30 * * * *',
     maxRandomDelayMs: 5 * 60_000,
-    candidateSource: 'events',
+    candidateSource: 'portal-meetup',
     description: 'Meetup portal poll — scrape mode, every 30m + 5m jitter',
   },
 ];
@@ -248,18 +240,25 @@ export const GC_JOBS: readonly StubJobDef[] = [
   },
 ];
 
-/** Portal adapter list functions (D-01: all 7 national portals wired).
+/** Portal adapter list functions keyed by scheduler job/source name.
  * Each adapter emits title+snippet from its listing (zero full fetch).
+ * Keying by job name keeps a portal tick scoped to one source.
  */
-export const PORTAL_LIST_FNS: readonly (() => Promise<PollCandidate[]>)[] = [
-  listCtftime,
-  listClist,
-  listUnstop,
-  listDevfolio,
-  listDevpost,
-  listLuma,
-  listMeetup,
-];
+export const PORTAL_SOURCES: Readonly<
+  Record<string, () => Promise<PollCandidate[]>>
+> = {
+  'portal-ctftime': listCtftime,
+  'portal-clist': listClist,
+  'portal-unstop': listUnstop,
+  'portal-devfolio': listDevfolio,
+  'portal-devpost': listDevpost,
+  'portal-luma': listLuma,
+  'portal-meetup': listMeetup,
+};
+
+/** Flat list retained for aggregate prechecks/tests. */
+export const PORTAL_LIST_FNS: readonly (() => Promise<PollCandidate[]>)[] =
+  Object.values(PORTAL_SOURCES);
 
 /** Static candidate list for Phase 2 (portal adapters land Phase 4+).
  * Kept for backward compatibility; real polling uses PORTAL_LIST_FNS.
@@ -392,11 +391,12 @@ export async function runStubTick(
   const bagSources = (bag.candidateSources ?? (opts as any).candidateSources) as
     | Record<string, CandidateSource>
     | undefined;
+  const source = def.candidateSource ? bagSources?.[def.candidateSource] : undefined;
 
   let candidates: readonly PollCandidate[];
 
-  if (def.candidateSource && bagSources?.[def.candidateSource]) {
-    candidates = await bagSources[def.candidateSource].list();
+  if (source) {
+    candidates = await source.list();
   } else if (opts.candidates ?? bag.candidates) {
     candidates = (opts.candidates ?? bag.candidates) as readonly PollCandidate[];
   } else if (def.candidateSource) {
@@ -424,6 +424,12 @@ export async function runStubTick(
     return String(verdict);
   };
 
+  // The source owns the pipeline; the job key is only a lookup name.
+  // Tests that inject candidates without a source retain the declared key.
+  const sourcePipeline = source?.pipeline ?? def.candidateSource ?? 'events';
+  const mergePipeline: 'events' | 'jobs' | null =
+    sourcePipeline === 'jobs' ? 'jobs' : sourcePipeline === 'events' ? 'events' : null;
+
   if (pb === undefined || hot === undefined || cold === undefined) {
     jobLog.warn({ job: def.name }, 'poll deps not provided; skipping candidate processing');
   } else {
@@ -445,12 +451,11 @@ export async function runStubTick(
 
       // D-10: intake merge stage (pre-audit) — runs only on 'fresh' verdicts
       // (Pitfall 9: hot-hit/tombstoned never reach the merge stage).
-      if (verdict === 'fresh' && pb !== undefined && cold !== undefined) {
+      if (verdict === 'fresh' && pb !== undefined && cold !== undefined && mergePipeline) {
         const store = createMergeStore({ pb, cold });
-        const pipeline = (def.candidateSource ?? 'events') as 'events' | 'jobs';
         const mergeResult = await attemptMerge(
           {
-            pipeline,
+            pipeline: mergePipeline,
             title: cand.title,
             url: cand.url,
             organizer: undefined, // extractCompany runs inside attemptMerge
@@ -476,7 +481,10 @@ export async function runStubTick(
           );
         }
       } else if (verdict === 'fresh') {
-        cLog.debug({ stage: 'merge' }, 'merge stage skipped: pb/cold not provided');
+        cLog.debug(
+          { stage: 'merge', pipeline: sourcePipeline },
+          'merge stage skipped: unsupported pipeline or pb/cold not provided',
+        );
       }
 
       // 2. scout prefilter (zero fetch)
@@ -506,9 +514,9 @@ export async function runStubTick(
       }
 
       // D-04 listing screen — zero-fetch senior reject, flag-only pre-detectors.
-      // Runs only for the jobs pipeline (candidateSource === 'jobs'); other
-      // pipelines are untouched. Flags never auto-reject — telemetry only.
-      if (def.candidateSource === 'jobs') {
+      // Runs only for the jobs pipeline; other pipelines are untouched.
+      // Flags never auto-reject — telemetry only.
+      if (sourcePipeline === 'jobs') {
         const screen = screenListing({ title: cand.title, snippet: cand.snippet } as any) as any;
         if (screen?.reject?.reason === 'senior_role') {
           // write tombstone_ledger row terminal_status senior_role, source listing-screen
