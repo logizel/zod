@@ -67,4 +67,25 @@ describe('parseEnv', () => {
     });
     expect(parsed.OPERATOR_USER_IDS).toBe('123456789,987654321');
   });
+
+  it('ACCESS_OWNER_EMAIL explicitly set to empty string parses to empty', () => {
+    const parsed = parseEnv({ ...REQUIRED, ACCESS_OWNER_EMAIL: '' });
+    expect(parsed.ACCESS_OWNER_EMAIL).toBe('');
+  });
+
+  it('ACCESS_OWNER_EMAIL absent defaults to empty string', () => {
+    const parsed = parseEnv({ ...REQUIRED });
+    expect(parsed.ACCESS_OWNER_EMAIL).toBe('');
+  });
+
+  it('ACCESS_OWNER_EMAIL preserves a valid owner address', () => {
+    const parsed = parseEnv({ ...REQUIRED, ACCESS_OWNER_EMAIL: 'owner@example.com' });
+    expect(parsed.ACCESS_OWNER_EMAIL).toBe('owner@example.com');
+  });
+
+  it('ACCESS_OWNER_EMAIL rejects a malformed non-empty value', () => {
+    expect(() => parseEnv({ ...REQUIRED, ACCESS_OWNER_EMAIL: 'not-an-email' })).toThrow(
+      /ACCESS_OWNER_EMAIL/,
+    );
+  });
 });

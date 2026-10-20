@@ -52,7 +52,13 @@ export const EnvSchema = z.object({
   // Phase 7: GC 25h-missing alert threshold in hours (D-14).
   GC_ALERT_HOURS: z.string().default('25'),
   // G-07-WR-01: owner email for application-layer /api/stream auth check.
-  ACCESS_OWNER_EMAIL: z.email().default(''),
+  // Accepts a valid address OR the literal empty string, because `.env.example`
+  // ships `ACCESS_OWNER_EMAIL=` (present-but-empty) and the env gate must not
+  // reject the repo's own convention. Empty stays fail-closed for the
+  // application layer: authorizeStream (apps/dashboard-server/src/index.ts)
+  // rejects a falsy identity header and requires an exact match, so an empty
+  // owner email can never authorize a stream.
+  ACCESS_OWNER_EMAIL: z.email().or(z.literal('')).default(''),
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
 });
 
