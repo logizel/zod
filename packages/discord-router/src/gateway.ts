@@ -26,8 +26,17 @@ export function startGateway({ env, log }: GatewayDeps): Client {
     partials: [Partials.Message, Partials.Reaction, Partials.Channel],
   });
 
-  client.on('ready', () => {
+  clientInstance = client;
+
+  client.once('ready', () => {
     log.info({ tag: client.user?.tag }, 'Logged in as <bot-tag>');
+
+    // Start handlers only after the gateway is ready. Starting them during
+    // login leaves listeners racing the first ready and can miss early events.
+    // Bookmark reaction handler (UI-02, D-05).
+    startBookmarkHandler({ env, log });
+    // Taste rule ingestion (MEM-04, D-11): reaction, !rule, and DM paths.
+    startTasteIngestion({ env, log });
   });
 
   client.on('error', (err) => {
@@ -40,15 +49,6 @@ export function startGateway({ env, log }: GatewayDeps): Client {
     log.error({ err: String(err) }, 'discord login failed');
   });
 
-  // Start bookmark reaction handler at boot (UI-02, D-05).
-  // Listens for messageReactionAdd with the custom bookmark emoji.
-  startBookmarkHandler({ env, log });
-
-  // Start taste rule ingestion at boot (MEM-04, D-11).
-  // Three paths: reaction (👍/👎), keyword command (!rule), DM to bot.
-  startTasteIngestion({ env, log });
-
-  clientInstance = client;
   return client;
 }
 

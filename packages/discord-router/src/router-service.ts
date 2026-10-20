@@ -58,6 +58,38 @@ export async function processOpportunity(
   }
 }
 
+/**
+ * Wait for the Discord gateway to be ready before the first post.
+ *
+ * The poll loop starts immediately after `startGateway()`, but login is
+ * asynchronous. Without this wait the first iteration sees `isReady() ===
+ * false`, defers the audited row, and only retries 60s later. Test/mock
+ * clients without `isReady` are treated as ready.
+ */
+async function waitForReady(client: any, timeoutMs = 30_000): Promise<boolean> {
+  if (!client) return false;
+  if (typeof client.isReady !== 'function') return true;
+  if (client.isReady()) return true;
+  if (typeof client.once !== 'function') return false;
+
+  await new Promise<void>((resolve) => {
+    let timer: ReturnType<typeof setTimeout>;
+    const onReady = (): void => {
+      clearTimeout(timer);
+      resolve();
+    };
+    timer = setTimeout(() => {
+      client.off?.('ready', onReady);
+      resolve();
+    }, timeoutMs);
+    client.once('ready', onReady);
+    // Close the isReady-check/once() race: ready may fire between them.
+    if (typeof client.isReady === 'function' && client.isReady()) onReady();
+  });
+
+  return typeof client.isReady === 'function' ? client.isReady() : true;
+}
+
 /** Create a router service with injected dependencies (testable). */
 export function createRouterService(deps: RouterServiceDeps): RouterService {
   const { env, log, pb: pbDeps, client: clientDeps } = deps;
@@ -87,6 +119,11 @@ export function createRouterService(deps: RouterServiceDeps): RouterService {
             const client = clientDeps ?? getClient();
             if (!client) {
               pbLog.warn({ id: opportunity.id }, 'discord client not ready; deferring post');
+              continue;
+            }
+            const ready = await waitForReady(client);
+            if (!ready) {
+              pbLog.warn({ id: opportunity.id }, 'discord gateway not ready; deferring post');
               continue;
             }
             const ok = await processOpportunity(pb, env, client, opportunity, pbLog);
