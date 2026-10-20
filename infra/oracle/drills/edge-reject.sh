@@ -23,13 +23,23 @@ RUNBOOK="$REPO_DIR/infra/oracle/runbook.md"
 
 if [ "$LOCAL" -eq 1 ]; then
   checks=0
-  # 1. Static-only shell: no realtime primitive to bypass the edge with.
-  if grep -rEi 'EventSource|subscribe\(|fetch\(|WebSocket|XMLHttpRequest' "$SHELL" >/dev/null; then
-    echo "EDGE-REJECT FAIL: shell exposes a dynamic primitive (edge wall would be bypassable)" >&2
+  # 1. Phase 7 shell is a realtime UI (SSE + boards fetch), but every data
+  #    endpoint is a fixed data-* attribute — no attacker-controlled URL or
+  #    eval primitive can redirect the edge wall.
+  if grep -Eqi 'location\.(search|hash)|document\.location|window\.name|postMessage|eval\(|new Function' "$SHELL"; then
+    echo "EDGE-REJECT FAIL: shell exposes a user-controlled URL/eval primitive" >&2
     exit 1
   fi
+  grep -q 'data-stream-url' "$SHELL" && grep -q 'data-boards-url' "$SHELL" \
+    || { echo "EDGE-REJECT FAIL: shell realtime endpoints are not fixed data-* attributes" >&2; exit 1; }
   checks=$((checks + 1))
-  # 2. Deny-by-default catch-all is the last ingress rule.
+  # 2. App-layer defense-in-depth: the dashboard server rejects unauth stream
+  #    requests before the SSE hub (G-07-WR-01).
+  DASH_SERVER="$REPO_DIR/apps/dashboard-server/src/index.ts"
+  grep -q 'authorizeStream' "$DASH_SERVER" && grep -q '401' "$DASH_SERVER" \
+    || { echo "EDGE-REJECT FAIL: dashboard server lacks the app-layer stream gate" >&2; exit 1; }
+  checks=$((checks + 1))
+  # 3. Deny-by-default catch-all is the last ingress rule.
   tail -1 "$CONFIG" | grep -q 'http_status:404' \
     || { echo "EDGE-REJECT FAIL: tunnel ingress lacks the trailing 404 catch-all" >&2; exit 1; }
   checks=$((checks + 1))
@@ -44,7 +54,7 @@ if [ "$LOCAL" -eq 1 ]; then
   grep -qi 'owner-only' "$RUNBOOK" && grep -q 'Allow' "$RUNBOOK" \
     || { echo "EDGE-REJECT FAIL: runbook does not document the owner-only Allow rule" >&2; exit 1; }
   checks=$((checks + 1))
-  echo "EDGE-REJECT PASS (local config-lint: $checks/5 preconditions hold; live assertions deferred to real host)"
+  echo "EDGE-REJECT PASS (local config-lint: $checks/6 preconditions hold; live assertions deferred to real host)"
   exit 0
 fi
 

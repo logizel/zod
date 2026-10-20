@@ -41,7 +41,8 @@ LOG="$WORK/soak.log"
 NODE_SCRIPT="$WORK/soak.mjs"
 
 cat > "$NODE_SCRIPT" <<'NODE'
-import { writeFileSync, appendFileSync, readFileSync, readdirSync } from 'node:fs';
+import { writeFileSync, appendFileSync, mkdirSync, readFileSync, readdirSync } from 'node:fs';
+import { dirname } from 'node:path';
 
 const durationMs = Number(process.argv[2]);
 const logPath = process.argv[3];
@@ -85,6 +86,9 @@ function sampleRss() {
   }
   rssSamples.push(rssMb);
   const ts = new Date().toISOString();
+  // The local-mode temp dir is normally alive for the whole run; recreate it
+  // defensively so a cleanup race cannot turn a soak into a spurious ENOENT.
+  mkdirSync(dirname(logPath), { recursive: true });
   appendFileSync(logPath, `${ts} rss_mb=${rssMb.toFixed(1)} zombies=${chromiumPids().length}\n`);
   return rssMb;
 }
