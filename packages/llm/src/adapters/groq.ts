@@ -26,7 +26,12 @@ export interface LengthViolationOutcome {
 
 export type ChatOutcome = ChatResult | RateLimitedOutcome | LengthViolationOutcome;
 
-const DEFAULT_MODEL = 'llama-3.1-8b-instant';
+const DEFAULT_MODEL = 'openai/gpt-oss-120b';
+
+/** True only for HTTP 413. Other statuses (especially 404) must fail over. */
+export function isLengthViolation(err: unknown): boolean {
+  return (err as { status?: number }).status === 413;
+}
 
 /**
  * Groq chat completion adapter.
@@ -73,8 +78,8 @@ export class GroqAdapter {
       }
 
       // 413 length violation — treat as shrink-or-stitch, never blind-retry.
-      const apiErr = err as { status?: number; message?: string; headers?: { get?: (key: string) => string | null } };
-      if (apiErr.status === 413 || (apiErr.headers?.get && apiErr.headers.get('content-length') === null)) {
+      // Do NOT infer this from missing headers: a 404/401 must fail over.
+      if (isLengthViolation(err)) {
         return { error: 'length_violation' };
       }
 

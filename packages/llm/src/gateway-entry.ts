@@ -9,7 +9,7 @@ import { createLogger } from '@zod/logger';
 import { LlmRouter } from './router.js';
 
 export function main(): void {
-  // 1. Fail-fast env parse: GROQ_API_KEY + GITHUB_TOKEN required (env schema enforces).
+  // 1. Fail-fast env parse: GROQ_API_KEY required (GitHub Models is retired).
   // Throws before any gateway client constructs — no partial traffic.
   const env = parseEnv();
 

@@ -27,7 +27,6 @@ export interface LadderBucketDef extends BucketDef {
 }
 
 const GROQ_CAP: ProviderCapability = { supportsJSON: true, maxOutputTokens: 4096, costTier: 'zero' };
-const GITHUB_CAP: ProviderCapability = { supportsJSON: true, maxOutputTokens: 4096, costTier: 'zero' };
 const SAMBANOVA_CAP: ProviderCapability = { supportsJSON: true, maxOutputTokens: 8192, costTier: 'paid-opt-in' };
 
 const MISTRAL_CAP: ProviderCapability = { supportsJSON: true, maxOutputTokens: 4096, costTier: 'zero' };
@@ -38,11 +37,10 @@ const OPENROUTER_CAP: ProviderCapability = { supportsJSON: true, maxOutputTokens
 
 /** Tier 1 — permanent free tiers (no credit card). SambaNova is paid-opt-in. */
 export const TIER1_MODELS: LadderBucketDef[] = [
-  { provider: 'groq', model: 'llama-3.1-8b-instant', tier: 'tier1', capability: GROQ_CAP },
-  { provider: 'groq', model: 'llama-3.3-70b-versatile', tier: 'tier1', capability: GROQ_CAP },
-  { provider: 'groq', model: 'meta-llama/llama-4-scout-17b-16e-instruct', tier: 'tier1', capability: GROQ_CAP },
-  { provider: 'github', model: 'gpt-4.1-mini', tier: 'tier1', capability: GITHUB_CAP },
-  { provider: 'github', model: 'gpt-4.1', tier: 'tier1', capability: GITHUB_CAP },
+  // Best general-purpose model on Groq's free plan: 120B params, 131K context,
+  // 8K TPM / 1K RPD. Replaces the retired Llama model IDs.
+  { provider: 'groq', model: 'openai/gpt-oss-120b', tier: 'tier1', capability: GROQ_CAP },
+  // SambaNova is paid-opt-in and is filtered out unless explicitly enabled.
   { provider: 'sambanova', model: 'Meta-Llama-3.3-70B-Instruct', tier: 'tier1', capability: SAMBANOVA_CAP },
 ];
 

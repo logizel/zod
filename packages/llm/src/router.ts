@@ -13,7 +13,6 @@ import { Stitcher } from './stitch.js';
 import { writeBucketState, type BucketStateInput } from './telemetry.js';
 import type { ChatMessage, ChatResult, ChatOutcome } from './adapters/groq.js';
 import { GroqAdapter } from './adapters/groq.js';
-import { GitHubModelsAdapter } from './adapters/github.js';
 import { SambaNovaAdapter } from './adapters/sambanova.js';
 import { MistralAdapter } from './adapters/mistral.js';
 import { OpenRouterAdapter } from './adapters/openrouter.js';
@@ -40,7 +39,7 @@ export interface CompleteOptions {
 export interface CompleteResult {
   verdict: unknown;   // parsed JSON verdict, or 'UNVERIFIED' / 'POOL_SATURATED'
   bucket: string | null;     // which bucket produced the verdict ("tier/provider:model")
-  path: string[];     // every bucket + tier attempted ("tier1/groq:llama-3.1-8b-instant")
+  path: string[];     // every bucket + tier attempted ("tier1/groq:openai/gpt-oss-120b")
   reason?: string;    // why no verdict was produced (exhaustion / pool saturation)
 }
 
@@ -94,9 +93,6 @@ export class LlmRouter {
       switch (def.provider) {
         case 'groq':
           adapter = new GroqAdapter(env.GROQ_API_KEY, def.model);
-          break;
-        case 'github':
-          adapter = new GitHubModelsAdapter(env.GITHUB_TOKEN, def.model);
           break;
         case 'sambanova':
           // paid-opt-in: only wire up when the operator provided an API key.

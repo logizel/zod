@@ -97,7 +97,7 @@ describe('LlmRouter.complete', () => {
     const router = new LlmRouter();
     const providers = router.getBucketStates().map((b) => b.provider);
     expect(providers).toContain('groq');
-    expect(providers).toContain('github');
+    expect(providers).toContain('openrouter');
     expect(providers).not.toContain('cerebras');
   });
 
@@ -112,24 +112,34 @@ describe('LlmRouter.complete', () => {
     const states = router.getBucketStates();
     const ladder = states.map((b) => `${b.tier}/${b.provider}/${b.model}`);
     expect(ladder.length).toBe(DEFAULT_LADDER.all.length);
-    expect(ladder).toContain('tier1/groq/llama-3.1-8b-instant');
-    expect(ladder).toContain('tier1/github/gpt-4.1-mini');
+    expect(ladder).toContain('tier1/groq/openai/gpt-oss-120b');
     expect(ladder.some((p) => p.includes('cerebras'))).toBe(false);
   });
 
-  it('default ladder Tier1 has exactly 6 models with paid opt-in, 5 without (SambaNova excluded)', () => {
-    // Without SAMBANOVA_API_KEY (test env), SambaNova paid-opt-in is excluded → 5 Tier1 models.
+  it('default ladder uses the best Groq free model and excludes retired providers', () => {
+    const groqModels = DEFAULT_LADDER.tier1
+      .filter((d) => d.provider === 'groq')
+      .map((d) => d.model);
+    expect(groqModels).toEqual(['openai/gpt-oss-120b']);
+    expect(DEFAULT_LADDER.all.some((d) => d.provider === 'github')).toBe(false);
+    expect(
+      DEFAULT_LADDER.all.some((d) =>
+        /llama-3\.1-8b-instant|llama-3\.3-70b-versatile|llama-4-scout/.test(d.model),
+      ),
+    ).toBe(false);
+  });
+
+  it('default ladder Tier1 has one free Groq model, plus SambaNova only on paid opt-in', () => {
+    // Without explicit paid opt-in, only the free Groq bucket is active.
     const tier1NoKey = DEFAULT_LADDER.tier1;
-    expect(tier1NoKey.length).toBe(5);
-    expect(tier1NoKey.filter((d) => d.provider === 'groq')).toHaveLength(3);
-    expect(tier1NoKey.filter((d) => d.provider === 'github')).toHaveLength(2);
+    expect(tier1NoKey).toHaveLength(1);
+    expect(tier1NoKey.filter((d) => d.provider === 'groq')).toHaveLength(1);
     expect(tier1NoKey.some((d) => d.provider === 'sambanova')).toBe(false);
 
-    // With operator opt-in (SAMBANOVA_API_KEY set), SambaNova joins Tier1 → 6 models.
+    // With operator opt-in, SambaNova joins Tier1.
     const tier1WithKey = new LadderConfig({ includePaidOptIn: true }).tier1;
-    expect(tier1WithKey.length).toBe(6);
-    expect(tier1WithKey.filter((d) => d.provider === 'groq')).toHaveLength(3);
-    expect(tier1WithKey.filter((d) => d.provider === 'github')).toHaveLength(2);
+    expect(tier1WithKey).toHaveLength(2);
+    expect(tier1WithKey.filter((d) => d.provider === 'groq')).toHaveLength(1);
     expect(tier1WithKey.filter((d) => d.provider === 'sambanova')).toHaveLength(1);
 
     // Cerebras absent in both.
@@ -288,8 +298,7 @@ describe('LlmRouter.complete', () => {
     const telemetry = makeTelemetrySink();
     const router = new LlmRouter(telemetry, { ladder: DEFAULT_LADDER });
     const internals = router as unknown as RouterInternals;
-    internals.adapters.set('groq:llama-3.1-8b-instant', groqAdapter as never);
-    internals.adapters.set('github:gpt-4.1-mini', makeMockAdapter(makeChatResult('{"verdict":"ok"}')) as never);
+    internals.adapters.set('groq:openai/gpt-oss-120b', groqAdapter as never);
 
     await router.complete(OPTIONS);
 
@@ -401,13 +410,14 @@ describe('LlmRouter.complete', () => {
   });
 
   it('full-ladder fallback matrix: every Tier1 unavailable → Tier2 engaged → valid JSON verdict', async () => {
-    const tier1 = DEFAULT_LADDER.tier1; // 5 models without SambaNova key in test env
+    const tier1 = DEFAULT_LADDER.tier1; // one free Groq model without paid opt-in
     const tier2 = DEFAULT_LADDER.tier2;
     expect(tier1.length).toBeGreaterThan(0);
     expect(tier2.length).toBeGreaterThan(0);
 
     const outcomes: Record<string, ChatOutcome> = {};
     for (const d of tier1) outcomes[`${d.provider}:${d.model}`] = makeRateLimited(60);
+    for (const d of tier2) outcomes[`${d.provider}:${d.model}`] = makeRateLimited(60);
     const lastTier2 = tier2[tier2.length - 1];
     outcomes[`${lastTier2.provider}:${lastTier2.model}`] = makeChatResult(
       '{"verdict":"overflow-matrix","score":91}',

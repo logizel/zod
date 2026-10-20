@@ -1,4 +1,6 @@
 // GitHub Models adapter — OpenAI-compatible client with baseURL override.
+// DEPRECATED: GitHub Models was retired on 2026-07-30. The ladder no longer
+// wires this adapter; it is retained for historical reference only.
 // D-02: maps 429/413 responses to the same unified error shape as the Groq adapter.
 
 import OpenAI from 'openai';

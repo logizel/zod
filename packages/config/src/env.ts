@@ -12,7 +12,9 @@ export const EnvSchema = z.object({
   TURSO_DATABASE_URL: z.string(),
   TURSO_AUTH_TOKEN: z.string().min(1),
   GROQ_API_KEY: z.string().min(1),
-  GITHUB_TOKEN: z.string().min(1),
+  // Optional: GitHub Models was retired on 2026-07-30 and is no longer in the
+  // LLM ladder. Retained as an optional token for future GitHub integrations.
+  GITHUB_TOKEN: z.string().default(''),
   SAMBANOVA_API_KEY: z.string().default(''),
   DISCORD_TOKEN: z.string().min(1),
   // D-14 / Pitfall 8: channel IDs for the three new job/loot buckets.
