@@ -4,10 +4,10 @@ current_phase: 07
 current_phase_name: Telemetry Dashboard + Ops Hardening
 status: executing
 stopped_at: Phase 7 context gathered
-last_updated: "2026-10-20T09:55:49.000Z"
+last_updated: "2026-10-20T11:34:36.046Z"
 last_activity: 2026-10-20
 last_activity_desc: Completed quick task 261020-ke3 (local full-stack verification)
-state_head: 51ff9e3ffac3b4c0f9307b56e323d9ac73c52ee3
+state_head: 4db7f04a08875f38f3f6995605dffd5a65ab7954
 progress:
   total_phases: 7
   completed_phases: 5
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-15)
 Phase: 07 (Telemetry Dashboard + Ops Hardening) — EXECUTING
 Plan: 3 of 3 (main) + 4 gap-closure (FIX-CR-01, FIX-WR-01, FIX-WR-04, FIX-WR-05)
 Status: Gap closure complete — all --gaps-only plans executed
-Last activity: 2026-10-20 — Completed quick task 261020-ke3: local full-stack verification (PocketBase bootstrap, dashboard/SSE/UI, scheduler boot smoke, local drills)
+Last activity: 2026-10-20 — Completed quick task 261020-nea: one-command local dev (`pnpm dev`) and verification (`pnpm verify:local`)
 
 Progress: [███████░░░] 71%
 
@@ -124,6 +124,7 @@ None yet.
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 261020-ke3 | Local full-stack verification: fix empty ACCESS_OWNER_EMAIL env gate, fix date-rotted dedup merger test, add idempotent PocketBase schema bootstrap plus dev seed, rebuild, run both test suites, then run PocketBase + dashboard server + scheduler locally and verify boards/SSE/UI with a temp proxy, plus local-mode infra drills | 2026-10-20 | 51ff9e3 | [261020-ke3-local-full-stack-verification-fix-empty-](./quick/261020-ke3-local-full-stack-verification-fix-empty-/) |
+| 261020-nea | One-command local dev and verification: add pnpm dev to start PocketBase, the idempotent schema/seed bootstrap, the dashboard server, the loopback dashboard proxy, and the scheduler with prefixed logs and a clean Ctrl-C shutdown; add pnpm verify:local for the dashboard build, both test suites, the db-hot scripts typecheck, all local drills, and the rebuild dry-run; document the local harness. | 2026-10-20 | 4db7f04 | [261020-nea-add-one-command-local-dev-and-verify-scr](./quick/261020-nea-add-one-command-local-dev-and-verify-scr/) |
 
 ## Deferred Items
 
