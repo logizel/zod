@@ -1,9 +1,6 @@
-/** PollCandidate shape shared with the scheduler tick pipeline. */
-export interface PollCandidate {
-  url: string;
-  title: string;
-  snippet: string;
-}
+import type { PollCandidate } from './types.js';
+
+export type { PollCandidate };
 
 /**
  * CTFtime portal adapter (api mode — official free JSON API).

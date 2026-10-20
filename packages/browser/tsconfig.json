@@ -4,8 +4,9 @@
     "composite": true,
     "outDir": "dist",
     "rootDir": "src",
-    "types": []
+    "types": ["node"]
   },
+  "exclude": ["src/**/*.test.ts"],
   "include": ["src"],
   "references": []
 }

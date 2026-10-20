@@ -58,7 +58,7 @@ export function checkBlockRules(
   candidates: PollCandidate[],
   rules: TasteRule[],
 ): { blocked: PollCandidate[]; passed: PollCandidate[] } {
-  const blockRules = rules.filter((r): r is Extract<TasteRule, { kind: 'BLOCK' }> => r.kind === 'BLOCK');
+  const blockRules = rules.filter((r) => r.kind === 'BLOCK');
   const blocked: PollCandidate[] = [];
   const passed: PollCandidate[] = [];
 
@@ -141,8 +141,12 @@ export async function applyTastePreScoring(
   const { blocked, passed } = checkBlockRules(candidates, rules);
   const urlHash = hashUrl(normalizeUrl(url));
 
-  for (const cand of blocked) {
-    await pb.collection('tombstone_ledger').create({
+  for (const _cand of blocked) {
+    const coll = pb.collection('tombstone_ledger');
+    if (typeof coll.create !== 'function') {
+      throw new Error('tombstone_ledger.create is not available');
+    }
+    await coll.create({
       url_hash: urlHash,
       fingerprint: urlHash,
       terminal_status: 'taste_blocked',

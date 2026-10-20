@@ -5,6 +5,7 @@
     "outDir": "dist",
     "rootDir": "src"
   },
+  "exclude": ["src/**/*.test.ts"],
   "include": ["src"],
   "references": [
     { "path": "../../packages/config" },

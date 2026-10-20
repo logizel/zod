@@ -14,7 +14,7 @@
  */
 
 import { readFileSync, realpathSync } from 'node:fs';
-import type { PollCandidate, CandidateSource } from '@zod/scheduler/jobs';
+import type { PollCandidate, CandidateSource } from './types.js';
 import { env } from '@zod/config';
 
 /** Default X/LinkedIn target URLs (poll-first listing, no detail fetch). */

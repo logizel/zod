@@ -8,7 +8,7 @@
 // confirmed or the event date passes. The loop terminates on either condition.
 
 import { hashUrl, normalizeUrl } from '@zod/dedup';
-import { LlmRouter } from '@zod/llm';
+import { LlmRouter, type ChatMessage } from '@zod/llm';
 import { createLogger, type Logger } from '@zod/logger';
 import {
   buildEventsMessages,
@@ -69,7 +69,7 @@ async function reauditTbaRow(
   const candidateUrl = row.links?.official ?? '';
 
   // Build messages based on pipeline (events or local).
-  let messages: { role: string; content: string }[];
+  let messages: ChatMessage[];
   if (pipeline === 'local') {
     messages = buildLocalMessages({
       pipeline: 'local',

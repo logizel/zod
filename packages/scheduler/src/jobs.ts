@@ -40,6 +40,12 @@ import {
   list as listMeetup,
 } from '@zod/discord-router/portals/meetup';
 import { getJobCandidates } from '@zod/discord-router/portals/jobs/index';
+import type {
+  CandidateSource,
+  PollCandidate,
+} from '@zod/discord-router/portals/types';
+
+export type { CandidateSource, PollCandidate };
 
 export const SCHEDULER_TIMEZONE = 'Asia/Kolkata';
 
@@ -241,30 +247,6 @@ export const GC_JOBS: readonly StubJobDef[] = [
     description: 'midnight GC purge heavy-text columns (description_raw/detail); retain tombstones + taste rules',
   },
 ];
-
-export interface PollCandidate {
-  url: string;
-  title: string;
-  snippet: string;
-  /** Location metadata from the listing (used by geo gate at audit time). */
-  location?: string;
-  /** Organizer/company from the listing (used by merger evidence gate). */
-  organizer?: string;
-  /** Epoch-ms date of the listing (used by merger ±3-day window gate). */
-  dateMs?: number;
-}
-
-/** A candidate source: pipeline name + list() + optional ATS-JSON detail fetch. */
-export interface CandidateSource {
-  /** Pipeline this source feeds (events | jobs | loot | local | social). */
-  pipeline: string;
-  /** List candidates from this source (listing-first: title+snippet only). */
-  list(): Promise<PollCandidate[]>;
-  /** Fetch mode hint: 'ats-json' means the source has a detail() text fetch. */
-  fetch?: 'ats-json';
-  /** Detail text fetch for ATS-JSON sources; null → tick falls back to facade. */
-  detail?: (cand: PollCandidate) => Promise<string | null>;
-}
 
 /** Portal adapter list functions (D-01: all 7 national portals wired).
  * Each adapter emits title+snippet from its listing (zero full fetch).

@@ -29,7 +29,6 @@ export default defineConfig({
       '@zod/db-hot/scratchpad': resolve(here, '../db-hot/src/scratchpad.ts'),
       '@zod/sanitize$': resolve(here, '../sanitize/src/index.ts'),
       '@zod/sanitize/fetch': resolve(here, '../sanitize/src/fetch.ts'),
-      '@zod/scheduler/jobs': resolve(here, '../scheduler/src/jobs.ts'),
       '@zod/browser': resolve(here, '../browser/src/index.ts'),
       '@zod/discord-router/portals/ctftime': resolve(here, './src/portals/ctftime.ts'),
       '@zod/discord-router/portals/clist': resolve(here, './src/portals/clist.ts'),

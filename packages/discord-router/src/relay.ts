@@ -146,7 +146,10 @@ export function createRelayService(deps: RelayDeps): RelayService {
       return;
     }
 
-    const msgArray = Array.from(messages.values()); // oldest first as returned by discord.js
+    const msgArray = Array.from(messages.values()) as Array<{
+      id: string;
+      content: string;
+    }>; // oldest first as returned by discord.js
     let newLastId = lastId;
 
     for (const msg of msgArray) {

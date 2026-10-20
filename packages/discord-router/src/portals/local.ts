@@ -18,7 +18,7 @@
 
 import { load, type CheerioAPI } from 'cheerio';
 import { fetchViaBrowser } from '@zod/browser';
-import type { PollCandidate, CandidateSource } from '@zod/scheduler/jobs';
+import type { PollCandidate, CandidateSource } from './types.js';
 import { env } from '@zod/config';
 
 /** Default DK/Udupi college + community watchlist domains (D-01 code defaults). */

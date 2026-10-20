@@ -32,6 +32,7 @@ export default defineConfig({
       '@zod/db-hot$': resolve(here, '../db-hot/src/client.ts'),
       '@zod/db-hot/scratchpad': resolve(here, '../db-hot/src/scratchpad.ts'),
       '@zod/sanitize$': resolve(here, '../sanitize/src/index.ts'),
+      '@zod/discord-router/portals/types': resolve(here, '../discord-router/src/portals/types.ts'),
       '@zod/discord-router/portals/ctftime': resolve(here, '../discord-router/src/portals/ctftime.ts'),
       '@zod/discord-router/portals/clist': resolve(here, '../discord-router/src/portals/clist.ts'),
       '@zod/discord-router/portals/unstop': resolve(here, '../discord-router/src/portals/unstop.ts'),

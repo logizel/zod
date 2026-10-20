@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { PollCandidate } from '@zod/scheduler/jobs';
+import type { PollCandidate } from './types.js';
 
 const mockFetch = vi.fn();
 const mockReadFileSync = vi.fn();
