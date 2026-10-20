@@ -474,6 +474,13 @@ describe('orchestrator drainStep2Rows events branch', () => {
     expect(opp.title).toBe('National CTF 2026');
     expect(opp.organizer).toBe('CyberSec India');
     expect(opp.audit_summary).toBe('Verified CTF infosec event, ₹1.5L cash prize, India-organized');
+    // deadlines is required by the live PB collection; non-TBA events must supply it.
+    expect(opp.deadlines).toMatchObject({
+      tba: false,
+      event_start: '2026-12-15T09:00:00Z',
+      event_end: '2026-12-16T18:00:00Z',
+    });
+    expect(opp.end_date).toBe('2026-12-16T18:00:00Z');
 
     expect(collections.scratchpad.update).toHaveBeenCalledWith('scratch-events-1', { step_position: 'STEP_3' });
     expect(collections.tombstone_ledger.create).not.toHaveBeenCalled();
@@ -604,8 +611,10 @@ describe('orchestrator drainStep2Rows events branch', () => {
 
     const router = makeRouter(() => ({
       ...fullEventsVerdict,
+      category: 'general',
       organizer_score: 2,
       agenda_score: 2,
+      audit_summary: 'Business networking mixer, no technical agenda',
     }));
 
     await drainStep2Rows({
@@ -618,6 +627,34 @@ describe('orchestrator drainStep2Rows events branch', () => {
     expect(collections.tombstone_ledger.create).toHaveBeenCalledTimes(1);
     const tsCall = (collections.tombstone_ledger.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(tsCall.terminal_status).toBe('non-technical');
+    vi.unstubAllGlobals();
+  });
+
+  it('sys-cp-sec fast-track bypasses the adjacent-deep-tech 9/9 threshold', async () => {
+    // Real HITCON-style verdict: organizer 9, agenda 8, high cash prize.
+    installEventsFetch();
+    const { pb, collections } = makePb({
+      scratchpadRows: [makeEventsScratchRow()],
+      existingOpportunities: [],
+    });
+
+    const router = makeRouter(() => ({
+      ...fullEventsVerdict,
+      organizer_score: 9,
+      agenda_score: 8,
+      audit_summary: 'High-profile CTF with cash prizes exceeding ₹1L',
+    }));
+
+    await drainStep2Rows({
+      pb,
+      router: router as any,
+      pageSize: 25,
+    });
+
+    expect(collections.opportunities.create).toHaveBeenCalledTimes(1);
+    expect(collections.tombstone_ledger.create).not.toHaveBeenCalled();
+    const opp = (collections.opportunities.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(opp.bucket_channel).toBe('#🔥-priority-sys-cp-sec');
     vi.unstubAllGlobals();
   });
 

@@ -4,6 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildEventsMessages,
+  extractCashInr,
   parseEventsVerdict,
   EventsVerdictSchema,
   type EventsVerdict,
@@ -34,6 +35,8 @@ describe('buildEventsMessages system prompt', () => {
     expect(system).toContain('prize');
     expect(system).toContain('1,00,000');
     expect(system).toContain('credit');
+    expect(system).toContain('USD');
+    expect(system).toContain('convert');
   });
 
   it('contains perk detection for prize-gate failures', () => {
@@ -84,10 +87,63 @@ describe('parseEventsVerdict', () => {
     }
   });
 
-  it('parses prize_cash_inr null with prize_text (TBA/unverified)', () => {
-    const verdict = parseEventsVerdict({ ...validVerdict, prize_cash_inr: null });
+  it('parses prize_cash_inr null with TBA prize_text', () => {
+    const verdict = parseEventsVerdict({
+      ...validVerdict,
+      prize_cash_inr: null,
+      prize_text: 'TBA',
+    });
     expect(verdict).not.toBeNull();
     if (verdict) expect(verdict.prize_cash_inr).toBeNull();
+  });
+
+  it('derives INR cash from an explicit USD prize when the LLM returns null', () => {
+    // Real HITCON response: prize_text has $8,000 USD, prize_cash_inr was null.
+    const verdict = parseEventsVerdict({
+      ...validVerdict,
+      prize_cash_inr: null,
+      prize_text:
+        '1st place: $8,000 USD; 2nd place: $4,000 USD; 3rd place: $2,000 USD',
+    });
+    expect(verdict).not.toBeNull();
+    if (verdict) expect(verdict.prize_cash_inr).toBe(8_000 * 83);
+  });
+
+  it('corrects a USD amount mistakenly returned as INR', () => {
+    const verdict = parseEventsVerdict({
+      ...validVerdict,
+      prize_cash_inr: 8_000,
+      prize_text: '1st place: $8,000 USD',
+    });
+    expect(verdict).not.toBeNull();
+    if (verdict) expect(verdict.prize_cash_inr).toBe(8_000 * 83);
+  });
+
+  it('extracts INR, USD, EUR, and lakh cash lines deterministically', () => {
+    expect(extractCashInr('₹1,50,000 cash')).toBe(150_000);
+    expect(extractCashInr('1.5 lakh INR')).toBe(150_000);
+    expect(extractCashInr('$8,000 USD')).toBe(8_000 * 83);
+    expect(extractCashInr('€2,000')).toBe(2_000 * 90);
+    expect(extractCashInr('no cash prize, only swag')).toBe(0);
+  });
+
+  it('normalizes numeric strings, missing perk_hint, and missing dates.end', () => {
+    const verdict = parseEventsVerdict({
+      ...validVerdict,
+      prize_cash_inr: '150000',
+      organizer_score: '9',
+      agenda_score: '9',
+      perk_hint: undefined,
+      dates: { start: '2026-12-15T09:00:00Z' },
+    });
+    expect(verdict).not.toBeNull();
+    if (verdict) {
+      expect(verdict.prize_cash_inr).toBe(150_000);
+      expect(verdict.organizer_score).toBe(9);
+      expect(verdict.agenda_score).toBe(9);
+      expect(verdict.perk_hint).toBeNull();
+      expect(verdict.dates?.end).toBe('2026-12-15T09:00:00Z');
+    }
   });
 
   it('category enum round-trips: sys-cp-sec | general', () => {

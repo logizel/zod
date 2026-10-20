@@ -280,6 +280,7 @@ async function processJobsRow(
     title: candidateTitle,
     organizer: '',
     links: { official: candidateUrl },
+    deadlines: { tba: false },
     experience_span: verdict.experience_span ?? null,
     stack_tags: verdict.stack_tags ?? [],
     eligibility_summary: verdict.eligibility_summary ?? '',
@@ -401,6 +402,7 @@ export async function drainLootRow(
     title: candidateTitle,
     organizer: '',
     links: { official: candidateUrl },
+    deadlines: { tba: false },
     shipping_verified: verdict.shipping_verified,
     card_required: verdict.card_required,
     claim_steps: verdict.claim_steps,
@@ -570,10 +572,17 @@ async function processEventsRow(
   }
 
   // Step 4: 80/20 domain filter with organizer/agenda scores from the verdict.
-  const domainVerdict = domainPrefilter(
-    { title: verdict.title, snippet: verdict.audit_summary },
-    { organizerScore: verdict.organizer_score, agendaScore: verdict.agenda_score },
-  );
+  // EVT-01 fast-track: a sys/CP/sec event is already in the priority lane; the
+  // deep-tech 9/9 threshold is for adjacent domains, not for the core category.
+  // Without this bypass a legitimate high-prize CTF (organizer 9 / agenda 8)
+  // is tombstoned as deep-tech-low-score.
+  const domainVerdict =
+    verdict.category === 'sys-cp-sec'
+      ? ({ verdict: 'pass' } as const)
+      : domainPrefilter(
+          { title: verdict.title, snippet: verdict.audit_summary },
+          { organizerScore: verdict.organizer_score, agendaScore: verdict.agenda_score },
+        );
   if (domainVerdict.verdict === 'reject') {
     rowLog.info({ stage: 'domain-filter', reason: domainVerdict.reason }, 'domain filter rejected; tombstoning');
     await writeTombstone(pb, candidateUrl, domainVerdict.reason, 'auditor');
@@ -632,6 +641,13 @@ async function processEventsRow(
       prize_cash_inr: verdict.prize_cash_inr ?? null,
       prize_text: verdict.prize_text,
       audit_summary: verdict.audit_summary,
+      deadlines: {
+        tba: false,
+        ...(verdict.dates
+          ? { event_start: verdict.dates.start, event_end: verdict.dates.end }
+          : {}),
+      },
+      end_date: verdict.dates?.end ?? null,
       description_raw: fetchedText.slice(0, 8000),
       possible_dupe_of: possibleDupeOf,
     });
