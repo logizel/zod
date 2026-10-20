@@ -269,14 +269,14 @@
     /* ---------------- active-tab persistence (localStorage) ---------------- */
     const TAB_STORAGE_KEY = 'zod:dashboard:activeTab';
     const TABS = [
-      { id: 'events-local', label: 'Events &middot; Local' },
-      { id: 'events-travel', label: 'Events &middot; Travel' },
-      { id: 'events-online', label: 'Events &middot; Online' },
+      { id: 'events-local', label: 'Events · Local' },
+      { id: 'events-travel', label: 'Events · Travel' },
+      { id: 'events-online', label: 'Events · Online' },
       { id: 'tba-queue', label: 'TBA Queue' },
-      { id: 'jobs-sys', label: 'Jobs &middot; Sys/CP/Sec' },
-      { id: 'jobs-general', label: 'Jobs &middot; General SWE' },
+      { id: 'jobs-sys', label: 'Jobs · Sys/CP/Sec' },
+      { id: 'jobs-general', label: 'Jobs · General SWE' },
       { id: 'loot', label: 'Loot' },
-      { id: 'audit-log', label: 'Audit &amp; Rejection Log' },
+      { id: 'audit-log', label: 'Audit & Rejection Log' },
     ];
     let activeTab = localStorage.getItem(TAB_STORAGE_KEY) || TABS[0].id;
     if (!TABS.some((t) => t.id === activeTab)) activeTab = TABS[0].id;

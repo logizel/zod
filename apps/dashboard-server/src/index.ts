@@ -57,7 +57,9 @@ async function main(): Promise<void> {
 
   const server = createServer(async (req, res) => {
     const url = req.url ?? '';
-    if (url === '/api/stream') {
+    // Filter queries must still route: compare the pathname, not the full URL.
+    const pathname = url.split('?')[0] ?? '';
+    if (pathname === '/api/stream') {
       // Application-layer defense-in-depth (G-07-WR-01): reject unauth before hub.addClient.
       if (!authorizeStream(req, env)) {
         res.writeHead(401, { 'WWW-Authenticate': 'Bearer realm="dashboard"' });
@@ -88,7 +90,7 @@ async function main(): Promise<void> {
       hub.addClient(client);
       res.write(`data: ${JSON.stringify({ type: 'connected', ts: Date.now() })}\n\n`);
       req.on('close', () => hub.removeClient(client));
-    } else if (url === '/api/boards') {
+    } else if (pathname === '/api/boards') {
       // Fetch opportunities from PocketBase (hot store) and apply filters
       // server-side in handleBoards. Read-only: getFullList only, no writes.
       let rows: Array<Record<string, unknown>> = [];
@@ -102,7 +104,7 @@ async function main(): Promise<void> {
         return;
       }
       handleBoards({ url: req.url ?? null }, res, { rows });
-    } else if (url.startsWith('/api/audit/older')) {
+    } else if (pathname.startsWith('/api/audit/older')) {
       // Read-only point lookup into Turso cold tombstone_ledger (D-11).
       handleAuditOlder({ url: req.url ?? null }, res, { db: STUB_DB });
     } else {
