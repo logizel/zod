@@ -16,7 +16,10 @@ import { hashUrl, normalizeUrl } from './fingerprint.js';
 // Helpers
 // ---------------------------------------------------------------------------
 
-const NOW = 1_792_145_094_000; // fixed now for deterministic window tests
+// Wall-clock anchor: the ±3-day window in merger.ts is relative to real time,
+// so pinning to a fixed epoch makes the suite rot as the calendar advances.
+// Date.now() keeps every offset below relative and stable on any run date.
+const NOW = Date.now();
 const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
 
 function makeCandidate(overrides: Partial<MergeCandidate> = {}): MergeCandidate {
