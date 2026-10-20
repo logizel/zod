@@ -1,7 +1,7 @@
 // 2D LLM ladder configuration — provider × model bucket table.
 //
-// Tier1: permanent free tiers (Groq × 3, GitHub Models × 2, SambaNova × 1 opt-in).
-// Tier2: overflow (Mistral, Z.ai, NVIDIA NIM, Cohere via OpenRouter :free, OpenRouter :free).
+// Tier1: permanent free tier (Groq gpt-oss-120b) + SambaNova paid opt-in.
+// Tier2: overflow (Mistral, Z.ai, NVIDIA NIM, OpenRouter :free).
 //   Engages only when ALL Tier1 buckets are unavailable (COOLDOWN or DAILY-CAP).
 //
 // Cerebras is intentionally absent from both tiers (D-04, SWM-06).
@@ -32,7 +32,6 @@ const SAMBANOVA_CAP: ProviderCapability = { supportsJSON: true, maxOutputTokens:
 const MISTRAL_CAP: ProviderCapability = { supportsJSON: true, maxOutputTokens: 4096, costTier: 'zero' };
 const ZAI_CAP: ProviderCapability = { supportsJSON: true, maxOutputTokens: 4096, costTier: 'zero' };
 const NVIDIA_CAP: ProviderCapability = { supportsJSON: true, maxOutputTokens: 4096, costTier: 'zero' };
-const COHERE_CAP: ProviderCapability = { supportsJSON: false, maxOutputTokens: 4096, costTier: 'zero' };
 const OPENROUTER_CAP: ProviderCapability = { supportsJSON: true, maxOutputTokens: 4096, costTier: 'zero' };
 
 /** Tier 1 — permanent free tiers (no credit card). SambaNova is paid-opt-in. */
@@ -44,12 +43,11 @@ export const TIER1_MODELS: LadderBucketDef[] = [
   { provider: 'sambanova', model: 'Meta-Llama-3.3-70B-Instruct', tier: 'tier1', capability: SAMBANOVA_CAP },
 ];
 
-/** Tier 2 — overflow; engages only after Tier1 exhausts. Cohere reached via OpenRouter :free. */
+/** Tier 2 — overflow; engages only after Tier1 exhausts. */
 export const TIER2_MODELS: LadderBucketDef[] = [
   { provider: 'mistral', model: 'mistral-small-latest', tier: 'tier2', capability: MISTRAL_CAP },
   { provider: 'zai', model: 'glm-5.2', tier: 'tier2', capability: ZAI_CAP },
   { provider: 'nvidia', model: 'nemotron-3.5-lightning', tier: 'tier2', capability: NVIDIA_CAP },
-  { provider: 'cohere', model: 'command-r-plus', tier: 'tier2', capability: COHERE_CAP },
   { provider: 'openrouter', model: 'meta-llama/llama-3.1-8b-instruct:free', tier: 'tier2', capability: OPENROUTER_CAP },
 ];
 
