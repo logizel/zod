@@ -68,7 +68,15 @@ function chromiumPids() {
       if (!/^\d+$/.test(d)) continue;
       try {
         const cmd = readFileSync(`/proc/${d}/cmdline`, 'utf8');
-        if (cmd.includes('chrome-headless-shell') || cmd.includes('ms-playwright')) out.push(Number(d));
+        // Count this drill's Chromium instances only. The Playwright MCP
+        // harness keeps its own browser under `ms-playwright-mcp`; counting it
+        // as a soak zombie makes the drill fail for an unrelated process.
+        if (
+          (cmd.includes('chrome-headless-shell') || cmd.includes('ms-playwright')) &&
+          !cmd.includes('ms-playwright-mcp')
+        ) {
+          out.push(Number(d));
+        }
       } catch {}
     }
   } catch {}
