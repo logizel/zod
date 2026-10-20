@@ -71,6 +71,8 @@ describe('env-drift bijection (.env.example ↔ EnvSchema)', () => {
       'DISCORD_CHANNEL_JOBS_SYS_CLOUD',
       'DISCORD_CHANNEL_JOBS_GENERAL',
       'DISCORD_CHANNEL_LOOT',
+      'DISCORD_CHANNEL_PRIORITY_SYS_CP_SEC',
+      'DISCORD_CHANNEL_ONLINE_1LAKH',
       'JINA_API_KEY',
       'GROQ_API_KEY',
       'GITHUB_TOKEN',

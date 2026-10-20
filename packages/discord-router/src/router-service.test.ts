@@ -25,6 +25,8 @@ const testEnv: Env = {
   DISCORD_CHANNEL_JOBS_SYS_CLOUD: '111000000000000000',
   DISCORD_CHANNEL_JOBS_GENERAL: '222000000000000000',
   DISCORD_CHANNEL_LOOT: '333000000000000000',
+  DISCORD_CHANNEL_PRIORITY_SYS_CP_SEC: '444000000000000000',
+  DISCORD_CHANNEL_ONLINE_1LAKH: '555000000000000000',
   FELLOWSHIP_ALLOWLIST_EXTRA: '',
 };
 
@@ -254,6 +256,62 @@ describe('processOpportunity', () => {
 
     expect(ok).toBe(true);
     expect(fetchedById).toContain('333000000000000000');
+  });
+
+  it('resolves #🔥-priority-sys-cp-sec by env ID first', async () => {
+    const fetchedById: string[] = [];
+    const opp: OpportunityRow = { ...fixture, bucket_channel: '#🔥-priority-sys-cp-sec' };
+    const pb = {
+      collection: () => ({
+        getList: () => Promise.resolve({ items: [opp] }),
+        update: (id: string, data: any) => Promise.resolve(),
+      }),
+    };
+    const client = {
+      channels: {
+        fetch: async (id: string) => {
+          fetchedById.push(id);
+          if (id === '444000000000000000') {
+            return { send: async () => ({ id: 'msg-4' }), isTextBased: () => true, isDMBased: () => false };
+          }
+          return null;
+        },
+      },
+      guilds: { cache: { values: () => [] } },
+    };
+
+    const ok = await processOpportunity(pb, testEnv, client, opp, makeLog());
+
+    expect(ok).toBe(true);
+    expect(fetchedById).toContain('444000000000000000');
+  });
+
+  it('resolves #-online-1lakh-plus by env ID first', async () => {
+    const fetchedById: string[] = [];
+    const opp: OpportunityRow = { ...fixture, bucket_channel: '#-online-1lakh-plus' };
+    const pb = {
+      collection: () => ({
+        getList: () => Promise.resolve({ items: [opp] }),
+        update: (id: string, data: any) => Promise.resolve(),
+      }),
+    };
+    const client = {
+      channels: {
+        fetch: async (id: string) => {
+          fetchedById.push(id);
+          if (id === '555000000000000000') {
+            return { send: async () => ({ id: 'msg-5' }), isTextBased: () => true, isDMBased: () => false };
+          }
+          return null;
+        },
+      },
+      guilds: { cache: { values: () => [] } },
+    };
+
+    const ok = await processOpportunity(pb, testEnv, client, opp, makeLog());
+
+    expect(ok).toBe(true);
+    expect(fetchedById).toContain('555000000000000000');
   });
 
   it('falls back to exact-name match when env ID is empty for a new bucket', async () => {

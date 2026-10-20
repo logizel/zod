@@ -131,10 +131,12 @@ export function startRouterService({ env, log }: { env: Env; log: Logger }): voi
   void createRouterService({ env, log });
 }
 
-// D-14 / Pitfall 8: bucket-channel value → env key for the three new buckets.
+// D-14 / Pitfall 8: bucket-channel value → env key for env-ID-first resolution.
 // Env-configured Discord channel IDs are resolved first; exact-name matching
 // is preserved as fallback. Unknown/unresolvable channels keep the skip path.
 const CHANNEL_ID_ENV_KEYS: Record<string, keyof Env> = {
+  '#🔥-priority-sys-cp-sec': 'DISCORD_CHANNEL_PRIORITY_SYS_CP_SEC',
+  '#-online-1lakh-plus': 'DISCORD_CHANNEL_ONLINE_1LAKH',
   '#⚙️-jobs-sys-cloud-devops': 'DISCORD_CHANNEL_JOBS_SYS_CLOUD',
   '#💼-jobs-general-swe': 'DISCORD_CHANNEL_JOBS_GENERAL',
   '#🎁-free-swag-and-credits': 'DISCORD_CHANNEL_LOOT',

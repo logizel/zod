@@ -21,6 +21,9 @@ export const EnvSchema = z.object({
   DISCORD_CHANNEL_JOBS_SYS_CLOUD: z.string().default(''),
   DISCORD_CHANNEL_JOBS_GENERAL: z.string().default(''),
   DISCORD_CHANNEL_LOOT: z.string().default(''),
+  // Event buckets (env-ID-first resolution in router-service).
+  DISCORD_CHANNEL_PRIORITY_SYS_CP_SEC: z.string().default(''),
+  DISCORD_CHANNEL_ONLINE_1LAKH: z.string().default(''),
   // D-06: fellowship allowlist extension — operator-extensible without a
   // release. getFellowshipAllowlist() merges this into the config default.
   FELLOWSHIP_ALLOWLIST_EXTRA: z.string().default(''),
