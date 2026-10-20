@@ -72,7 +72,7 @@ Runs the local verification gates sequentially from the repo root:
 ${steps.map((step, index) => `  ${index + 1}. ${step.label}`).join('\n')}
 
 Options:
-  --soak   also run the 5-minute local browser soak (drill 7)
+  --soak   also run the 5-minute local browser soak (extra step after rebuild)
   --help   show this help
 `);
 }
