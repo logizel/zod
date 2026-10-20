@@ -349,6 +349,7 @@ describe('job poll jobs registered via single registry', () => {
     for (const job of portalJobs) {
       expect(cron.validate(job.expression)).toBe(true);
       expect(job.maxRandomDelayMs).toBe(5 * 60_000);
+      expect(job.candidateSource).toBe('events');
       expect(job.description).toContain('portal poll');
     }
   });

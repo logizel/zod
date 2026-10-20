@@ -21,7 +21,7 @@ export interface OrchestratorSchedulerOpts {
   /** PocketBase-like handle for scratchpad/opportunities/tombstone writes. */
   pb: unknown;
   /** LlmRouter for audit completions. */
-  router: { complete: (opts: unknown) => Promise<unknown> };
+  router: DrainOpts['router'];
   /** Page size for bounded STEP_2 getList. Default 25. */
   pageSize?: number;
   /** Injected scheduler module (tests use fakes). Defaults to real cron. */

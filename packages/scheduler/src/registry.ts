@@ -54,7 +54,8 @@ export interface RegistryHandle {
   stop(): void;
 }
 
-export interface RegisterOptions {
+export interface RegisterOptions
+  extends Pick<TickOptions, 'pb' | 'hot' | 'cold' | 'fetch'> {
   /** Metrics destination for start/done/skip tick records. */
   sink?: MetricsSink;
   /**
@@ -147,7 +148,15 @@ export function registerStubJobs(
   const tasks = STUB_JOBS.map((def) => {
     const task = mod.schedule(
       def.expression,
-      () => runStubTick(def, log, { sink: opts.sink, heartbeatDir, candidateSources: opts.candidateSources }),
+      () => runStubTick(def, log, {
+        sink: opts.sink,
+        heartbeatDir,
+        candidateSources: opts.candidateSources,
+        pb: opts.pb,
+        hot: opts.hot,
+        cold: opts.cold,
+        fetch: opts.fetch,
+      }),
       {
         name: def.name,
         timezone: SCHEDULER_TIMEZONE,
@@ -232,6 +241,10 @@ export function registerPollJobs(
         sink: opts.sink,
         heartbeatDir,
         candidateSources: opts.candidateSources,
+        pb: opts.pb,
+        hot: opts.hot,
+        cold: opts.cold,
+        fetch: opts.fetch,
       }),
       {
         name: def.name,
