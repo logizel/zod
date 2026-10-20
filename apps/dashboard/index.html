@@ -355,6 +355,10 @@
         btn.textContent = t.label;
         btn.onclick = () => { activeTab = t.id; saveActiveTab(); renderTabs(); loadBoards(); };
         boardTabsEl.appendChild(btn);
+        // The tab strip and the board sections are separate elements; keep the
+        // visible section in lockstep with the selected tab.
+        const section = document.getElementById('tab-' + t.id);
+        if (section) section.classList.toggle('active', t.id === activeTab);
       }
     }
 
