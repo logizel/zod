@@ -35,7 +35,8 @@ function stripHtml(text: string): string {
     .trim();
 }
 
-function firstLine(text: string): string {
+function firstLine(text: string | null | undefined): string {
+  if (!text) return '';
   for (const line of text.split('\n')) {
     const trimmed = line.trim();
     if (trimmed.length > 0) return trimmed;
@@ -46,7 +47,8 @@ function firstLine(text: string): string {
 export interface HnComment {
   objectID: string;
   created_at_i: number;
-  comment_text: string;
+  /** Algolia can return null/omit this for deleted or malformed comments. */
+  comment_text?: string | null;
 }
 
 export async function list(opts?: { since?: Date }): Promise<PollCandidate[]> {
@@ -95,13 +97,16 @@ export async function list(opts?: { since?: Date }): Promise<PollCandidate[]> {
 
   const candidates: PollCandidate[] = [];
   for (const child of filtered) {
-    const title = firstLine(child.comment_text);
-    const snippet = stripHtml(child.comment_text).slice(0, 200);
+    const text = child.comment_text ?? '';
+    if (!text.trim()) continue; // deleted/malformed comments have no body
+
+    const title = firstLine(text);
+    const snippet = stripHtml(text).slice(0, 200);
 
     // url = first absolute link found in comment text, else HN permalink
     let url = HN_PERMALINK(child.objectID);
     try {
-      const match = child.comment_text.match(ABSOLUTE_URL_RE);
+      const match = text.match(ABSOLUTE_URL_RE);
       if (match) {
         const candidateUrl = match[0];
         validateUrl(candidateUrl); // SSRF guard: only http(s), no private hosts

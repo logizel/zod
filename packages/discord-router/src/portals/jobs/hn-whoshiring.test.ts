@@ -113,6 +113,40 @@ describe('hn-whoshiring adapter (Algolia two-call recipe)', () => {
     expect(result).toEqual([]);
   });
 
+  it('skips null/empty comment bodies instead of crashing', async () => {
+    mockFetch
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ hits: [{ objectID: 'thread-42' }] }), {
+          status: 200,
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            objectID: 'thread-42',
+            children: [
+              { objectID: 'null-body', created_at_i: 1790000001, comment_text: null },
+              { objectID: 'missing-body', created_at_i: 1790000002 },
+              {
+                objectID: 'valid',
+                created_at_i: 1790000003,
+                comment_text: 'Real job\nhttps://jobs.lever.co/real/apply',
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
+      );
+
+    const result = await list();
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      title: 'Real job',
+      url: 'https://jobs.lever.co/real/apply',
+    });
+  });
+
   it('returns empty array when thread has no children', async () => {
     mockFetch
       .mockResolvedValueOnce(
