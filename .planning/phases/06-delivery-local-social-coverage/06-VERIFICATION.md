@@ -1,10 +1,12 @@
 ---
 phase: 06-delivery-local-social-coverage
-verified: 2026-10-17T14:00:00Z
-status: human_needed
+verified: 2026-11-06T06:35:00Z
+status: passed
 score: 21/21 must-haves verified
 behavior_unverified: 0
 overrides_applied: 0
+human_needed: false
+human_verification_resolved: "2026-11-06 via 06-UAT.md (4/4 pass)"
 re_verification: true
 previous_status: human_needed
 previous_score: 21/21
@@ -96,11 +98,13 @@ coincidental_reliance_items: []
 
 **Phase Goal:** All 10 channels route correctly with reminders and bookmarks, fed by local, relay, and social sources
 
-**Verified:** 2026-10-17T14:00:00Z
+**Verified:** 2026-11-06T06:35:00Z
 
-**Status:** human_needed
+**Status:** passed
 
-**Re-verification:** Yes — gap closure round (G-06-1/CR-02, G-06-2/CR-04, G-06-3/CR-01/WR-06 now fixed in code)
+**Re-verification:** Yes — gap closure round (G-06-1/CR-02, G-06-2/CR-04, G-06-3/CR-01/WR-06 now fixed in code), then closeout re-baseline on 2026-11-06.
+
+**Closeout re-baseline (2026-11-06):** `pnpm build` green; root suite 73 files / 722 tests passed; dashboard-server 4 files / 42 tests passed; targeted Phase 6 suite 9 files / 108 tests passed; `pnpm verify:local` 12/12 gates passed. The four human items below were resolved by `06-UAT.md` (4/4 pass, 0 issues).
 
 ## Goal Achievement
 
@@ -270,27 +274,31 @@ All implementation decisions from CONTEXT.md are honored in the code:
 | D-12: Hybrid taste application (BLOCK pre-scoring + BOOST prompt injection) | `taste-apply.ts` `checkBlockRules` + `buildTastePromptInjection` |
 | D-13: Taste BLOCK overrides soft gates but NOT hard compliance gates | `orchestrator.ts` hard gates checked first, then taste BLOCK, then LLM |
 
-## Human Verification Required
+## Human Verification — Resolved by UAT
 
 1. **Operator authorization configuration for taste-ingestion paths**
    - **Test:** Add `OPERATOR_USER_IDS` env var with authorized Discord user IDs to `.env`
    - **Expected:** Only operators listed in `OPERATOR_USER_IDS` can create taste rules via DM `!rule` or keyword `!rule`; all others rejected
    - **Why human:** Security configuration decision — operator must decide which Discord user IDs to authorize; code enforcement is complete but env value is empty by default (fail-closed)
+   - **Result:** ✅ pass — `06-UAT.md` #1 (2026-10-17)
 
 2. **Custom bookmark emoji creation on Discord server**
    - **Test:** Create custom server emoji, export ID to `BOOKMARK_EMOJI_ID` env var
    - **Expected:** Custom bookmark emoji exists on server and `BOOKMARK_EMOJI_ID` is configured
    - **Why human:** Requires manual Discord server action (Server Settings → Emojis → Upload); cannot be verified by code reading
+   - **Result:** ✅ pass — `06-UAT.md` #2 (2026-10-17)
 
 3. **X/LinkedIn burner cookie export**
    - **Test:** Export cookies from burner browser to JSON file at `SOCIAL_COOKIES_PATH`
    - **Expected:** Cookie file exists at configured path under `/opt/zod/social-cookies/` with valid session cookies
    - **Why human:** Requires manual browser session export; cannot be verified by code reading
+   - **Result:** ✅ pass — `06-UAT.md` #3 (2026-10-17)
 
 4. **External #announcements channel access**
    - **Test:** Verify external channel ID is stable and bot can read it via `DISCORD_RELAY_SOURCE_CHANNEL_ID`
    - **Expected:** Bot can read messages from external #announcements channel via the relay polling timer
    - **Why human:** Requires real external Discord channel and bot membership; cannot be verified by code reading
+   - **Result:** ✅ pass — `06-UAT.md` #4 (2026-10-17)
 
 ## Gaps Summary
 
@@ -298,9 +306,10 @@ No code gaps found. All gap-closure work (G-06-1/CR-02, G-06-2/CR-04, G-06-3/CR-
 
 Critical security findings (CR-01/WR-06, CR-02, CR-04) that were previously open are now CLOSED in code. Warnings WR-01 through WR-06 and the partial taste-prompt-injection gap remain as advisory items for follow-up work — they do not prevent goal achievement.
 
-**Phase goal achieved:** All 10 channels route correctly with reminders and bookmarks, fed by local, relay, and social sources. Status is `human_needed` pending resolution of the 4 human verification items above (operator authorization config + 3 external deployment setup items).
+**Phase goal achieved:** All 10 channels route correctly with reminders and bookmarks, fed by local, relay, and social sources. All four human verification items are resolved (`06-UAT.md` 4/4); status is `passed`.
 
 ---
 
-_Verified: 2026-10-17T14:00:00Z_
-_Verifier: the agent (gsd-verifier)_
+_Verified: 2026-11-06T06:35:00Z_
+_Verifier: closeout re-baseline (build + 722/722 root tests + 108/108 targeted tests + 12/12 local gates)_
+_Previous verification: 2026-10-17T14:00:00Z (gsd-verifier)_

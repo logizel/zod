@@ -8,10 +8,10 @@
 ### Ingestion
 
 - [x] **ING-01**: System polls structured event portals (Unstop, Devfolio, Devpost, Luma, Meetup, CTFtime, CLIST.by) via JSON APIs/RSS first every 15–30 minutes
-- [ ] **ING-02**: System crawls DK & Udupi college/community watchlist domains and bio-link pages every 2–4 hours
+- [x] **ING-02**: System crawls DK & Udupi college/community watchlist domains and bio-link pages every 2–4 hours
 - [x] **ING-03**: System polls job/fellowship portals (Greenhouse, Lever, Ashby, YC, Wellfound, Cutshort, Cuvette, LFX/GSoC/MLH) via search-index + direct polling every 30–60 minutes
-- [ ] **ING-04**: Bot relays external Discord #announcements into private #raw-incoming-feeds via official Bot Gateway (no self-bot)
-- [ ] **ING-05**: System polls X/LinkedIn via exported session cookies on randomized 45–90 minute jitter plus search-index fallback
+- [x] **ING-04**: Bot relays external Discord #announcements into private #raw-incoming-feeds via official Bot Gateway (no self-bot)
+- [x] **ING-05**: System polls X/LinkedIn via exported session cookies on randomized 45–90 minute jitter plus search-index fallback
 - [x] **ING-06**: Sanitizer strips scripts/styles/SVG/nav via Jina-first + shared headless browser fallback, cutting token payload ≥85%
 
 ### Swarm
@@ -27,10 +27,10 @@
 
 - [x] **EVT-01**: Sys/CP/Sec (systems, competitive programming, CTF/InfoSec) events fast-track to #🔥-priority-sys-cp-sec after legitimacy check
 - [x] **EVT-02**: 80/20 domain filter admits all SWE domains, adjacent deep-tech only at organizer≥9 and agenda≥9, rejects non-technical business events
-- [ ] **EVT-03**: Local DK/Udupi offline events route to #📍-local-dk-udupi regardless of prize size
-- [ ] **EVT-04**: Out-of-town offline events require verified selection round + quality to reach #✈️-travel-curated; walk-in low-effort rejected
+- [x] **EVT-03**: Local DK/Udupi offline events route to #📍-local-dk-udupi regardless of prize size
+- [x] **EVT-04**: Out-of-town offline events require verified selection round + quality to reach #✈️-travel-curated; walk-in low-effort rejected
 - [x] **EVT-05**: Online events require verified liquid cash ≥₹1,00,000 INR (credits/vouchers/certificates stripped) to reach #💻-online-1lakh-plus
-- [ ] **EVT-06**: Legit TBA prize/agenda events fire Ping #1 to #⏳-early-tba-radar with WATCHING_TBA status and re-audit every 48h until Ping #2
+- [x] **EVT-06**: Legit TBA prize/agenda events fire Ping #1 to #⏳-early-tba-radar with WATCHING_TBA status and re-audit every 48h until Ping #2
 - [x] **EVT-07**: Cross-platform duplicates merge on normalized title + ±3d date window + organizer into one master record with unified registration_links[]
 
 ### Jobs Pipeline
@@ -53,13 +53,13 @@
 - [x] **MEM-01**: Hot PocketBase `opportunities` collection stores fingerprint_hash, pipeline, bucket_channel, status, prize, links, deadlines, reminders, bookmark, audit_summary
 - [x] **MEM-02**: Hot `agent_telemetry` ring streams slot/provider/model/step/url/status over SSE with 24h retention
 - [x] **MEM-03**: Cold Turso `tombstone_ledger` (url_hash PK, fingerprint, terminal status) is checked pre-scrape in <5ms and never deleted
-- [ ] **MEM-04**: Cold `taste_rules` (BLOCK/BOOST/WEIGHT/CUSTOM) inject into Auditor/Curator prompts from #🧠-bot-training-chat feedback with confirmation reply
+- [x] **MEM-04**: Cold `taste_rules` (BLOCK/BOOST/WEIGHT/CUSTOM) inject into Auditor/Curator prompts from #🧠-bot-training-chat feedback with confirmation reply
 - [x] **MEM-05**: Midnight garbage collector purges heavy text 24h after end_date (48h after rejection), retaining tombstones + taste rules
 
 ### Delivery & Dashboard
 
 - [x] **UI-01**: Discord router posts audit cards (title, organizer, dates, mode, prize breakdown, merged links, 1-line audit) to the 10-channel matrix with 48h/24h deadline reminders for bookmarked/priority items
-- [ ] **UI-02**: 📌 reaction bookmarks an opportunity and arms its deadline reminders
+- [x] **UI-02**: 📌 reaction bookmarks an opportunity and arms its deadline reminders
 - [x] **DSH-01**: Cloudflare Zero Trust gate rejects unauthenticated requests before any UI or SSE stream renders; dashboard is read-only v1
 - [x] **DSH-02**: Top panel shows rolling agent slots (provider/model reel + micro-step ticker incl. 429 baton-pass) live from PocketBase SSE
 - [x] **DSH-03**: Middle panel shows 2D pool health grid (READY/ACTIVE/60s-COOLDOWN/DAILY-CAP per provider-model bucket)
@@ -100,10 +100,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | ING-01 | Phase 4 | Complete |
-| ING-02 | Phase 6 | Pending |
+| ING-02 | Phase 6 | Complete |
 | ING-03 | Phase 5 | Complete |
-| ING-04 | Phase 6 | Pending |
-| ING-05 | Phase 6 | Pending |
+| ING-04 | Phase 6 | Complete |
+| ING-05 | Phase 6 | Complete |
 | ING-06 | Phase 2 | Complete |
 | SWM-01 | Phase 2 | Complete |
 | SWM-02 | Phase 4 | Complete |
@@ -113,10 +113,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SWM-06 | Phase 3 | Complete |
 | EVT-01 | Phase 4 | Complete |
 | EVT-02 | Phase 4 | Complete |
-| EVT-03 | Phase 6 | Pending |
-| EVT-04 | Phase 6 | Pending |
+| EVT-03 | Phase 6 | Complete |
+| EVT-04 | Phase 6 | Complete |
 | EVT-05 | Phase 4 | Complete |
-| EVT-06 | Phase 6 | Pending |
+| EVT-06 | Phase 6 | Complete |
 | EVT-07 | Phase 5 | Complete |
 | JOB-01 | Phase 5 | Complete |
 | JOB-02 | Phase 5 | Complete |
@@ -130,10 +130,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MEM-01 | Phase 1 | Complete |
 | MEM-02 | Phase 1 | Complete |
 | MEM-03 | Phase 1 | Complete |
-| MEM-04 | Phase 6 | Pending |
+| MEM-04 | Phase 6 | Complete |
 | MEM-05 | Phase 7 | Complete |
 | UI-01 | Phase 4 | Complete |
-| UI-02 | Phase 6 | Pending |
+| UI-02 | Phase 6 | Complete |
 | DSH-01 | Phase 7 | Complete |
 | DSH-02 | Phase 7 | Complete |
 | DSH-03 | Phase 7 | Complete |
