@@ -3,7 +3,7 @@ status: complete
 phase: 07-telemetry-dashboard-ops-hardening
 source: [07-VERIFICATION.md]
 started: 2026-10-18T09:45:00Z
-updated: 2026-10-18T09:47:00Z
+updated: 2026-11-06T12:10:00Z
 ---
 
 ## Current Test
@@ -61,11 +61,13 @@ pending: 0
 skipped: 0
 blocked: 0
 
-## Gaps
+## Gaps — Resolved
 
-- CR-03 production fix: registry.ts assertSchedulerGuards() now includes GC_JOBS (fixed in this commit)
-- CR-04 connection timeout: res.setTimeout + req.on('timeout') implemented on /api/stream (fixed in this commit)
-- CR-01 deployment: data-stream-url/data-boards-url attributes present in index.html but not yet deployed with absolute tunnel URL
-- WR-01: /api/stream has no application-layer auth (relies solely on Cloudflare Access edge)
-- WR-04: Client-side viewer cap counts reconnects, not concurrent viewers
-- WR-05: Boards-fetch errors silently swallowed (console.error only)
+All gaps recorded during UAT were closed before phase closeout:
+
+- CR-01 deployment: `data-stream-url` / `data-boards-url` attributes are present in `index.html` and resolve to the tunnel origin, with relative fallback (07-FIX-CR-01).
+- CR-03 production fix: `assertSchedulerGuards()` includes `GC_JOBS` (`registry.ts`).
+- CR-04 connection timeout: `res.setTimeout` + `req.on('timeout')` implemented on `/api/stream`; per-client write isolation added.
+- WR-01: `authorizeStream()` added before `hub.addClient` (07-FIX-WR-01, commit `8e37289`).
+- WR-04: client reconnect-as-cap removed; server-side viewer cap enforced (07-FIX-WR-04).
+- WR-05: user-visible "Boards failed to load" message added (07-FIX-WR-05).
