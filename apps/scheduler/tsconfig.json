@@ -8,6 +8,7 @@
   "exclude": ["src/**/*.test.ts"],
   "include": ["src"],
   "references": [
+    { "path": "../dashboard-server" },
     { "path": "../../packages/config" },
     { "path": "../../packages/logger" },
     { "path": "../../packages/scheduler" },

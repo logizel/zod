@@ -24,6 +24,9 @@
       "path": "./apps/scheduler"
     },
     {
+      "path": "./apps/dashboard-server"
+    },
+    {
       "path": "./apps/bot"
     },
     {
