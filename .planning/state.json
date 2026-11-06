@@ -1,7 +1,7 @@
 {
   "contract": "1.0.0",
   "flavor": "core",
-  "milestone": null,
+  "milestone": "v1",
   "phases": [
     {
       "number": "1",
@@ -31,18 +31,18 @@
     {
       "number": "6",
       "name": "Delivery + Local/Social Coverage",
-      "status": "in_progress"
+      "status": "complete"
     },
     {
       "number": "7",
       "name": "Telemetry Dashboard + Ops Hardening",
-      "status": "in_progress"
+      "status": "complete"
     }
   ],
   "next": {
-    "command": "/gsd:progress --next",
-    "label": "Advance to the next step",
-    "reason": "Phase 07 of 7 · 71% · executing"
+    "command": "/gsd-new-milestone",
+    "label": "Start the next milestone",
+    "reason": "v1 complete · 7/7 phases · 40/40 requirements · audited tech_debt"
   },
-  "updated_at": "2026-10-17T18:57:51.281Z"
+  "updated_at": "2026-11-06T06:59:13.017Z"
 }

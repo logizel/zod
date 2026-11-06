@@ -5,7 +5,7 @@ slug: "foundation"
 # audit-milestone §5.5 distinguishes NOT-VALIDATED (draft) from PARTIAL (validated + nyquist_compliant: false) (#2117)
 status: validated
 nyquist_compliant: true
-wave_0_complete: false
+wave_0_complete: true
 created: "2026-10-15"
 ---
 
@@ -54,13 +54,13 @@ created: "2026-10-15"
 
 ## Wave 0 Requirements
 
-- [ ] `vitest.config.ts` (root, `test.workspace`) + per-package `vitest.config.ts` files
-- [ ] `packages/dedup/src/fingerprint.test.ts` — must-match/must-differ fixtures + URL normalization cases
-- [ ] `packages/config/src/env.test.ts` — missing-secret throws; defaults apply
-- [ ] `packages/logger/src/redact.test.ts` — secret paths censored, non-secrets pass through
-- [ ] `packages/scheduler/src/overlap.test.ts` — forced-overlap skip + `execution:overlap` counter
-- [ ] `infra/oracle/drills/*.sh` — port-scan, edge-reject, wipe-restore harnesses
-- [ ] Ephemeral PB (local binary) + Turso test DB for integration tests — planner decides (local PB binary vs `pocketbase` npm test helper)
+- [x] `vitest.config.ts` (root, `test.workspace`) + per-package `vitest.config.ts` files
+- [x] `packages/dedup/src/fingerprint.test.ts` — must-match/must-differ fixtures + URL normalization cases
+- [x] `packages/config/src/env.test.ts` — missing-secret throws; defaults apply
+- [x] `packages/logger/src/redact.test.ts` — secret paths censored, non-secrets pass through
+- [x] `packages/scheduler/src/overlap.test.ts` — forced-overlap skip + `execution:overlap` counter
+- [x] `infra/oracle/drills/*.sh` — port-scan, edge-reject, wipe-restore harnesses
+- [x] Ephemeral PB (local binary) + Turso test DB for integration tests — exercised by local drills and `01-UAT.md` live Turso round-trip
 
 ---
 

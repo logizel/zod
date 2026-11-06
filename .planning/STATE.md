@@ -2,18 +2,18 @@
 gsd_state_version: "1.0"
 current_phase: 07
 current_phase_name: Telemetry Dashboard + Ops Hardening
-status: executing
-stopped_at: Phase 7 context gathered
-last_updated: "2026-10-20T11:34:36.046Z"
-last_activity: 2026-10-20
-last_activity_desc: Completed quick task 261020-ke3 (local full-stack verification)
-state_head: 4db7f04a08875f38f3f6995605dffd5a65ab7954
+status: complete
+stopped_at: "v1 closed — all 7 phases complete"
+last_updated: "2026-11-06T06:59:13.017Z"
+last_activity: 2026-11-06
+last_activity_desc: Completed v1 closeout — re-baseline, Phase 6/7 verification, requirements reconciliation, milestone audit, release tag
+state_head: 506daec
 progress:
   total_phases: 7
-  completed_phases: 5
+  completed_phases: 7
   total_plans: 32
   completed_plans: 32
-  percent: 71
+  percent: 100
 ---
 
 # Project State
@@ -23,21 +23,21 @@ progress:
 See: .planning/PROJECT.md (updated 2026-10-15)
 
 **Core value:** Only verified, deduplicated, high-signal opportunities reach Discord — every online event has audited cash ≥₹1,00,000 or a real perk with India shipping, every job is true 0–1yr/intern, every alert links the official source.
-**Current focus:** Phase 07 — Telemetry Dashboard + Ops Hardening
+**Current focus:** v1 complete — closeout audit and release
 
 ## Current Position
 
-Phase: 07 (Telemetry Dashboard + Ops Hardening) — EXECUTING
+Phase: 07 (Telemetry Dashboard + Ops Hardening) — COMPLETE
 Plan: 3 of 3 (main) + 4 gap-closure (FIX-CR-01, FIX-WR-01, FIX-WR-04, FIX-WR-05)
-Status: Gap closure complete — all --gaps-only plans executed
-Last activity: 2026-10-20 — Completed quick task 261020-nea: one-command local dev (`pnpm dev`) and verification (`pnpm verify:local`)
+Status: Complete — v1 milestone audit recorded (`tech_debt`, no blockers); release tag `v1.0.0`
+Last activity: 2026-11-06 — v1 closeout: build repaired, 12/12 local gates green, Phases 6–7 verified/validated, 40/40 requirements complete
 
-Progress: [███████░░░] 71%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 18
+- Total plans completed: 32 (v1 complete)
 - Average duration: -
 - Total execution time: -
 
@@ -116,8 +116,8 @@ None yet.
 
 ### Blockers/Concerns
 
-- ⚠️ [Phase 5] CR-01: SQL-injection pattern in createOpportunityIfAbsent PocketBase filter (orchestrator.ts:363) — urlHash is SHA-256 hex so not exploitable, but fragile hand-rolled escaping; review for Phase 6 hardening
-- X/LinkedIn session posture + DK/Udupi domain inventory need review as gates before Phase 6 build
+- No blocking concerns at v1 close. The Phase 5 CR-01 filter escaping remains non-exploitable (`urlHash` is SHA-256 hex) and is tracked as D-11 in `docs/follow-ups/v1-debt.md`.
+- All deferred advisories are prioritized in `docs/follow-ups/v1-debt.md`; none block the v1.0.0 tag.
 
 ### Quick Tasks Completed
 
@@ -128,14 +128,16 @@ None yet.
 
 ## Deferred Items
 
-Items acknowledged and deferred at milestone close, most recent first:
+Items acknowledged and deferred at milestone close, most recent first. Full prioritized backlog: [`docs/follow-ups/v1-debt.md`](../docs/follow-ups/v1-debt.md).
 
 | Category | Item | Status | Deferred At | Milestone |
 |----------|------|--------|-------------|-----------|
-| *(none)* | | | | |
+| Correctness | D-01 taste-apply URL hash collision; D-02 TBA re-audit deadline wipe | Tracked | 2026-11-06 | v1 |
+| Behavior | D-03 reminder flag reset; D-04 hardcoded reminder hours; D-05 relay sanitization; D-06 cookie JSON validation; D-07 local taste injection | Tracked | 2026-11-06 | v1 |
+| Hardening | D-08..D-17 secrets scan, seed consumer, watchdog URLs, filter escaping, DM casing, listener guard, TOCTOU, Phase 7 info items, legacy security records, Phase 1 advisories | Tracked | 2026-11-06 | v1 |
 
 ## Session Continuity
 
-Last session: 2026-10-17T13:26:20.204Z
-Stopped at: Phase 7 context gathered
-Resume file: .planning/phases/07-telemetry-dashboard-ops-hardening/07-CONTEXT.md
+Last session: 2026-11-06T06:59:13.017Z
+Stopped at: v1 complete — all phases closed, milestone audited, release tagged
+Resume file: .planning/v1-MILESTONE-AUDIT.md

@@ -1,8 +1,10 @@
 ---
 phase: 01-foundation
 verified: 2026-10-15T17:45:00Z
-status: human_needed
+status: passed
 score: 16/16 must-haves verified
+human_needed: false
+human_verification_resolved: "2026-10-15 via 01-UAT.md (5/5 pass)"
 covered_files:
   - .planning/phases/01-foundation/01-01-PLAN.md
   - .planning/phases/01-foundation/01-02-PLAN.md
@@ -69,8 +71,9 @@ human_verification:
 
 **Phase Goal:** The system has a surviving home — provisioned VM, live databases, closed network, and a scheduler that cannot stampede
 **Verified:** 2026-10-15T17:45:00Z
-**Status:** human_needed
-**Re-verification:** No — initial verification
+**Status:** passed
+**Human verification:** resolved — `01-UAT.md` complete, 5/5 pass, 0 issues (2026-10-15)
+**Re-verification:** No — initial verification; status updated at v1 closeout after UAT completion
 
 ## Goal Achievement
 
@@ -169,7 +172,7 @@ No blockers. Debt-marker grep (`TBD|FIXME|XXX|TODO|HACK|PLACEHOLDER`) run over p
 
 ### Human Verification Required
 
-Five items (see frontmatter): live rebuild on Ampere, live wipe with Turso round-trip, live port/edge assertions, live memory band + real watchdog page, pre-commit hook firing. All stem from plan-deferred live paths (no credentials in this environment by design), not from implementation gaps.
+Five items (see frontmatter): live rebuild on Ampere, live wipe with Turso round-trip, live port/edge assertions, live memory band + real watchdog page, pre-commit hook firing. All stem from plan-deferred live paths (no credentials in this environment by design), not from implementation gaps. **All five passed in `01-UAT.md` (5/5, 0 issues, 2026-10-15).**
 
 ### Gaps Summary
 
