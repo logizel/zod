@@ -19,6 +19,7 @@
 
 import { hashUrl, normalizeUrl } from '@zod/dedup';
 import type { TasteRule } from '@zod/db-hot/schema';
+import { lookupTasteRules, type ColdTasteRule, type StatementExecutor } from '@zod/db-cold';
 
 export interface PollCandidate {
   url: string;
@@ -34,8 +35,43 @@ export interface PbLike {
   };
 }
 
-/** Load all taste_rules rows from PocketBase (fresh per audit cycle). */
-export async function loadTasteRules(pb: PbLike): Promise<TasteRule[]> {
+export interface LoadTasteRulesOpts {
+  /** Cold Turso executor (primary read when available). */
+  cold?: StatementExecutor;
+  /** Whether to fall back to PocketBase when cold is unavailable/empty. */
+  pbFallback?: boolean;
+}
+
+/**
+ * Load all taste_rules rows. Reads cold Turso first when a cold executor is
+ * provided; falls back to PocketBase when cold is unavailable or empty.
+ */
+export async function loadTasteRules(
+  pb: PbLike,
+  opts: LoadTasteRulesOpts = {},
+): Promise<TasteRule[]> {
+  const { cold, pbFallback = true } = opts;
+
+  // Cold first: durable VM-rebuild-surviving store.
+  if (cold) {
+    try {
+      const coldRules = await lookupTasteRules(cold);
+      if (coldRules.length > 0) {
+        return coldRules.map((r: ColdTasteRule) => ({
+          kind: r.kind as 'BLOCK' | 'BOOST' | 'WEIGHT' | 'CUSTOM',
+          rule: r.rule,
+          weight: r.weight,
+          source: r.source,
+          created_at: new Date().toISOString(),
+        }));
+      }
+    } catch {
+      // Cold unavailable — fall through to PB fallback (or empty).
+    }
+  }
+
+  if (!pbFallback) return [];
+
   try {
     const coll = pb.collection('taste_rules');
     if (!coll || typeof coll.getList !== 'function') {
@@ -130,22 +166,22 @@ export function checkHardComplianceGates(
  * Full pre-scoring flow: check BLOCK rules, tombstone blocked candidates,
  * return only passed candidates.
  *
- * The `url` parameter is the candidate URL used for tombstone hashing.
+ * Each blocked candidate is tombstoned with a hash of its OWN candidate URL
+ * (not a reused listing URL), so dedup fingerprints stay correct per post.
  */
 export async function applyTastePreScoring(
   candidates: PollCandidate[],
   rules: TasteRule[],
   pb: PbLike,
-  url: string,
 ): Promise<PollCandidate[]> {
   const { blocked, passed } = checkBlockRules(candidates, rules);
-  const urlHash = hashUrl(normalizeUrl(url));
 
-  for (const _cand of blocked) {
+  for (const cand of blocked) {
     const coll = pb.collection('tombstone_ledger');
     if (typeof coll.create !== 'function') {
       throw new Error('tombstone_ledger.create is not available');
     }
+    const urlHash = hashUrl(normalizeUrl(cand.url));
     await coll.create({
       url_hash: urlHash,
       fingerprint: urlHash,

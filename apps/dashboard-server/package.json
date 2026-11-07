@@ -26,6 +26,7 @@
   },
   "dependencies": {
     "@zod/config": "workspace:*",
+    "@zod/db-cold": "workspace:*",
     "@zod/db-hot": "workspace:*",
     "@zod/logger": "workspace:*",
     "eventsource": "^5.1.3",

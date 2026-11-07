@@ -5,7 +5,7 @@
 // D-01: every bucket state transition is persisted to agent_telemetry via
 // writeBucketState so the operator sees READY → 60s-COOLDOWN → READY.
 // D-04: Cerebras is absent from the ladder; no timer can route to it.
-import { registerGatewayJobs, type SchedulerModule, type TickLogger } from '@zod/scheduler-registry';
+import { registerGatewayTimerJobs, type SchedulerModule, type TickLogger } from '@zod/scheduler-registry';
 import { BucketState } from './bucket.js';
 import { writeBucketState, type BucketStateInput } from './telemetry.js';
 import { LlmRouter } from './router.js';
@@ -33,11 +33,11 @@ export interface GatewaySchedulerOpts {
 /** Starts gateway bucket timers through the single scheduler registry.
  * The scheduler owns the cron schedule; the gateway owns the tick handler. */
 export class GatewayScheduler {
-  private handle: ReturnType<typeof registerGatewayJobs> | null = null;
+  private handle: ReturnType<typeof registerGatewayTimerJobs> | null = null;
 
   constructor(private readonly opts: GatewaySchedulerOpts) {}
 
-  /** Register + start gateway bucket-timer jobs via registerGatewayJobs. */
+  /** Register + start gateway bucket-timer jobs via registerGatewayTimerJobs. */
   start(log: TickLogger): void {
     const { router, pb, slot, pipeline, url = '', mod } = this.opts;
     const writeTelemetry = async (input: TelemetryWriteInput): Promise<void> => {
@@ -63,7 +63,7 @@ export class GatewayScheduler {
       }
     };
 
-    this.handle = registerGatewayJobs(log, mod, { tickHandler });
+    this.handle = registerGatewayTimerJobs(log, mod, { tickHandler });
   }
 
   /** Recover every COOLDOWN bucket whose cooldownUntil has elapsed (60s → READY).

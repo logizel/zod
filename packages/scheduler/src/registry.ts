@@ -13,6 +13,8 @@ import {
   SCHEDULER_TIMEZONE,
   STUB_JOBS,
   GATEWAY_JOBS,
+  GATEWAY_TIMER_JOBS,
+  DELIVERY_JOBS,
   JOB_POLL_JOBS,
   AUDIT_JOBS,
   GC_JOBS,
@@ -31,6 +33,8 @@ export {
   SCHEDULER_TIMEZONE,
   STUB_JOBS,
   GATEWAY_JOBS,
+  GATEWAY_TIMER_JOBS,
+  DELIVERY_JOBS,
   JOB_POLL_JOBS,
   AUDIT_JOBS,
   GC_JOBS,
@@ -181,20 +185,19 @@ export function registerStubJobs(
   };
 }
 
-/** Register gateway bucket-timer jobs alongside stub jobs via the same single
- * registry path (no setInterval scatter). Accepts an injected tickHandler so
- * the scheduler stays agnostic of gateway internals (llm provides the handler
- * via registry-integration.ts). */
-export function registerGatewayJobs(
+/** Shared registration path for gateway/delivery cron jobs. The scheduler
+ * stays agnostic of gateway internals — callers inject a tickHandler. */
+function registerGatewayJobSet(
+  defs: readonly StubJobDef[],
   log: TickLogger,
-  mod: SchedulerModule = cron,
+  mod: SchedulerModule,
   opts: RegisterOptions & {
     tickHandler?: (def: StubJobDef, log: TickLogger) => Promise<void> | void;
-  } = {},
+  },
 ): RegistryHandle {
   assertSchedulerGuards(mod);
   const heartbeatDir = opts.heartbeatDir ?? process.env['SCHEDULER_HEARTBEAT_DIR'];
-  const tasks = GATEWAY_JOBS.map((def) => {
+  const tasks = defs.map((def) => {
     const task = mod.schedule(
       def.expression,
       () => runGatewayTick(def, log, { sink: opts.sink, heartbeatDir, tickHandler: opts.tickHandler }),
@@ -220,6 +223,40 @@ export function registerGatewayJobs(
       }
     },
   };
+}
+
+/** Register every gateway job (headless timers + delivery). Kept for tests and
+ * single-process use; production uses the narrower functions below. */
+export function registerGatewayJobs(
+  log: TickLogger,
+  mod: SchedulerModule = cron,
+  opts: RegisterOptions & {
+    tickHandler?: (def: StubJobDef, log: TickLogger) => Promise<void> | void;
+  } = {},
+): RegistryHandle {
+  return registerGatewayJobSet(GATEWAY_JOBS, log, mod, opts);
+}
+
+/** Register only the headless bucket timers (scheduler process). */
+export function registerGatewayTimerJobs(
+  log: TickLogger,
+  mod: SchedulerModule = cron,
+  opts: RegisterOptions & {
+    tickHandler?: (def: StubJobDef, log: TickLogger) => Promise<void> | void;
+  } = {},
+): RegistryHandle {
+  return registerGatewayJobSet(GATEWAY_TIMER_JOBS, log, mod, opts);
+}
+
+/** Register only the Discord-delivery jobs (bot process). */
+export function registerDeliveryJobs(
+  log: TickLogger,
+  mod: SchedulerModule = cron,
+  opts: RegisterOptions & {
+    tickHandler?: (def: StubJobDef, log: TickLogger) => Promise<void> | void;
+  } = {},
+): RegistryHandle {
+  return registerGatewayJobSet(DELIVERY_JOBS, log, mod, opts);
 }
 
 /** Register job-pipeline poll jobs (jobs-poll, loot-watchlist) via runStubTick

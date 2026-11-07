@@ -154,12 +154,13 @@ export const STUB_JOBS: readonly StubJobDef[] = [
 
 /** Gateway bucket-timer jobs registered through the single scheduler registry (D-23).
  *
- * These run alongside the stub jobs — one registry, no scattered setInterval.
+ * These are headless: they do not need a Discord gateway connection. The
+ * scheduler process owns them so a bot reconnect cannot delay bucket recovery.
  * - gateway-bucket-cooldown: every minute + 30s jitter, recovers COOLDOWN buckets → READY.
  * - gateway-daily-cap-reset: daily at UTC midnight + 5m jitter, resets DAILY-CAP buckets.
  * - gateway-warmup: every minute + 10s jitter, idempotent ladder + env key validation at boot.
  */
-export const GATEWAY_JOBS: readonly StubJobDef[] = [
+export const GATEWAY_TIMER_JOBS: readonly StubJobDef[] = [
   {
     name: 'gateway-bucket-cooldown',
     expression: '* * * * *',
@@ -178,6 +179,11 @@ export const GATEWAY_JOBS: readonly StubJobDef[] = [
     maxRandomDelayMs: 10 * 1000,
     description: 'validates ladder + env keys at gateway boot (idempotent)',
   },
+];
+
+/** Discord-delivery jobs. These need the gateway client, so the bot process
+ * owns them (the headless scheduler must never create a second gateway). */
+export const DELIVERY_JOBS: readonly StubJobDef[] = [
   {
     name: 'gateway-relay-poll',
     expression: '*/15 * * * *',
@@ -190,6 +196,12 @@ export const GATEWAY_JOBS: readonly StubJobDef[] = [
     maxRandomDelayMs: 5 * 60_000,
     description: 'bookmark deadline reminder scan (UI-02)',
   },
+];
+
+/** Backwards-compatible aggregate: every gateway/delivery job in one table. */
+export const GATEWAY_JOBS: readonly StubJobDef[] = [
+  ...GATEWAY_TIMER_JOBS,
+  ...DELIVERY_JOBS,
 ];
 
 /** Job pipeline poll + audit-drain jobs (Phase 5, D-01 / D-14).

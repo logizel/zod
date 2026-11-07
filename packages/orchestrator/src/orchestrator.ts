@@ -146,6 +146,8 @@ async function processRow(
       return await processEventsRow(pb, router, rowLog, row);
     case 'local':
       return await drainLocalRow(pb, router, rowLog, row);
+    case 'social':
+      return await processSocialRow(pb, router, rowLog, row);
     case 'jobs':
     default:
       return await processJobsRow(pb, router, rowLog, row);
@@ -179,7 +181,6 @@ async function processJobsRow(
     [{ url: candidateUrl, title: candidateTitle, snippet: fetchedText }],
     tasteRules,
     pb,
-    candidateUrl,
   );
   if (passed.length === 0) {
     await scratchpadColl(pb).update(row.id, { step_position: 'STEP_3' });
@@ -334,7 +335,6 @@ export async function drainLootRow(
     [{ url: candidateUrl, title: candidateTitle, snippet: faqText }],
     tasteRules,
     pb,
-    candidateUrl,
   );
   if (passed.length === 0) {
     await scratchpadColl(pb).update(row.id, { step_position: 'STEP_3' });
@@ -492,7 +492,6 @@ async function processEventsRow(
     [{ url: candidateUrl, title: candidateTitle, snippet: fetchedText }],
     tasteRules,
     pb,
-    candidateUrl,
   );
   if (passed.length === 0) {
     await scratchpadColl(pb).update(row.id, { step_position: 'STEP_3' });
@@ -671,6 +670,203 @@ async function processEventsRow(
 }
 
 /**
+ * Social audit flow (D-07/D-08/D-09).
+ *
+ * X/LinkedIn social candidates carry pipeline: 'social'. They reuse events-style
+ * audit semantics (rule pack → LlmRouter → hard/taste gates → write/tombstone)
+ * but route through the social channel and preserve pipeline: 'social' on the
+ * written opportunity row.
+ */
+async function processSocialRow(
+  pb: PbLike,
+  router: LlmRouter,
+  rowLog: Logger,
+  row: TaskScratchpadRow,
+): Promise<void> {
+  const pipeline = row.pipeline;
+  const candidateUrl = row.candidate_url;
+  const candidateTitle = row.candidate_title ?? '';
+  const fetchedText = row.partial_buffer ?? '';
+
+  // D-13: Hard compliance gates FIRST (before taste rules, before LLM).
+  const hardGate = checkHardComplianceGates(candidateTitle, fetchedText);
+  if (hardGate?.blocked) {
+    await writeTombstone(pb, candidateUrl, hardGate.reason, 'hard_compliance');
+    await scratchpadColl(pb).update(row.id, { step_position: 'STEP_3' });
+    rowLog.info({ reasonCode: hardGate.reason }, 'tombstone written (hard compliance gate)');
+    return;
+  }
+
+  // D-12: Taste BLOCK pre-scoring filter — before LLM call.
+  const tasteRules = await loadTasteRules(pb);
+  const passed = await applyTastePreScoring(
+    [{ url: candidateUrl, title: candidateTitle, snippet: fetchedText }],
+    tasteRules,
+    pb,
+  );
+  if (passed.length === 0) {
+    await scratchpadColl(pb).update(row.id, { step_position: 'STEP_3' });
+    rowLog.info({ reasonCode: 'taste_blocked' }, 'tombstone written (taste BLOCK pre-scoring)');
+    return;
+  }
+
+  // D-12: Advisory system-prompt injection from BOOST/WEIGHT/CUSTOM rules.
+  const tasteInjection = buildTastePromptInjection(tasteRules);
+
+  const messages = buildEventsMessages({
+    pipeline: 'social',
+    candidateUrl,
+    candidateTitle,
+    fetchedText,
+    tasteInjection,
+  });
+
+  const result = await router.complete({
+    messages,
+    step1: '',
+    step2: fetchedText,
+    slot: 'auditor-social-1',
+    pipeline: 'social',
+    url: candidateUrl,
+    priority: 2,
+  });
+
+  if (result.verdict === 'UNVERIFIED' || result.verdict === 'POOL_SATURATED') {
+    rowLog.info({ verdict: result.verdict, reason: result.reason }, 'no verdict; leaving at STEP_2');
+    return;
+  }
+
+  const verdict = parseEventsVerdict(result.verdict);
+  if (!verdict) {
+    rowLog.warn({ stage: 'verdict_parse' }, 'verdict parse failed; tombstoning');
+    await writeTombstone(pb, candidateUrl, 'verdict_parse_failed', 'auditor');
+    await scratchpadColl(pb).update(row.id, { step_position: 'STEP_3' });
+    return;
+  }
+
+  // Ping #1: TBA detection — prize and date both null → TBA radar.
+  if (verdict.prize_cash_inr === null && verdict.dates === null) {
+    rowLog.info({ stage: 'tba-ping1' }, 'Ping #1: social TBA detected');
+    const urlHash = hashUrl(normalizeUrl(candidateUrl));
+    await createOpportunityIfAbsent(pb, {
+      url_hash: urlHash,
+      fingerprint_hash: urlHash,
+      pipeline: 'social',
+      bucket_channel: '#⏳-early-tba-radar',
+      status: 'audited',
+      title: candidateTitle,
+      organizer: verdict.organizer,
+      links: { official: candidateUrl },
+      prize_cash_inr: null,
+      prize_text: verdict.prize_text,
+      audit_summary: verdict.audit_summary,
+      deadlines: { tba: true },
+      description_raw: fetchedText.slice(0, 8000),
+    });
+    await scratchpadColl(pb).update(row.id, { step_position: 'STEP_3' });
+    rowLog.info({ bucketChannel: '#⏳-early-tba-radar' }, 'social TBA opportunity written (Ping #1)');
+    return;
+  }
+
+  // Resolve official domain within 2-hop cap (SSRF-guarded).
+  const hop = await resolveOfficialDomain(candidateUrl, 2);
+  if (!hop.ok) {
+    rowLog.info({ stage: 'resolveOfficialDomain' }, 'domain resolution failed; tombstoning link_hop_failed');
+    await writeTombstone(pb, candidateUrl, 'link_hop_failed', 'auditor');
+    await scratchpadColl(pb).update(row.id, { step_position: 'STEP_3' });
+    return;
+  }
+
+  // Domain filter (sys-cp-sec fast-track).
+  const domainVerdict =
+    verdict.category === 'sys-cp-sec'
+      ? ({ verdict: 'pass' } as const)
+      : domainPrefilter(
+          { title: verdict.title, snippet: verdict.audit_summary },
+          { organizerScore: verdict.organizer_score, agendaScore: verdict.agenda_score },
+        );
+  if (domainVerdict.verdict === 'reject') {
+    rowLog.info({ stage: 'domain-filter', reason: domainVerdict.reason }, 'domain filter rejected; tombstoning');
+    await writeTombstone(pb, candidateUrl, domainVerdict.reason, 'auditor');
+    await scratchpadColl(pb).update(row.id, { step_position: 'STEP_3' });
+    return;
+  }
+
+  // Prize gate — explicit liquid cash >= ₹1L, credits stripped.
+  const prizeGatePasses = passesPrizeGate(verdict.prize_text, verdict.prize_cash_inr);
+
+  if (prizeGatePasses) {
+    const bucketChannel =
+      verdict.category === 'sys-cp-sec' ? '#🔥-priority-sys-cp-sec' : '#-online-1lakh-plus';
+
+    let possibleDupeOf = '';
+    if (pb !== undefined && (pipeline === 'events' || pipeline === 'jobs')) {
+      // The dedup merger only supports events/jobs pipelines; social is new
+      // and has no existing rows to merge against yet.
+      const store = createMergeStore({ pb: pb as any });
+      const mergeResult = await attemptMerge(
+        {
+          pipeline,
+          title: candidateTitle,
+          url: candidateUrl,
+          organizer: (verdict.organizer as string | undefined) ?? undefined,
+          dateMs: undefined,
+          location: undefined,
+        },
+        store,
+      );
+
+      if (mergeResult.merged) {
+        await writeTombstone(pb, candidateUrl, 'merged', 'merger');
+        await scratchpadColl(pb).update(row.id, { step_position: 'STEP_3' });
+        rowLog.info({ stage: 'backstop', masterId: mergeResult.masterId }, 'merged at drain — no opportunity create');
+        return;
+      }
+      if (mergeResult.possibleDupe && mergeResult.masterId) {
+        possibleDupeOf = mergeResult.masterId;
+      }
+    }
+
+    const urlHash = hashUrl(normalizeUrl(candidateUrl));
+    await createOpportunityIfAbsent(pb, {
+      url_hash: urlHash,
+      fingerprint_hash: urlHash,
+      pipeline: 'social',
+      bucket_channel: bucketChannel,
+      status: 'audited',
+      title: candidateTitle,
+      organizer: verdict.organizer,
+      links: { official: candidateUrl },
+      prize_cash_inr: verdict.prize_cash_inr ?? null,
+      prize_text: verdict.prize_text,
+      audit_summary: verdict.audit_summary,
+      deadlines: {
+        tba: false,
+        ...(verdict.dates
+          ? { event_start: verdict.dates.start, event_end: verdict.dates.end }
+          : {}),
+      },
+      end_date: verdict.dates?.end ?? null,
+      description_raw: fetchedText.slice(0, 8000),
+      possible_dupe_of: possibleDupeOf,
+    });
+    await scratchpadColl(pb).update(row.id, { step_position: 'STEP_3' });
+    rowLog.info({ bucketChannel }, 'social opportunity written (audited)');
+    return;
+  }
+
+  // Prize gate failed.
+  if (verdict.perk_hint) {
+    await drainLootRow(pb, router, rowLog, row);
+    return;
+  }
+
+  await writeTombstone(pb, candidateUrl, 'prize_below_threshold', 'auditor');
+  await scratchpadColl(pb).update(row.id, { step_position: 'STEP_3' });
+  rowLog.info({ reasonCode: 'prize_below_threshold' }, 'tombstone written (prize below threshold)');
+}
+
+/**
  * Local audit flow (D-02): rule pack → router → geo classification → bucket
  * routing → opportunities write | tombstone.
  *
@@ -712,7 +908,6 @@ async function drainLocalRow(
     [{ url: candidateUrl, title: candidateTitle, snippet: fetchedText }],
     tasteRules,
     pb,
-    candidateUrl,
   );
   if (passed.length === 0) {
     await scratchpadColl(pb).update(row.id, { step_position: 'STEP_3' });

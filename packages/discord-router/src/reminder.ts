@@ -34,13 +34,22 @@ export interface ReminderDeps {
 
 const NOW_ISO = () => new Date().toISOString();
 
-/** Human-readable reminder text. */
+/** Human-readable reminder text. Computes the offset from the reminder's own
+ * `at` timestamp rather than inferring 48h/24h from deadlines.event_start,
+ * so a 24h reminder on an event_start-anchored row reads "24h" not "48h". */
 function formatReminder(reminder: any, deadlines: any): string {
   const anchor = deadlines?.event_start ?? deadlines?.apply_by;
   const anchorLabel = deadlines?.event_start ? 'Event starts' : 'Apply by';
-  const anchorDate = anchor ? new Date(anchor).toISOString().slice(0, 10) : 'unknown date';
-  const hoursAgo = deadlines?.event_start ? 48 : 24;
-  return `${anchorLabel} in ${hoursAgo}h (${anchorDate})`;
+  const anchorDate = anchor ? new Date(anchor).getTime() : null;
+  const reminderAt = reminder?.at ? new Date(reminder.at).getTime() : null;
+  let hoursAgo: number;
+  if (anchorDate !== null && reminderAt !== null) {
+    hoursAgo = Math.round((anchorDate - reminderAt) / (60 * 60 * 1000));
+  } else {
+    hoursAgo = deadlines?.event_start ? 48 : 24;
+  }
+  const anchorDateStr = anchor ? new Date(anchor).toISOString().slice(0, 10) : 'unknown date';
+  return `${anchorLabel} in ${hoursAgo}h (${anchorDateStr})`;
 }
 
 /** Create a reminder ticker with injected dependencies (testable). */

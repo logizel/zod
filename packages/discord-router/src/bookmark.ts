@@ -127,6 +127,14 @@ export function createBookmarkHandler(deps: BookmarkDeps): BookmarkHandler {
 }
 
 /** Start the bookmark handler (entrypoint usage: creates deps from env + log). */
-export function startBookmarkHandler({ env, log }: { env: Env; log: Logger }): void {
-  void createBookmarkHandler({ env, log });
+export function startBookmarkHandler({
+  env,
+  log,
+  pb,
+}: {
+  env: Env;
+  log: Logger;
+  pb?: any;
+}): void {
+  void createBookmarkHandler({ env, log, pb });
 }

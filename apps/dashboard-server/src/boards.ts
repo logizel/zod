@@ -58,7 +58,11 @@ const BOARD_TAB_DEFS: Array<{
   {
     tab: 'events-local',
     window: 'active/upcoming + last 7 days',
-    scope: (r) => r.pipeline === 'events' && isLocalChannel(String(r.bucket_channel ?? '')),
+    // Local ingestion writes pipeline='local' (EVT-03); local events must not
+    // disappear from the local board because of that code-owned marker.
+    scope: (r) =>
+      (r.pipeline === 'events' || r.pipeline === 'local') &&
+      isLocalChannel(String(r.bucket_channel ?? '')),
   },
   {
     tab: 'events-travel',
@@ -177,8 +181,30 @@ export type ListOpportunities = () => Promise<Array<Record<string, unknown>>>;
 
 export interface HandleBoardsOpts {
   rows?: Array<Record<string, unknown>>;
+  /** Cold/hot tombstone rows for the audit & rejection log tab. */
+  tombstones?: Array<Record<string, unknown>>;
   listOpportunities?: ListOpportunities;
   nowMs?: number;
+}
+
+/** Shape a tombstone ledger row for the audit-log board. */
+function tombstoneToBoardRow(t: Record<string, unknown>): Record<string, unknown> {
+  const terminal = String(t.terminal_status ?? 'tombstoned');
+  const decidedAt = String(t.decided_at ?? '');
+  return {
+    id: String(t.url_hash ?? t.id ?? ''),
+    url_hash: String(t.url_hash ?? ''),
+    fingerprint: String(t.fingerprint ?? ''),
+    title: `Rejected: ${terminal}`,
+    organizer: String(t.source ?? ''),
+    pipeline: 'tombstone',
+    bucket_channel: '',
+    status: 'tombstoned',
+    terminal_status: terminal,
+    source: String(t.source ?? ''),
+    decided_at: decidedAt,
+    end_date: decidedAt,
+  };
 }
 
 /** Handle GET /api/boards: return JSON boards array shaped for board tabs. */
@@ -191,7 +217,10 @@ export function handleBoards(
   opts: HandleBoardsOpts = {},
 ): void {
   const nowMs = opts.nowMs ?? Date.now();
-  const rows: Array<Record<string, unknown>> = opts.rows ?? [];
+  const rows: Array<Record<string, unknown>> = [
+    ...(opts.rows ?? []),
+    ...(opts.tombstones ?? []).map(tombstoneToBoardRow),
+  ];
 
   let filters: BoardsFilter;
   try {

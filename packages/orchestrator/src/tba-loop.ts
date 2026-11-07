@@ -34,6 +34,15 @@ function fortyEightHoursAgoISO(): string {
   return new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
 }
 
+/** Merge deadline patches onto the existing row.deadlines so fields like
+ * event_start/event_end/apply_by are preserved instead of overwritten. */
+function mergeDeadlines(
+  existing: Record<string, unknown> | undefined,
+  patches: Record<string, unknown>,
+): Record<string, unknown> {
+  return { ...(existing ?? {}), ...patches };
+}
+
 /** Scan TBA opportunities due for re-audit (>48h since last update). */
 export async function tbaReauditScan(opts: TBAOpts): Promise<void> {
   const { pb, router, log = createLogger('info').child({ component: 'orchestrator/tba' }) } = opts;
@@ -101,7 +110,7 @@ async function reauditTbaRow(
     rowLog.info({ verdict: result.verdict }, 'TBA re-audit no verdict; keeping TBA');
     await pb.collection('opportunities').update(row.id, {
       updated: new Date().toISOString(),
-      deadlines: { tba: true },
+      deadlines: mergeDeadlines(row.deadlines, { tba: true }),
     });
     return;
   }
@@ -118,7 +127,7 @@ async function reauditTbaRow(
     rowLog.warn({ stage: 'verdict_parse' }, 'TBA re-audit parse failed; keeping TBA');
     await pb.collection('opportunities').update(row.id, {
       updated: new Date().toISOString(),
-      deadlines: { tba: true },
+      deadlines: mergeDeadlines(row.deadlines, { tba: true }),
     });
     return;
   }
@@ -131,7 +140,7 @@ async function reauditTbaRow(
     const eventEnd = new Date(verdict.dates.end);
     if (!isNaN(eventEnd.getTime()) && eventEnd < now) {
       await pb.collection('opportunities').update(row.id, {
-        deadlines: { tba: false },
+        deadlines: mergeDeadlines(row.deadlines, { tba: false }),
         status: 'expired',
         updated: new Date().toISOString(),
       });
@@ -153,17 +162,18 @@ async function reauditTbaRow(
   const datesConfirmed = verdict.dates !== null && verdict.dates !== undefined;
 
   if (prizeConfirmed || datesConfirmed) {
+    const deadlines = mergeDeadlines(row.deadlines, { tba: false });
+    if (verdict.dates) {
+      deadlines.event_start = verdict.dates.start;
+      deadlines.event_end = verdict.dates.end;
+    }
     const updateData: Record<string, unknown> = {
-      deadlines: { tba: false },
+      deadlines,
       prize_cash_inr: verdict.prize_cash_inr ?? null,
       prize_text: verdict.prize_text,
       status: 'audited',
       updated: new Date().toISOString(),
     };
-    if (verdict.dates) {
-      (updateData.deadlines as Record<string, unknown>).event_start = verdict.dates.start;
-      (updateData.deadlines as Record<string, unknown>).event_end = verdict.dates.end;
-    }
     // Route to TBA radar channel (Ping #2 confirmed post)
     await pb.collection('opportunities').update(row.id, {
       ...updateData,
@@ -180,7 +190,7 @@ async function reauditTbaRow(
   // Do NOT re-ping — Ping #1 already fired when TBA was first detected.
   await pb.collection('opportunities').update(row.id, {
     updated: new Date().toISOString(),
-    deadlines: { tba: true },
+    deadlines: mergeDeadlines(row.deadlines, { tba: true }),
   });
   rowLog.info({ rowId: row.id }, 'Still TBA after re-audit; keeping on 48h loop');
 }

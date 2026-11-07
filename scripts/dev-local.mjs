@@ -23,6 +23,7 @@ const PB_DATA_PATH = resolve(ROOT, 'pb_data');
 const PB_DATA_DB_PATH = resolve(PB_DATA_PATH, 'data.db');
 const PROXY_SCRIPT = resolve(ROOT, 'scripts/dev-dashboard-proxy.mjs');
 const DASHBOARD_ENTRY = resolve(ROOT, 'apps/dashboard-server/dist/index.js');
+const BOT_ENTRY = resolve(ROOT, 'apps/bot/dist/index.js');
 const OWNER_FALLBACK = 'owner@example.com';
 const PORTS = [8090, 3000, 8080];
 const IS_WINDOWS = process.platform === 'win32';
@@ -48,10 +49,12 @@ Starts the local Zod stack from the repo root:
   dashboard server  http://127.0.0.1:3000
   dashboard proxy   http://127.0.0.1:8080  <- open this URL
   scheduler         pnpm dev:scheduler
+  bot               node apps/bot/dist/index.js  (requires DISCORD_TOKEN)
 
 Options:
   --no-seed        skip the dev seed rows (schema is still applied)
   --no-scheduler   do not start the scheduler
+  --no-bot         do not start the Discord bot
   --help           show this help
 
 Ctrl-C stops all services.
@@ -70,12 +73,14 @@ class StartupError extends Error {
 // ---------------------------------------------------------------------------
 
 function parseArgs(argv) {
-  const opts = { seed: true, scheduler: true };
+  const opts = { seed: true, scheduler: true, bot: true };
   for (const arg of argv) {
     if (arg === '--no-seed') {
       opts.seed = false;
     } else if (arg === '--no-scheduler') {
       opts.scheduler = false;
+    } else if (arg === '--no-bot') {
+      opts.bot = false;
     } else if (arg === '--help' || arg === '-h') {
       printUsage();
       process.exit(0);
@@ -496,6 +501,25 @@ async function main() {
     await sleep(1000);
     if (scheduler.exited) {
       throw new Error('scheduler exited during startup — see the [scheduler] log lines above.');
+    }
+  }
+
+  if (options.bot) {
+    log('building @zod/bot');
+    try {
+      runInherited('bot build', pnpmPath, ['--filter', '@zod/bot', 'build']);
+    } catch (error) {
+      throw new Error(
+        `bot build failed: ${error.message}`,
+      );
+    }
+    log('starting the Discord bot');
+    // The bot connects to the Discord gateway; without valid DISCORD_TOKEN it
+    // will exit. This is non-fatal for the local stack — log and continue.
+    const bot = startChild('bot', process.execPath, [BOT_ENTRY], childEnv);
+    await sleep(1500);
+    if (bot.exited) {
+      log('bot exited during startup (expected without valid Discord credentials)');
     }
   }
 

@@ -26,9 +26,18 @@ importers:
       '@zod/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@zod/db-hot':
+        specifier: workspace:*
+        version: link:../../packages/db-hot
+      '@zod/discord-router':
+        specifier: workspace:*
+        version: link:../../packages/discord-router
       '@zod/logger':
         specifier: workspace:*
         version: link:../../packages/logger
+      '@zod/scheduler-registry':
+        specifier: workspace:*
+        version: link:../../packages/scheduler
     devDependencies:
       tsx:
         specifier: ^4.23.15
@@ -44,6 +53,9 @@ importers:
       '@zod/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@zod/db-cold':
+        specifier: workspace:*
+        version: link:../../packages/db-cold
       '@zod/db-hot':
         specifier: workspace:*
         version: link:../../packages/db-hot
@@ -204,6 +216,9 @@ importers:
       '@zod/config':
         specifier: workspace:*
         version: link:../config
+      '@zod/db-cold':
+        specifier: workspace:*
+        version: link:../db-cold
       '@zod/db-hot':
         specifier: workspace:*
         version: link:../db-hot
@@ -288,9 +303,9 @@ importers:
       '@zod/config':
         specifier: workspace:*
         version: link:../config
-      '@zod/db-hot':
+      '@zod/db-cold':
         specifier: workspace:*
-        version: link:../db-hot
+        version: link:../db-cold
       '@zod/dedup':
         specifier: workspace:*
         version: link:../dedup

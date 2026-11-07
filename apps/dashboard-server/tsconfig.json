@@ -10,6 +10,7 @@
   "include": ["src"],
   "references": [
     { "path": "../../packages/config" },
+    { "path": "../../packages/db-cold" },
     { "path": "../../packages/db-hot" },
     { "path": "../../packages/logger" }
   ]

@@ -36,6 +36,11 @@ function drillSteps() {
 function buildSteps(soak) {
   const steps = [
     {
+      label: 'build (root)',
+      command: 'pnpm',
+      args: ['build'],
+    },
+    {
       label: 'build @zod/dashboard-server',
       command: 'pnpm',
       args: ['--filter', '@zod/dashboard-server', 'build'],

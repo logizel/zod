@@ -17,8 +17,8 @@
   },
   "dependencies": {
     "@zod/config": "workspace:*",
+    "@zod/db-cold": "workspace:*",
     "@zod/dedup": "workspace:*",
-    "@zod/db-hot": "workspace:*",
     "@zod/discord-router": "workspace:*",
     "@zod/llm": "workspace:*",
     "@zod/logger": "workspace:*",

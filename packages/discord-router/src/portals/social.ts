@@ -62,25 +62,53 @@ export function buildCookieHeader(cookies: SocialCookie[]): string {
 }
 
 /**
+ * Per-post URL patterns (X status URLs, LinkedIn posts, etc.).
+ * One URL per post — never reuse the listing URL for multiple candidates.
+ */
+const POST_URL_RE =
+  /(?:https?:\/\/)?(?:www\.)?(?:x\.com|twitter\.com|linkedin\.com)\/(?:[A-Za-z0-9_]{1,15}\/(?:status|posts)\/\d{10,}|in\/[A-Za-z0-9\-_]+\/(?:posts|activity)\/\d{10,})/g;
+
+/**
+ * Extract a per-post URL from HTML. Returns the first post-specific URL found,
+ * or null when none is present (caller falls back to the listing URL).
+ */
+function extractPostUrl(html: string): string | null {
+  const matches = html.match(POST_URL_RE);
+  return matches?.[0] ?? null;
+}
+
+/**
  * Extract post-like candidates from a social page response.
  * Best-effort parsing — raw HTML may be client-rendered shells.
+ * Each candidate gets its own post URL when one can be extracted;
+ * otherwise the listing URL is used as a fallback (single candidate only).
  */
 function extractCandidatesFromHtml(html: string, sourceUrl: string): PollCandidate[] {
   const candidates: PollCandidate[] = [];
+  const postUrl = extractPostUrl(html);
+
   // Look for common post patterns in server-rendered or embedded JSON
   const text = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, ' ');
   const lines = text.split(/\n+/);
+  let count = 0;
   for (const line of lines) {
     const trimmed = line.trim();
     if (trimmed.length < 10 || trimmed.length > 500) continue;
     // Skip nav/chrome-like noise
     if (/^(home|explore|notifications|messages|profile|search|sign|login|join|post|create)/i.test(trimmed)) continue;
+    // One URL per post: use the extracted post URL when available,
+    // otherwise use the listing URL (but only emit one candidate in that case).
     candidates.push({
-      url: sourceUrl,
+      url: postUrl ?? sourceUrl,
       title: trimmed.slice(0, 120),
       snippet: trimmed.slice(0, 200),
     });
-    if (candidates.length >= 3) break; // cap per page
+    count += 1;
+    if (postUrl) {
+      // Post URL found — one candidate per post, stop after first.
+      break;
+    }
+    if (count >= 3) break; // cap per page when no post URL found
   }
   return candidates;
 }

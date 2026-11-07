@@ -1,0 +1,26 @@
+# Discord bot supervision (gateway + router + delivery jobs).
+#
+# Installed on the VM as /etc/systemd/system/zod-bot.service by
+# infra/oracle/rebuild.sh (which clones + builds the repo at /home/zod/zod
+# and keeps the secrets at /etc/zod/env, owner-only 0600).
+# Restart=always: the gateway must reconnect after crashes and VM reboots.
+# This is the only process allowed to own a Discord gateway connection.
+# Production runs the compiled tsc emit, never tsx watch.
+
+[Unit]
+Description=Zod Discord bot (gateway, router, relay, reminders)
+After=network-online.target zod-pocketbase.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/zod/zod
+ExecStart=/usr/bin/node /home/zod/zod/apps/bot/dist/index.js
+EnvironmentFile=/etc/zod/env
+Restart=always
+RestartSec=10
+User=zod
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

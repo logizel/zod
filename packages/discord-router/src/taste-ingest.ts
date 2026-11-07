@@ -17,6 +17,7 @@
 
 import type { Env } from '@zod/config';
 import { TasteRule } from '@zod/db-hot/schema';
+import { recordTasteRule, type ColdTasteRule, type StatementExecutor } from '@zod/db-cold';
 import { createLogger, type Logger } from '@zod/logger';
 import { createPbClient } from '@zod/db-hot';
 import { getClient } from './gateway.js';
@@ -32,6 +33,41 @@ export interface TasteIngestionDeps {
   pb?: any;
   /** Injected discord.js Client (tests inject a mock). */
   client?: any;
+  /** Cold Turso executor (primary write target for taste rules). */
+  cold?: StatementExecutor;
+}
+
+/**
+ * Write a taste rule to the cold Turso ledger (primary), falling back to
+ * PocketBase when cold is unavailable. Never throws.
+ */
+async function writeTasteRule(
+  deps: { pb: any; cold?: StatementExecutor; log: { warn: (args: any, msg: string) => void } },
+  rule: ColdTasteRule,
+): Promise<void> {
+  const { pb, cold, log } = deps;
+  if (cold) {
+    try {
+      await recordTasteRule(cold, rule);
+      return;
+    } catch (err) {
+      log.warn({ err: String(err), source: 'taste_rule_cold' }, 'cold taste-rule write failed, falling back to PocketBase');
+    }
+  }
+  // PocketBase fallback
+  try {
+    const coll = pb.collection('taste_rules');
+    if (typeof coll.create === 'function') {
+      await coll.create({
+        kind: rule.kind,
+        rule: rule.rule,
+        weight: rule.weight,
+        source: rule.source,
+      });
+    }
+  } catch (err) {
+    log.warn({ err: String(err), source: 'taste_rule_pb' }, 'PocketBase taste-rule write also failed');
+  }
 }
 
 /**
@@ -90,7 +126,7 @@ function extractRuleContext(message: any): string {
 
 /** Create a taste ingestion handler with injected dependencies (testable). */
 export function createTasteIngestionHandler(deps: TasteIngestionDeps): TasteIngestionHandler {
-  const { env, log, pb: pbDeps, client: clientDeps } = deps;
+  const { env, log, pb: pbDeps, client: clientDeps, cold } = deps;
   const pbLog = log.child({ component: 'discord-router/taste-ingest' });
 
   // CR-02 / G-06-1: operator allowlist for DM taste-rule creation (Path 3).
@@ -146,7 +182,8 @@ export function createTasteIngestionHandler(deps: TasteIngestionDeps): TasteInge
       });
 
       const pb = await getPb();
-      await pb.collection('taste_rules').create({
+      await writeTasteRule({ pb, cold, log: pbLog }, {
+        id: crypto.randomUUID(),
         kind: tasteRule.kind,
         rule: tasteRule.rule,
         weight: tasteRule.weight,
@@ -190,7 +227,8 @@ export function createTasteIngestionHandler(deps: TasteIngestionDeps): TasteInge
         });
 
         const pb = await getPb();
-        await pb.collection('taste_rules').create({
+        await writeTasteRule({ pb, cold, log: pbLog }, {
+          id: crypto.randomUUID(),
           kind: tasteRule.kind,
           rule: tasteRule.rule,
           weight: tasteRule.weight,
@@ -219,7 +257,8 @@ export function createTasteIngestionHandler(deps: TasteIngestionDeps): TasteInge
         });
 
         const pb = await getPb();
-        await pb.collection('taste_rules').create({
+        await writeTasteRule({ pb, cold, log: pbLog }, {
+          id: crypto.randomUUID(),
           kind: tasteRule.kind,
           rule: tasteRule.rule,
           weight: tasteRule.weight,
@@ -245,9 +284,13 @@ export function createTasteIngestionHandler(deps: TasteIngestionDeps): TasteInge
 export function startTasteIngestion({
   env,
   log,
+  pb,
+  cold,
 }: {
   env: Env;
   log: Logger;
+  pb?: any;
+  cold?: StatementExecutor;
 }): void {
-  void createTasteIngestionHandler({ env, log });
+  void createTasteIngestionHandler({ env, log, pb, cold });
 }

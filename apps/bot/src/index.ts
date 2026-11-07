@@ -1,16 +1,26 @@
-import { parseEnv } from '@zod/config';
-import { createLogger } from '@zod/logger';
+import { startBot } from './bot.js';
 
-// Bot entry STUB (D-04): skeleton only, no gateway code.
-// Boot order matches every other entrypoint: fail-fast env parse FIRST, then
-// the redacting logger, then one JSON boot line. discord.js gateway wiring
-// (intents, embeds, channel routing) lands in Phase 4/6; until then this
-// process boots and exits clean so the workspace contract stays provable.
-export function main(): void {
-  const env = parseEnv();
-  const log = createLogger(env.LOG_LEVEL);
-  log.info({ component: 'bot' }, 'bot boot ok (skeleton: no gateway)');
-  log.flush();
+// Contract-fixed entrypoint: env/PocketBase gate runs inside startBot before
+// the gateway opens. The gateway connection + cron delivery timers keep the
+// process alive until SIGINT/SIGTERM.
+export async function main(): Promise<void> {
+  const runtime = await startBot();
+
+  const shutdown = (signal: string): void => {
+    void runtime
+      .stop()
+      .catch((err: unknown) => {
+        console.error('bot shutdown failed', err);
+      })
+      .finally(() => process.exit(0));
+    console.log(`[bot] ${signal} received, shutting down`);
+  };
+
+  process.once('SIGINT', () => shutdown('SIGINT'));
+  process.once('SIGTERM', () => shutdown('SIGTERM'));
 }
 
-main();
+main().catch((err: unknown) => {
+  console.error('bot boot failed', err);
+  process.exit(1);
+});

@@ -1,18 +1,6 @@
-import { parseEnv } from '@zod/config';
-import { createLogger } from '@zod/logger';
-import { startGateway } from './gateway.js';
-import { startRouterService } from './router-service.js';
-
-// Bot entry: fail-fast env parse FIRST, then the redacting logger, then
-// gateway + router service boot. Missing DISCORD_TOKEN throws out of parseEnv
-// before any discord.js Client constructs.
-export function main(): void {
-  const env = parseEnv();
-  const log = createLogger(env.LOG_LEVEL);
-  log.info({ component: 'discord-router' }, 'discord-router boot ok');
-  startGateway({ env, log });
-  startRouterService({ env, log });
-  log.flush();
-}
-
-main();
+// Package-level convenience exports. No top-level boot side effects: the
+// production entrypoint is apps/bot/src/index.ts (see its ownership comment).
+export { startGateway, getClient } from './gateway.js';
+export { startRouterService, createRouterService } from './router-service.js';
+export { startRelayService, createRelayService } from './relay.js';
+export { createReminderTick, reminderTick } from './reminder.js';

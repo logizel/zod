@@ -7,7 +7,7 @@
 // - Discord client not ready -> returns false
 // - No secrets leaked into logs or alert text
 import { describe, expect, it, beforeEach, vi } from 'vitest';
-import { sendOpsAlert, type AlertDeps } from './alerts.js';
+import { createOpsAlertSender, sendOpsAlert, type AlertDeps } from './alerts.js';
 
 const requiredEnv = {
   PB_URL: 'http://127.0.0.1:8090',
@@ -140,5 +140,111 @@ describe('sendOpsAlert', () => {
       { error: 'rate limited' },
       'failed to send ops alert',
     );
+  });
+});
+
+describe('createOpsAlertSender (REST, headless scheduler)', () => {
+  function makeRestDeps(overrides: Record<string, unknown> = {}) {
+    const log = { warn: vi.fn(), info: vi.fn(), error: vi.fn() };
+    return {
+      env: { ...requiredEnv } as any,
+      log,
+      fetchImpl: vi.fn(),
+      apiBase: 'https://discord.test/api/v10',
+      ...overrides,
+    } as any;
+  }
+
+  it('posts to the env-provided ops-health channel ID', async () => {
+    const deps = makeRestDeps();
+    deps.fetchImpl.mockResolvedValue({ ok: true, status: 200, json: async () => ({}) });
+
+    const ok = await createOpsAlertSender(deps)('GC summary');
+
+    expect(ok).toBe(true);
+    expect(deps.fetchImpl).toHaveBeenCalledTimes(1);
+    const [url, init] = deps.fetchImpl.mock.calls[0];
+    expect(url).toBe('https://discord.test/api/v10/channels/111000000000000000/messages');
+    expect(init.method).toBe('POST');
+    expect(init.headers.Authorization).toBe('Bot discord-test');
+    expect(JSON.parse(init.body)).toEqual({ content: 'GC summary' });
+  });
+
+  it('resolves the channel by guild name when no env ID is set', async () => {
+    const deps = makeRestDeps({
+      env: { ...requiredEnv, DISCORD_CHANNEL_OPS_HEALTH: '' } as any,
+    });
+    deps.fetchImpl
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => [{ id: 'guild-1' }],
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => [
+          { id: 'other', name: 'general', type: 0 },
+          { id: 'ops-1', name: '🛠-ops-health', type: 0 },
+        ],
+      })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({}) });
+
+    const ok = await createOpsAlertSender(deps)('resolved by name');
+
+    expect(ok).toBe(true);
+    expect(deps.fetchImpl.mock.calls[2][0]).toBe(
+      'https://discord.test/api/v10/channels/ops-1/messages',
+    );
+  });
+
+  it('caches the name-resolved channel across alerts', async () => {
+    const deps = makeRestDeps({
+      env: { ...requiredEnv, DISCORD_CHANNEL_OPS_HEALTH: '' } as any,
+    });
+    deps.fetchImpl.mockImplementation(async (url: string) => {
+      if (url.endsWith('/users/@me/guilds')) {
+        return { ok: true, status: 200, json: async () => [{ id: 'guild-1' }] };
+      }
+      if (url.endsWith('/guilds/guild-1/channels')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => [{ id: 'ops-1', name: 'ops-health', type: 0 }],
+        };
+      }
+      return { ok: true, status: 200, json: async () => ({}) };
+    });
+
+    const send = createOpsAlertSender(deps);
+    await send('one');
+    await send('two');
+
+    const channelLookups = deps.fetchImpl.mock.calls.filter(([url]: [string]) =>
+      url.endsWith('/users/@me/guilds'),
+    );
+    expect(channelLookups).toHaveLength(1);
+    expect(
+      deps.fetchImpl.mock.calls.filter(([url]: [string]) => url.endsWith('/messages')),
+    ).toHaveLength(2);
+  });
+
+  it('returns false when Discord rejects the message', async () => {
+    const deps = makeRestDeps();
+    deps.fetchImpl.mockResolvedValue({ ok: false, status: 500, json: async () => ({}) });
+
+    const ok = await createOpsAlertSender(deps)('failed alert');
+
+    expect(ok).toBe(false);
+    expect(deps.log.warn).toHaveBeenCalled();
+  });
+
+  it('returns false without calling Discord when the token is missing', async () => {
+    const deps = makeRestDeps({ env: { ...requiredEnv, DISCORD_TOKEN: '' } as any });
+
+    const ok = await createOpsAlertSender(deps)('no token');
+
+    expect(ok).toBe(false);
+    expect(deps.fetchImpl).not.toHaveBeenCalled();
   });
 });

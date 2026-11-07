@@ -103,18 +103,32 @@ export class LlmRouter {
           adapter = new SambaNovaAdapter(env.SAMBANOVA_API_KEY, def.model);
           break;
         case 'mistral':
-          // Tier-2 overflow: no provider key configured in this plan (zero-cost,
-          // operator keys added separately); adapter wired but key-less.
-          adapter = new MistralAdapter('', def.model);
+          if (!env.MISTRAL_API_KEY) {
+            log.debug({ provider: def.provider, model: def.model }, 'mistral adapter skipped: no MISTRAL_API_KEY');
+            continue;
+          }
+          adapter = new MistralAdapter(env.MISTRAL_API_KEY, def.model);
           break;
         case 'openrouter':
-          adapter = new OpenRouterAdapter('', def.model);
+          if (!env.OPENROUTER_API_KEY) {
+            log.debug({ provider: def.provider, model: def.model }, 'openrouter adapter skipped: no OPENROUTER_API_KEY');
+            continue;
+          }
+          adapter = new OpenRouterAdapter(env.OPENROUTER_API_KEY, def.model);
           break;
         case 'zai':
-          adapter = new ZaiAdapter('', def.model);
+          if (!env.ZAI_API_KEY) {
+            log.debug({ provider: def.provider, model: def.model }, 'zai adapter skipped: no ZAI_API_KEY');
+            continue;
+          }
+          adapter = new ZaiAdapter(env.ZAI_API_KEY, def.model);
           break;
         case 'nvidia':
-          adapter = new NvidiaAdapter('', def.model);
+          if (!env.NVIDIA_API_KEY) {
+            log.debug({ provider: def.provider, model: def.model }, 'nvidia adapter skipped: no NVIDIA_API_KEY');
+            continue;
+          }
+          adapter = new NvidiaAdapter(env.NVIDIA_API_KEY, def.model);
           break;
         default:
           log.warn({ provider: def.provider }, 'LlmRouter: unknown provider, skipping');
@@ -158,6 +172,12 @@ export class LlmRouter {
 
       for (const def of this.ladder.tier1) {
         const key = `${def.provider}:${def.model}`;
+        // Provider key not configured: do not burn a path slot or pretend the
+        // bucket was attempted. Tier2 stays cleanly out until its key exists.
+        if (!this.adapters.has(key)) {
+          log.debug({ provider: def.provider, model: def.model }, 'tier1 bucket skipped: no adapter (key not configured)');
+          continue;
+        }
         path.push(`tier1/${key}`);
 
         if (!this.registry.canFire(def.provider, def.model)) continue;
@@ -187,6 +207,10 @@ export class LlmRouter {
       if (verdict === null) {
         for (const def of this.ladder.tier2) {
           const key = `${def.provider}:${def.model}`;
+          if (!this.adapters.has(key)) {
+            log.debug({ provider: def.provider, model: def.model }, 'tier2 bucket skipped: no adapter (key not configured)');
+            continue;
+          }
           path.push(`tier2/${key}`);
 
           if (!this.registry.canFire(def.provider, def.model)) continue;

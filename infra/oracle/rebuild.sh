@@ -180,18 +180,21 @@ install_unit() { # $1 = repo file, $2 = installed unit name
 }
 if [ "$DRY_RUN" -eq 1 ]; then
   for u in infra/cloudflared/cloudflared.service infra/cloudflared/scheduler.service \
-           infra/cloudflared/pocketbase.service infra/oracle/cache-buffer.service; do
+           infra/cloudflared/pocketbase.service infra/cloudflared/dashboard.service \
+           infra/cloudflared/bot.service infra/oracle/cache-buffer.service; do
     [ -f "$REPO_DIR/$u" ] || hard "unit file missing: $u"
     grep -q '^Restart=always' "$REPO_DIR/$u" || hard "unit lacks Restart=always: $u"
   done
   grep -q 'hostname:' "$REPO_DIR/infra/cloudflared/config.yml" \
     || hard "tunnel config has no hostname line"
-  pass "unit install reachable (cloudflared + zod-scheduler + zod-pocketbase + zod-cache-buffer, all Restart=always)"
+  pass "unit install reachable (cloudflared + scheduler + pocketbase + dashboard + bot + cache-buffer, all Restart=always)"
   pass "backup timer reachable (zod-pb-backup.service + zod-pb-backup.timer, daily, Persistent)"
 else
   install_unit infra/cloudflared/cloudflared.service cloudflared.service
   install_unit infra/cloudflared/scheduler.service zod-scheduler.service
   install_unit infra/cloudflared/pocketbase.service zod-pocketbase.service
+  install_unit infra/cloudflared/dashboard.service zod-dashboard.service
+  install_unit infra/cloudflared/bot.service zod-bot.service
   install_unit infra/oracle/cache-buffer.service zod-cache-buffer.service
   cp "$REPO_DIR/infra/oracle/cache-buffer.sh" "$OPT_DIR/cache-buffer.sh"
   chmod +x "$OPT_DIR/cache-buffer.sh"
@@ -219,16 +222,16 @@ Persistent=true
 WantedBy=timers.target
 EOF
   systemctl daemon-reload
-  systemctl enable --now cloudflared zod-scheduler zod-pocketbase zod-cache-buffer.service zod-pb-backup.timer
+  systemctl enable --now cloudflared zod-scheduler zod-pocketbase zod-dashboard zod-bot zod-cache-buffer.service zod-pb-backup.timer
 fi
 
 # --- 7. supervised-services assertion ---------------------------------------
 if [ "$DRY_RUN" -eq 1 ]; then
-  pass "service assertion reachable (systemctl is-active cloudflared zod-scheduler zod-pocketbase zod-cache-buffer)"
+  pass "service assertion reachable (systemctl is-active cloudflared zod-scheduler zod-pocketbase zod-dashboard zod-bot zod-cache-buffer)"
 else
-  systemctl is-active --quiet cloudflared zod-scheduler zod-pocketbase zod-cache-buffer.service \
-    || hard "supervised service not active: $(systemctl is-active cloudflared zod-scheduler zod-pocketbase zod-cache-buffer.service)"
-  note "services" "cloudflared + zod-scheduler + zod-pocketbase + zod-cache-buffer all active"
+  systemctl is-active --quiet cloudflared zod-scheduler zod-pocketbase zod-dashboard zod-bot zod-cache-buffer.service \
+    || hard "supervised service not active: $(systemctl is-active cloudflared zod-scheduler zod-pocketbase zod-dashboard zod-bot zod-cache-buffer.service)"
+  note "services" "cloudflared + zod-scheduler + zod-pocketbase + zod-dashboard + zod-bot + zod-cache-buffer all active"
 fi
 
 # --- 8. outbound tunnel pre-check --------------------------------------------

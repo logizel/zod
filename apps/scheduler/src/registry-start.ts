@@ -20,10 +20,10 @@ import {
   type TickLogger,
 } from '@zod/scheduler-registry';
 import { createPbClient } from '@zod/db-hot';
-import type { TelemetryRow, OpportunityRow } from '@zod/db-hot/telemetry';
-import { runMidnightGc } from '@zod/dashboard-server/gc';
+import { runPersistentGc } from '@zod/dashboard-server/gc';
+import { createOpsAlertSender } from '@zod/dashboard-server/alerts';
 import { createTursoClient, clientExecutor } from '@zod/db-cold';
-import { LlmRouter, writeBucketState, type TelemetrySink } from '@zod/llm';
+import { LlmRouter, writeBucketState, GatewayScheduler, type TelemetrySink } from '@zod/llm';
 import { parseEnv } from '@zod/config';
 import {
   getPortalCandidates,
@@ -107,28 +107,34 @@ export async function startSchedulerRegistry(log: TickLogger): Promise<RegistryH
     pageSize: 25,
   });
 
-  // MEM-05 midnight GC: purgeExpiredHeavyText via injected tickHandler.
-  // Scheduler stays agnostic — the handler calls into @zod/dashboard-server/gc.
+  // MEM-05 midnight GC: persistent purge + 24h telemetry delete + 48h
+  // rejection compaction, persisted last-success marker, and real REST ops
+  // alerts (#🛠-ops-health). Scheduler never opens a second Discord gateway.
+  const sendOpsAlert = createOpsAlertSender({ env, log });
   const gcHandle = registerGcJob(log, undefined, {
     tickHandler: async (_def, jobLog) => {
-      const [telemetryRows, oppRows] = await Promise.all([
-        pb.collection('agent_telemetry').getFullList() as unknown as Promise<TelemetryRow[]>,
-        pb.collection('opportunities').getFullList() as unknown as Promise<OpportunityRow[]>,
-      ]);
-      const sendAlert = async (text: string): Promise<boolean> => {
-        jobLog.warn({ alert: 'gc-25h-missing', text }, 'GC 25h-missing alert');
-        return false;
-      };
-      const result = await runMidnightGc(
-        { agentTelemetry: telemetryRows, opportunities: oppRows },
-        Date.now(),
-        { env, log: jobLog, sendAlert },
-      );
+      const result = await runPersistentGc({
+        pb,
+        env,
+        log: jobLog,
+        nowMs: Date.now(),
+        sendAlert: sendOpsAlert,
+      });
       jobLog.info({ job: 'gc-midnight-purge', ...result }, 'gc-midnight-purge tick');
     },
   });
 
   orchestrator.start(log);
+
+  // Headless bucket timers (cooldown recovery, daily-cap reset, warmup) live
+  // in the scheduler process. Delivery jobs (relay/reminders) live in the bot.
+  const gatewayScheduler = new GatewayScheduler({
+    router,
+    pb,
+    slot: 'gateway-timers',
+    pipeline: 'events',
+  });
+  gatewayScheduler.start(log);
 
   log.info({ component: 'scheduler/registry-start' }, 'scheduler registry started with live deps');
 
@@ -138,6 +144,7 @@ export async function startSchedulerRegistry(log: TickLogger): Promise<RegistryH
     stop: () => {
       for (const handle of handles) handle.stop();
       orchestrator.stop();
+      gatewayScheduler.stop();
     },
   };
 }

@@ -101,8 +101,8 @@ describe('SseHub', () => {
 
     const clientA = makeFakeClient();
     const clientB = makeFakeClient();
-    hub.addClient(clientA);
-    hub.addClient(clientB);
+    hub.addClient(clientA, false);
+    hub.addClient(clientB, false);
 
     // Drive the push directly (same payload the ~4s timer emits).
     (hub as any).pushDelta();
@@ -127,7 +127,7 @@ describe('SseHub', () => {
     const hub = new SseHub(pb, makeLog());
 
     const client = makeFakeClient();
-    hub.addClient(client);
+    hub.addClient(client, false);
 
     (hub as any).pushHeartbeat();
 
@@ -234,7 +234,7 @@ describe('SseHub bucket states + 429 baton-pass slots', () => {
       [{ provider: 'groq', model: 'llama-3.1-8b-instant', step: 'STEP_1-filter', status: 'active', batonPass: null }],
     );
     const client = makeFakeClient();
-    hub.addClient(client);
+    hub.addClient(client, false);
     (hub as any).pushDelta();
 
     const parsed = JSON.parse(client.written[0].replace(/^data: /, ''));
@@ -244,5 +244,55 @@ describe('SseHub bucket states + 429 baton-pass slots', () => {
     expect(Array.isArray(parsed.slots)).toBe(true);
     expect(parsed.bucketStates[0].state).toBe('READY');
     expect(parsed.slots[0].step).toBe('STEP_1-filter');
+  });
+
+  it('sends the current snapshot immediately when a viewer connects', () => {
+    const hub = new SseHub(
+      makeFakePb(),
+      makeLog(),
+      [{ provider: 'groq', model: 'm', state: 'READY' }],
+      [{ provider: 'groq', model: 'm', step: 'STEP_1', status: 'active', batonPass: null }],
+    );
+    const client = makeFakeClient();
+    expect(hub.addClient(client)).toBe(true);
+
+    expect(client.written.length).toBe(1);
+    const parsed = JSON.parse(client.written[0].replace(/^data: /, ''));
+    expect(parsed.type).toBe('delta');
+    expect(parsed.slots[0].step).toBe('STEP_1');
+    expect(parsed.bucketStates[0].state).toBe('READY');
+  });
+
+  it('enforces the viewer cap and rejects viewers above it', () => {
+    const hub = new SseHub(makeFakePb(), makeLog(), [], [], 1);
+    expect(hub.capacity).toBe(1);
+    expect(hub.addClient(makeFakeClient(), false)).toBe(true);
+    expect(hub.addClient(makeFakeClient(), false)).toBe(false);
+    expect(hub.size).toBe(1);
+  });
+
+  it('hydrates slots and bucket states from the latest telemetry rows', async () => {
+    // PocketBase sort=-updated returns newest first; hydrate() reverses so the
+    // newest row is applied last and wins per slot/bucket.
+    const rows = [
+      { provider: 'groq', model: 'm', slot: 'auditor-1', step: 'STEP_2', status: 'done', detail: 'finished' },
+      { provider: 'groq', model: 'm', slot: 'auditor-1', step: 'STEP_1', status: 'active', detail: 'start' },
+      { provider: 'mistral', model: 'mistral-small', slot: 'curator-1', step: 'STEP_3', status: 'cooldown', detail: '429' },
+    ];
+    const pb = {
+      collection: (name: string) => ({
+        subscribe: () => ({ unsubscribe: () => undefined }),
+        getList: async () => ({ items: name === 'agent_telemetry' ? rows : [] }),
+      }),
+    } as any;
+    const hub = new SseHub(pb, makeLog());
+    await hub.hydrate();
+
+    const client = makeFakeClient();
+    hub.addClient(client);
+    const parsed = JSON.parse(client.written[0].replace(/^data: /, ''));
+    expect(parsed.slots).toHaveLength(2);
+    expect(parsed.slots.find((s: any) => s.provider === 'groq').step).toBe('STEP_2');
+    expect(parsed.bucketStates.find((b: any) => b.provider === 'mistral').state).toBe('60s-COOLDOWN');
   });
 });

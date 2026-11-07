@@ -9,6 +9,7 @@
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import {
   runMidnightGc,
+  runPersistentGc,
   getLastSuccessfulGcMs,
   resetGcState,
   type GcRunResult,
@@ -184,5 +185,252 @@ describe('runMidnightGc', () => {
     const result = await runMidnightGc(makeRows(), NOW + (2 * HOUR_MS), { env, sendAlert });
     expect(result.alertRaised).toBe(false); // no prior success to go stale
     expect(sendAlert).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// runPersistentGc: real PocketBase persistence (deletes/updates/marker)
+// ---------------------------------------------------------------------------
+
+type FakeRow = Record<string, unknown>;
+
+function makeFakePb(seed: Record<string, FakeRow[]> = {}): {
+  pb: any;
+  data: Map<string, Map<string, FakeRow>>;
+} {
+  const data = new Map<string, Map<string, FakeRow>>();
+  let seq = 0;
+  for (const [name, rows] of Object.entries(seed)) {
+    data.set(name, new Map(rows.map((r) => [String(r.id), { ...r }])));
+  }
+
+  const collection = (name: string) => {
+    if (!data.has(name)) data.set(name, new Map());
+    const rows = data.get(name)!;
+    const notFound = () => {
+      const err = new Error('404 not found') as Error & { status: number };
+      err.status = 404;
+      return err;
+    };
+    return {
+      getFullList: async () => [...rows.values()].map((r) => ({ ...r })),
+      getFirstListItem: async (filter: string) => {
+        const match = filter.match(/^slot = '(.+)'$/);
+        const wanted = match?.[1];
+        const row = [...rows.values()].find((r) => r['slot'] === wanted);
+        if (!row) throw notFound();
+        return { ...row };
+      },
+      create: async (input: FakeRow) => {
+        const id = `row-${++seq}`;
+        const row = {
+          id,
+          created: new Date(NOW).toISOString(),
+          updated: new Date(NOW).toISOString(),
+          ...input,
+        };
+        rows.set(id, row);
+        return { ...row };
+      },
+      update: async (id: string, patch: FakeRow) => {
+        const row = rows.get(id);
+        if (!row) throw notFound();
+        Object.assign(row, patch, { updated: new Date(NOW).toISOString() });
+        return { ...row };
+      },
+      delete: async (id: string) => rows.delete(id),
+    };
+  };
+
+  return { pb: { collection } as any, data };
+}
+
+function at(offsetMs: number): string {
+  return new Date(NOW + offsetMs).toISOString();
+}
+
+function persistentSeed(): Record<string, FakeRow[]> {
+  return {
+    agent_telemetry: [
+      { id: 'tel-old', slot: 'auditor-1', created: at(-25 * HOUR_MS), detail: 'old heavy detail' },
+      { id: 'tel-fresh', slot: 'auditor-2', created: at(-2 * HOUR_MS), detail: 'fresh detail' },
+      {
+        id: 'gc-marker',
+        slot: 'gc-last-success',
+        created: at(-1 * HOUR_MS),
+        updated: at(-1 * HOUR_MS),
+        detail: at(-1 * HOUR_MS),
+        provider: 'system',
+        model: 'gc',
+        step: 'gc-midnight',
+        status: 'done',
+      },
+    ],
+    opportunities: [
+      { id: 'opp-old', end_date: at(-25 * HOUR_MS), description_raw: 'old raw', status: 'expired' },
+      { id: 'opp-fresh', end_date: at(-2 * HOUR_MS), description_raw: 'fresh raw', status: 'candidate' },
+      {
+        id: 'opp-rejected-old',
+        end_date: at(10 * 24 * HOUR_MS),
+        updated: at(-49 * HOUR_MS),
+        description_raw: 'rejected heavy text',
+        status: 'rejected',
+      },
+      {
+        id: 'opp-rejected-fresh',
+        end_date: null,
+        updated: at(-47 * HOUR_MS),
+        description_raw: 'recent rejection text',
+        status: 'rejected',
+      },
+    ],
+    tombstone_ledger: [
+      { id: 'tomb-1', url_hash: 'h1', fingerprint: 'f1', terminal_status: 'rejected', decided_at: at(-100 * HOUR_MS) },
+    ],
+    taste_rules: [
+      { id: 'taste-1', kind: 'BLOCK', rule: 'crypto', weight: 1, source: 'keyword' },
+    ],
+  };
+}
+
+describe('runPersistentGc', () => {
+  it('deletes 24h-old telemetry and compacts opportunity heavy text in PocketBase', async () => {
+    const { pb, data } = makeFakePb(persistentSeed());
+    const sendAlert = vi.fn().mockResolvedValue(true);
+
+    const result = await runPersistentGc({
+      pb,
+      nowMs: NOW,
+      sendAlert,
+      summaryAlert: false,
+      env: { ...requiredEnv } as any,
+    });
+
+    expect(result.telemetryDeleted).toBe(1);
+    expect(data.get('agent_telemetry')!.has('tel-old')).toBe(false);
+    expect(data.get('agent_telemetry')!.has('tel-fresh')).toBe(true);
+
+    // 24h after end_date -> compacted.
+    expect(data.get('opportunities')!.get('opp-old')!.description_raw).toBe('');
+    expect(data.get('opportunities')!.get('opp-fresh')!.description_raw).toBe('fresh raw');
+    // 48h after rejection -> compacted even with a future end_date.
+    expect(data.get('opportunities')!.get('opp-rejected-old')!.description_raw).toBe('');
+    // 47h after rejection -> still retained.
+    expect(data.get('opportunities')!.get('opp-rejected-fresh')!.description_raw).toBe(
+      'recent rejection text',
+    );
+    expect(result.opportunityTextPurged).toBe(2);
+    expect(result.errors).toBe(0);
+  });
+
+  it('never touches tombstone_ledger or taste_rules', async () => {
+    const seed = persistentSeed();
+    const { pb, data } = makeFakePb(seed);
+
+    await runPersistentGc({
+      pb,
+      nowMs: NOW,
+      sendAlert: vi.fn().mockResolvedValue(true),
+      summaryAlert: false,
+      env: { ...requiredEnv } as any,
+    });
+
+    expect([...data.get('tombstone_ledger')!.keys()]).toEqual(['tomb-1']);
+    expect([...data.get('taste_rules')!.keys()]).toEqual(['taste-1']);
+  });
+
+  it('persists the last-success marker by updating the existing row', async () => {
+    const { pb, data } = makeFakePb(persistentSeed());
+
+    const result = await runPersistentGc({
+      pb,
+      nowMs: NOW,
+      sendAlert: vi.fn().mockResolvedValue(true),
+      summaryAlert: false,
+      env: { ...requiredEnv } as any,
+    });
+
+    const markers = [...data.get('agent_telemetry')!.values()].filter(
+      (r) => r['slot'] === 'gc-last-success',
+    );
+    expect(markers).toHaveLength(1);
+    expect(result.persisted).toBe(true);
+    expect(result.lastSuccessMs).toBe(NOW);
+    expect(Date.parse(String(markers[0].detail))).toBe(NOW);
+  });
+
+  it('creates the last-success marker when none exists', async () => {
+    const { pb, data } = makeFakePb({
+      agent_telemetry: [],
+      opportunities: [],
+    });
+
+    const result = await runPersistentGc({
+      pb,
+      nowMs: NOW,
+      sendAlert: vi.fn().mockResolvedValue(true),
+      summaryAlert: false,
+      env: { ...requiredEnv } as any,
+    });
+
+    const markers = [...data.get('agent_telemetry')!.values()].filter(
+      (r) => r['slot'] === 'gc-last-success',
+    );
+    expect(markers).toHaveLength(1);
+    expect(result.persisted).toBe(true);
+  });
+
+  it('raises the 25h-missing alert from the persisted marker across restarts', async () => {
+    resetGcState(); // simulate a fresh scheduler process (no module state)
+    const seed = persistentSeed();
+    const marker = seed.agent_telemetry.find((r) => r['slot'] === 'gc-last-success')!;
+    marker.detail = at(-26 * HOUR_MS);
+    marker.created = at(-26 * HOUR_MS);
+    marker.updated = at(-26 * HOUR_MS);
+    const { pb } = makeFakePb(seed);
+    const sendAlert = vi.fn().mockResolvedValue(true);
+
+    const result = await runPersistentGc({
+      pb,
+      nowMs: NOW,
+      sendAlert,
+      summaryAlert: false,
+      env: { ...requiredEnv } as any,
+    });
+
+    expect(result.alertRaised).toBe(true);
+    expect(sendAlert).toHaveBeenCalledTimes(1);
+    expect(String(sendAlert.mock.calls[0][0])).toContain('25h-missing');
+  });
+
+  it('does not persist success and sends a FAILED summary when a delete fails', async () => {
+    const seed = persistentSeed();
+    const { pb, data } = makeFakePb(seed);
+    const originalCollection = pb.collection.bind(pb);
+    pb.collection = (name: string) => {
+      const coll = originalCollection(name);
+      if (name === 'agent_telemetry') {
+        coll.delete = async () => {
+          throw new Error('PB delete failed');
+        };
+      }
+      return coll;
+    };
+    const sendAlert = vi.fn().mockResolvedValue(true);
+
+    const result = await runPersistentGc({
+      pb,
+      nowMs: NOW,
+      sendAlert,
+      env: { ...requiredEnv } as any,
+    });
+
+    expect(result.errors).toBeGreaterThan(0);
+    expect(result.persisted).toBe(false);
+    const marker = [...data.get('agent_telemetry')!.values()].find(
+      (r) => r['slot'] === 'gc-last-success',
+    )!;
+    expect(Date.parse(String(marker.detail))).toBe(NOW - 1 * HOUR_MS); // unchanged
+    expect(String(sendAlert.mock.calls.at(-1)?.[0])).toContain('FAILED');
   });
 });

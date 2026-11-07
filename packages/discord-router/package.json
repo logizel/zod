@@ -33,6 +33,30 @@
     "./domain-filter": {
       "types": "./dist/domain-filter.d.ts",
       "default": "./dist/domain-filter.js"
+    },
+    "./gateway": {
+      "types": "./dist/gateway.d.ts",
+      "default": "./dist/gateway.js"
+    },
+    "./router-service": {
+      "types": "./dist/router-service.d.ts",
+      "default": "./dist/router-service.js"
+    },
+    "./relay": {
+      "types": "./dist/relay.d.ts",
+      "default": "./dist/relay.js"
+    },
+    "./reminder": {
+      "types": "./dist/reminder.d.ts",
+      "default": "./dist/reminder.js"
+    },
+    "./bookmark": {
+      "types": "./dist/bookmark.d.ts",
+      "default": "./dist/bookmark.js"
+    },
+    "./taste-ingest": {
+      "types": "./dist/taste-ingest.d.ts",
+      "default": "./dist/taste-ingest.js"
     }
   },
   "scripts": {
@@ -42,6 +66,7 @@
   "dependencies": {
     "@zod/browser": "workspace:*",
     "@zod/config": "workspace:*",
+    "@zod/db-cold": "workspace:*",
     "@zod/db-hot": "workspace:*",
     "@zod/logger": "workspace:*",
     "@zod/sanitize": "workspace:*",

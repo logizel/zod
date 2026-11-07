@@ -31,6 +31,14 @@ export const LOOKUP_TOMBSTONE_SQL =
 export const RECORD_TOMBSTONE_SQL =
   'INSERT OR IGNORE INTO tombstone_ledger (url_hash, fingerprint, terminal_status, source, decided_at) VALUES (?, ?, ?, ?, ?)';
 
+/** Read all taste rules from the cold Turso ledger. */
+export const LOOKUP_TASTE_RULES_SQL =
+  'SELECT id, kind, rule, weight, source FROM taste_rules';
+
+/** Taste rule write: insert-or-ignore so reruns never overwrite a rule. */
+export const RECORD_TASTE_RULE_SQL =
+  'INSERT OR IGNORE INTO taste_rules (id, kind, rule, weight, source) VALUES (?, ?, ?, ?, ?)';
+
 /** Remote-only construction from env URL + token. */
 export function createTursoClient(env: ColdEnv): Client {
   return createClient({
@@ -81,5 +89,45 @@ export async function recordTombstone(
     tombstone.terminal_status,
     tombstone.source,
     tombstone.decided_at,
+  ]);
+}
+
+/** Taste rule row read from the cold Turso ledger. */
+export interface ColdTasteRule {
+  id: string;
+  kind: string;
+  rule: string;
+  weight: number;
+  source: string;
+}
+
+/** Read all taste rules from the cold ledger. */
+export async function lookupTasteRules(
+  db: StatementExecutor,
+): Promise<ColdTasteRule[]> {
+  const { rows } = await db.execute(LOOKUP_TASTE_RULES_SQL);
+  return rows.map((row) => {
+    const record = row as Record<string, unknown>;
+    return {
+      id: String(record['id']),
+      kind: String(record['kind']),
+      rule: String(record['rule']),
+      weight: Number(record['weight']),
+      source: String(record['source'] ?? ''),
+    };
+  });
+}
+
+/** Insert-or-ignore a taste rule into the cold ledger. */
+export async function recordTasteRule(
+  db: StatementExecutor,
+  rule: ColdTasteRule,
+): Promise<void> {
+  await db.execute(RECORD_TASTE_RULE_SQL, [
+    rule.id,
+    rule.kind,
+    rule.rule,
+    rule.weight,
+    rule.source,
   ]);
 }

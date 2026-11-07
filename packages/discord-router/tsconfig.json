@@ -10,6 +10,7 @@
   "include": ["src"],
   "references": [
     { "path": "../config" },
+    { "path": "../db-cold" },
     { "path": "../db-hot" },
     { "path": "../logger" },
     { "path": "../sanitize" }

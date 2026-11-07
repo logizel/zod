@@ -16,6 +16,11 @@ export const EnvSchema = z.object({
   // LLM ladder. Retained as an optional token for future GitHub integrations.
   GITHUB_TOKEN: z.string().default(''),
   SAMBANOVA_API_KEY: z.string().default(''),
+  // Tier-2 overflow providers (all optional; absent key = bucket not wired).
+  MISTRAL_API_KEY: z.string().default(''),
+  ZAI_API_KEY: z.string().default(''),
+  NVIDIA_API_KEY: z.string().default(''),
+  OPENROUTER_API_KEY: z.string().default(''),
   DISCORD_TOKEN: z.string().min(1),
   // D-14 / Pitfall 8: channel IDs for the three new job/loot buckets.
   // Empty default keeps boot passing when env is unset; resolveChannel uses

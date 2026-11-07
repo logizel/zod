@@ -14,6 +14,7 @@ import { LadderConfig, DEFAULT_LADDER, type LadderBucketDef } from './ladder.js'
 import { PriorityQueue, type Priority } from './priority.js';
 import { SpendCircuitBreaker } from './circuit-breaker.js';
 import { BucketRegistry } from './bucket.js';
+import { env } from '@zod/config';
 
 function makeChatResult(text: string, finishReason: string | null = 'stop'): ChatResult {
   return { text, finishReason };
@@ -436,5 +437,50 @@ describe('LlmRouter.complete', () => {
     for (const d of tier1) expect(result.path).toContain(`tier1/${d.provider}:${d.model}`);
     expect(result.path).toContain(`tier2/${lastTier2.provider}:${lastTier2.model}`);
     expect(result.path.some((p) => p.includes('cerebras'))).toBe(false);
+  });
+
+  it('wires Tier-2 adapters only when the provider key is configured', () => {
+    const router = new LlmRouter();
+    const adapters = (router as unknown as RouterInternals).adapters;
+    const keyFor: Record<string, string> = {
+      mistral: 'MISTRAL_API_KEY',
+      zai: 'ZAI_API_KEY',
+      nvidia: 'NVIDIA_API_KEY',
+      openrouter: 'OPENROUTER_API_KEY',
+    };
+    for (const def of DEFAULT_LADDER.tier2) {
+      const envKey = keyFor[def.provider]!;
+      const configured = Boolean((env as unknown as Record<string, unknown>)[envKey]);
+      expect(adapters.has(`${def.provider}:${def.model}`), `${def.provider} adapter`).toBe(configured);
+    }
+    // Groq is a required key and must always be wired.
+    expect(adapters.has('groq:openai/gpt-oss-120b')).toBe(true);
+  });
+
+  it('skips unconfigured buckets without adding them to the attempted path', async () => {
+    const tier1: LadderBucketDef[] = [
+      {
+        provider: 'groq',
+        model: 'llama-3.1-8b-instant',
+        tier: 'tier1',
+        capability: { supportsJSON: true, maxOutputTokens: 4096, costTier: 'zero' },
+      },
+    ];
+    const tier2: LadderBucketDef[] = [
+      {
+        provider: 'mistral',
+        model: 'mistral-small-latest',
+        tier: 'tier2',
+        capability: { supportsJSON: true, maxOutputTokens: 4096, costTier: 'zero' },
+      },
+    ];
+    const { router } = buildRouterWithLadder(tier1, tier2, {
+      'groq:llama-3.1-8b-instant': makeRateLimited(60),
+    });
+
+    const result = await router.complete(OPTIONS);
+
+    expect(result.verdict).toBe('UNVERIFIED');
+    expect(result.path).toEqual(['tier1/groq:llama-3.1-8b-instant']);
   });
 });

@@ -139,6 +139,40 @@ describe('GET /api/boards', () => {
       'tba-queue',
     ]);
   });
+
+  it('shows pipeline=local rows on the events-local board (EVT-03)', () => {
+    const res = mockResponse();
+    const nowMs = Date.parse('2026-11-03T00:00:00Z');
+    handleBoards({ url: '/api/boards' } as never, res as never, {
+      rows: [boardRow({ pipeline: 'local', bucket_channel: '#📍-local-dk-udupi' })],
+      nowMs,
+    });
+    const parsed = JSON.parse(res.body!) as { boards: Array<{ tab: string; rows: unknown[] }> };
+    const local = parsed.boards.find((b) => b.tab === 'events-local')!;
+    expect(local.rows).toHaveLength(1);
+  });
+
+  it('shows tombstone ledger rows on the audit-log board (DSH-04)', () => {
+    const res = mockResponse();
+    const nowMs = Date.parse('2026-11-03T00:00:00Z');
+    handleBoards({ url: '/api/boards' } as never, res as never, {
+      tombstones: [
+        {
+          url_hash: 'hash-1',
+          fingerprint: 'hash-1',
+          terminal_status: 'prize_below_threshold',
+          source: 'auditor',
+          decided_at: '2026-11-01T00:00:00Z',
+        },
+      ],
+      nowMs,
+    });
+    const parsed = JSON.parse(res.body!) as { boards: Array<{ tab: string; rows: Array<Record<string, unknown>> }> };
+    const audit = parsed.boards.find((b) => b.tab === 'audit-log')!;
+    expect(audit.rows).toHaveLength(1);
+    expect(audit.rows[0].terminal_status).toBe('prize_below_threshold');
+    expect(audit.rows[0].status).toBe('tombstoned');
+  });
 });
 
 // ---------------------------------------------------------------------------

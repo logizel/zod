@@ -6,16 +6,18 @@
 // Owned by dashboard.service systemd unit (Restart=always).
 
 import { createServer } from 'node:http';
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { parseEnv, type Env } from '@zod/config';
 import { createLogger } from '@zod/logger';
 import { createPbClient, type HotEnv } from '@zod/db-hot';
+import { clientExecutor, createTursoClient } from '@zod/db-cold';
 import { SseHub } from './sse.js';
-import { handleBoards, handleAuditOlder, type StatementExecutor } from './boards.js';
+import { handleBoards, handleAuditOlder } from './boards.js';
 
-/** In-memory statement executor — no Turso configured yet. Read-only stub. */
-const STUB_DB: StatementExecutor = {
-  execute: async (_sql: string, _args?: unknown[]) => ({ rows: [] }),
-};
+const HERE = dirname(fileURLToPath(import.meta.url));
+const DASHBOARD_HTML = resolve(HERE, '../../dashboard/index.html');
 
 // G-07-WR-01: application-layer auth check on /api/stream before hub.addClient.
 // Reads the Cloudflare Access identity header injected on tunneled requests;
@@ -37,6 +39,10 @@ async function main(): Promise<void> {
 
   // Shared PocketBase service-account client (loopback PB on 127.0.0.1:8090).
   const pb = await createPbClient(env as HotEnv);
+
+  // Cold ledger executor for the audit "load older" point lookup. Construction
+  // is lazy — no Turso network call until the first query.
+  const coldDb = clientExecutor(createTursoClient(env));
 
   // Single shared SSE hub: one PB subscription, fan-out to all viewers (D-06).
   // Server-side viewer cap bounds SSE cost (D-08, Pitfall 13).
@@ -66,6 +72,12 @@ async function main(): Promise<void> {
         res.end('unauthorized');
         return;
       }
+      // Server-side viewer cap (D-08): reject before any stream headers render.
+      if (!hub.hasCapacity()) {
+        res.writeHead(503, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'viewer capacity reached' }));
+        return;
+      }
       // Zero Trust Access already rejected unauth at the edge (D-04).
       // Defense-in-depth: connection timeout reaps stalled sockets (CR-04).
       res.writeHead(200, {
@@ -73,13 +85,6 @@ async function main(): Promise<void> {
         'Cache-Control': 'no-cache',
         'Connection': 'keep-alive',
       });
-      const streamTimeoutMs = Number(env.SSE_CONNECTION_TIMEOUT_MS ?? 120000);
-      const onStreamTimeout = () => {
-        hub.removeClient(client);
-        res.end();
-      };
-      res.setTimeout(streamTimeoutMs, onStreamTimeout);
-      req.on('timeout', onStreamTimeout);
       const client: {
         write: (chunk: string) => boolean;
         close: () => void;
@@ -87,13 +92,34 @@ async function main(): Promise<void> {
         write: (chunk: string) => res.write(chunk),
         close: () => res.end(),
       };
-      hub.addClient(client);
+      const streamTimeoutMs = Number(env.SSE_CONNECTION_TIMEOUT_MS ?? 120000);
+      const onStreamTimeout = () => {
+        hub.removeClient(client);
+        res.end();
+      };
+      res.setTimeout(streamTimeoutMs, onStreamTimeout);
+      req.on('timeout', onStreamTimeout);
       res.write(`data: ${JSON.stringify({ type: 'connected', ts: Date.now() })}\n\n`);
+      hub.addClient(client);
       req.on('close', () => hub.removeClient(client));
+    } else if (pathname === '/' || pathname === '/index.html') {
+      // Serve the read-only dashboard UI from the same origin as /api/*.
+      // Cloudflare Access gates this page at the edge; the local dev proxy
+      // serves the same file with a loopback origin rewrite.
+      try {
+        const html = readFileSync(DASHBOARD_HTML, 'utf8');
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.end(html);
+      } catch (err) {
+        log.error({ err: String(err), path: DASHBOARD_HTML }, 'dashboard html not found');
+        res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+        res.end('dashboard html not found');
+      }
     } else if (pathname === '/api/boards') {
       // Fetch opportunities from PocketBase (hot store) and apply filters
       // server-side in handleBoards. Read-only: getFullList only, no writes.
       let rows: Array<Record<string, unknown>> = [];
+      let tombstones: Array<Record<string, unknown>> = [];
       try {
         const records = await pb.collection('opportunities').getFullList<Record<string, unknown>>();
         rows = records as unknown as Array<Record<string, unknown>>;
@@ -103,10 +129,16 @@ async function main(): Promise<void> {
         res.end(JSON.stringify({ error: 'upstream unavailable' }));
         return;
       }
-      handleBoards({ url: req.url ?? null }, res, { rows });
+      try {
+        const records = await pb.collection('tombstone_ledger').getFullList<Record<string, unknown>>();
+        tombstones = records as unknown as Array<Record<string, unknown>>;
+      } catch {
+        // Optional mirror: the audit-log tab still renders opportunity rows.
+      }
+      handleBoards({ url: req.url ?? null }, res, { rows, tombstones });
     } else if (pathname.startsWith('/api/audit/older')) {
       // Read-only point lookup into Turso cold tombstone_ledger (D-11).
-      handleAuditOlder({ url: req.url ?? null }, res, { db: STUB_DB });
+      await handleAuditOlder({ url: req.url ?? null }, res, { db: coldDb });
     } else {
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'not found' }));

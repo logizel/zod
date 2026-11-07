@@ -18,7 +18,10 @@
   },
   "dependencies": {
     "@zod/config": "workspace:*",
-    "@zod/logger": "workspace:*"
+    "@zod/db-hot": "workspace:*",
+    "@zod/discord-router": "workspace:*",
+    "@zod/logger": "workspace:*",
+    "@zod/scheduler-registry": "workspace:*"
   },
   "devDependencies": {
     "tsx": "^4.23.15",

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+import { hashUrl, normalizeUrl } from '@zod/dedup';
 import {
   loadTasteRules,
   checkBlockRules,
@@ -71,6 +72,69 @@ describe('loadTasteRules', () => {
     const { pb } = makePb({ tasteRulesItems: [] });
     const rules = await loadTasteRules(pb as any);
     expect(rules).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// loadTasteRules — cold-first with PocketBase fallback
+// ---------------------------------------------------------------------------
+
+describe('loadTasteRules cold-first', () => {
+  function makeCold(rules: any[]) {
+    return {
+      execute: vi.fn().mockResolvedValue({ rows: rules }),
+    };
+  }
+
+  it('reads cold Turso first when rules exist', async () => {
+    const cold = makeCold([
+      { id: 'c-1', kind: 'BLOCK', rule: 'crypto', weight: 1.0, source: 'cold' },
+    ]);
+    const { pb } = makePb({ tasteRulesItems: [{ kind: 'BLOCK', rule: 'pb-rule', weight: 1.0, source: 'pb' }] });
+
+    const rules = await loadTasteRules(pb as any, { cold: cold as any });
+
+    expect(rules).toHaveLength(1);
+    expect(rules[0].rule).toBe('crypto');
+    expect(rules[0].source).toBe('cold');
+    // PB should not be consulted when cold returns rules.
+    expect(pb.collection).not.toHaveBeenCalledWith('taste_rules');
+  });
+
+  it('falls back to PocketBase when cold returns empty', async () => {
+    const cold = makeCold([]);
+    const { pb } = makePb({
+      tasteRulesItems: [{ kind: 'BOOST', rule: 'pb-boost', weight: 2.0, source: 'pb' }],
+    });
+
+    const rules = await loadTasteRules(pb as any, { cold: cold as any });
+
+    expect(rules).toHaveLength(1);
+    expect(rules[0].rule).toBe('pb-boost');
+    expect(pb.collection('taste_rules').getList).toHaveBeenCalledWith(1, 200, { sort: '-created' });
+  });
+
+  it('returns empty when cold throws and pbFallback is disabled', async () => {
+    const cold = makeCold([]);
+    cold.execute.mockRejectedValueOnce(new Error('cold down'));
+    const { pb } = makePb({ tasteRulesItems: [] });
+
+    const rules = await loadTasteRules(pb as any, { cold: cold as any, pbFallback: false });
+
+    expect(rules).toEqual([]);
+  });
+
+  it('falls back to PocketBase when cold throws', async () => {
+    const cold = makeCold([]);
+    cold.execute.mockRejectedValueOnce(new Error('cold down'));
+    const { pb } = makePb({
+      tasteRulesItems: [{ kind: 'BLOCK', rule: 'pb-block', weight: 1.0, source: 'pb' }],
+    });
+
+    const rules = await loadTasteRules(pb as any, { cold: cold as any });
+
+    expect(rules).toHaveLength(1);
+    expect(rules[0].rule).toBe('pb-block');
   });
 });
 
@@ -186,7 +250,6 @@ describe('applyTastePreScoring', () => {
       [{ url: 'https://example.com/crypto', title: 'Crypto Event', snippet: 'blockchain' }],
       rules,
       pb as any,
-      'https://example.com/crypto',
     );
 
     expect(result).toHaveLength(0);
@@ -196,6 +259,31 @@ describe('applyTastePreScoring', () => {
     expect(tsCall.source).toBe('taste_rule');
     expect(tsCall.url_hash).toBeTruthy();
     expect(tsCall.fingerprint).toBe(tsCall.url_hash);
+  });
+
+  it('tombstones each blocked candidate with its OWN URL hash (not a reused listing URL)', async () => {
+    const { pb, collections } = makePb({
+      tasteRulesItems: [{ kind: 'BLOCK', rule: 'crypto', weight: 1.0, source: 'reaction' }],
+    });
+
+    const rules = [{ kind: 'BLOCK', rule: 'crypto', weight: 1.0, source: 'reaction' }];
+    const result = await applyTastePreScoring(
+      [
+        { url: 'https://example.com/crypto-a', title: 'Crypto A', snippet: 'blockchain' },
+        { url: 'https://example.com/crypto-b', title: 'Crypto B', snippet: 'NFTs' },
+      ],
+      rules,
+      pb as any,
+    );
+
+    expect(result).toHaveLength(0);
+    expect(collections.tombstone_ledger.create).toHaveBeenCalledTimes(2);
+    const [callA, callB] = collections.tombstone_ledger.create.mock.calls.map((c) => c[0]);
+    expect(callA.url_hash).toBe(hashUrl('https://example.com/crypto-a'));
+    expect(callB.url_hash).toBe(hashUrl('https://example.com/crypto-b'));
+    expect(callA.url_hash).not.toBe(callB.url_hash);
+    expect(callA.terminal_status).toBe('taste_blocked');
+    expect(callB.terminal_status).toBe('taste_blocked');
   });
 
   it('returns all candidates when none match block rules', async () => {
@@ -208,7 +296,6 @@ describe('applyTastePreScoring', () => {
       [{ url: 'https://example.com/ai', title: 'AI Event', snippet: 'machine learning' }],
       rules,
       pb as any,
-      'https://example.com/ai',
     );
 
     expect(result).toHaveLength(1);
