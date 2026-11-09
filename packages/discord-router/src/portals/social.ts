@@ -56,9 +56,26 @@ export function readSocialCookies(path: string): SocialCookie[] {
   return JSON.parse(raw);
 }
 
-/** Build a Cookie header string from parsed cookies. */
+/** Build a Cookie header string from parsed cookies (unfiltered). */
 export function buildCookieHeader(cookies: SocialCookie[]): string {
   return cookies.map((c) => `${c.name}=${c.value}`).join('; ');
+}
+
+/** True when a cookie scoped to `cookieDomain` applies to `hostname`. */
+export function cookieMatchesHost(cookieDomain: string, hostname: string): boolean {
+  const domain = cookieDomain.replace(/^\./u, '').toLowerCase();
+  const host = hostname.toLowerCase();
+  if (!domain) return false;
+  return host === domain || host.endsWith(`.${domain}`);
+}
+
+/** Build a Cookie header containing only cookies scoped to `url`'s host. */
+export function buildCookieHeaderFor(cookies: SocialCookie[], url: string): string {
+  const { hostname } = new URL(url);
+  return cookies
+    .filter((cookie) => cookieMatchesHost(cookie.domain, hostname))
+    .map((cookie) => `${cookie.name}=${cookie.value}`)
+    .join('; ');
 }
 
 /**
@@ -128,12 +145,16 @@ export const socialSource: CandidateSource = {
       return [];
     }
 
-    const header = buildCookieHeader(cookies);
     const candidates: PollCandidate[] = [];
     let actions = 0;
 
     for (const url of DEFAULT_SOCIAL_URLS) {
       if (actions >= MAX_ACTIONS_PER_TICK) break;
+
+      // Per-domain filtering: never send X cookies to LinkedIn (or vice
+      // versa), and never poll a host anonymously just to hit a login wall.
+      const header = buildCookieHeaderFor(cookies, url);
+      if (!header) continue;
 
       // 30-90s jitter between requests (D-08 human pacing)
       const jitter = 30_000 + Math.random() * 60_000;

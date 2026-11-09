@@ -28,6 +28,7 @@ import {
   socialSource,
   readSocialCookies,
   buildCookieHeader,
+  buildCookieHeaderFor,
   sleep,
   SocialCookie,
 } from './social.js';
@@ -45,6 +46,8 @@ beforeEach(() => {
 const sampleCookies: SocialCookie[] = [
   { name: 'auth_token', value: 'abc123', domain: 'x.com' },
   { name: 'ct0', value: 'def456', domain: 'x.com' },
+  { name: 'li_at', value: 'li789', domain: '.www.linkedin.com' },
+  { name: 'JSESSIONID', value: 'js012', domain: '.www.linkedin.com' },
 ];
 
 /**
@@ -172,7 +175,7 @@ describe('social source (X/LinkedIn CandidateSource)', () => {
     gMockRealpathSync.mockReturnValue(cookiePath);
     gMockReadFileSync.mockReturnValue(JSON.stringify(sampleCookies));
     const cookies = readSocialCookies(cookiePath);
-    expect(cookies).toHaveLength(2);
+    expect(cookies).toHaveLength(4);
     expect(cookies[0]).toMatchObject({ name: 'auth_token', value: 'abc123' });
     expect(gMockReadFileSync).toHaveBeenCalledWith(cookiePath, 'utf8');
   });
@@ -189,14 +192,35 @@ describe('social source (X/LinkedIn CandidateSource)', () => {
     gMockRealpathSync.mockReturnValue(realPath);
     gMockReadFileSync.mockReturnValue(JSON.stringify(sampleCookies));
     const cookies = readSocialCookies(linkPath);
-    expect(cookies).toHaveLength(2);
+    expect(cookies).toHaveLength(4);
     expect(gMockReadFileSync).toHaveBeenCalledWith(realPath, 'utf8');
     expect(gMockReadFileSync).not.toHaveBeenCalledWith(linkPath, 'utf8');
   });
 
   it('buildCookieHeader constructs Cookie header string', () => {
     const header = buildCookieHeader(sampleCookies);
-    expect(header).toBe('auth_token=abc123; ct0=def456');
+    expect(header).toBe('auth_token=abc123; ct0=def456; li_at=li789; JSESSIONID=js012');
+  });
+
+  it('buildCookieHeaderFor filters cookies by URL host', () => {
+    expect(buildCookieHeaderFor(sampleCookies, 'https://x.com/search?q=test')).toBe(
+      'auth_token=abc123; ct0=def456',
+    );
+    expect(buildCookieHeaderFor(sampleCookies, 'https://www.linkedin.com/feed/')).toBe(
+      'li_at=li789; JSESSIONID=js012',
+    );
+    expect(buildCookieHeaderFor(sampleCookies, 'https://example.com')).toBe('');
+  });
+
+  it('buildCookieHeaderFor matches dot-prefixed domains and subdomains', () => {
+    const cookies: SocialCookie[] = [
+      { name: 'li_at', value: 'li', domain: '.linkedin.com' },
+      { name: 'auth_token', value: 'x', domain: '.x.com' },
+    ];
+    expect(buildCookieHeaderFor(cookies, 'https://www.linkedin.com/feed/')).toBe('li_at=li');
+    expect(buildCookieHeaderFor(cookies, 'https://in.linkedin.com/feed/')).toBe('li_at=li');
+    expect(buildCookieHeaderFor(cookies, 'https://www.x.com/home')).toBe('auth_token=x');
+    expect(buildCookieHeaderFor(cookies, 'https://notx.com/')).toBe('');
   });
 
   it('sleep resolves', async () => {
