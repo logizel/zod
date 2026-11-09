@@ -24,3 +24,7 @@ CREATE TABLE IF NOT EXISTS taste_rules (
 );
 
 CREATE INDEX IF NOT EXISTS idx_taste_kind ON taste_rules(kind);
+
+-- Dedup key for INSERT OR IGNORE: re-reacting or re-running ingestion must not
+-- duplicate an identical (kind, rule) pair. Idempotent on rebuild.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_taste_unique ON taste_rules(kind, rule);

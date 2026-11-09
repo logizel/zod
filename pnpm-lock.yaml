@@ -8,6 +8,9 @@ importers:
 
   .:
     devDependencies:
+      '@libsql/client':
+        specifier: ^0.18.0
+        version: 0.18.0
       '@types/node':
         specifier: ^26.6.5
         version: 26.6.5

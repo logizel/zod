@@ -61,7 +61,9 @@ export async function loadTasteRules(
           kind: r.kind as 'BLOCK' | 'BOOST' | 'WEIGHT' | 'CUSTOM',
           rule: r.rule,
           weight: r.weight,
-          source: r.source,
+          // Cold rows carry no provenance column; mark them as cold-sourced
+          // so operators can tell them apart from PocketBase-written rules.
+          source: 'cold',
           created_at: new Date().toISOString(),
         }));
       }

@@ -31,13 +31,22 @@ export const LOOKUP_TOMBSTONE_SQL =
 export const RECORD_TOMBSTONE_SQL =
   'INSERT OR IGNORE INTO tombstone_ledger (url_hash, fingerprint, terminal_status, source, decided_at) VALUES (?, ?, ?, ?, ?)';
 
-/** Read all taste rules from the cold Turso ledger. */
+/** Read all taste rules from the cold Turso ledger.
+ *
+ * The cold schema (infra/turso/schema.sql) has no `source` column and uses an
+ * INTEGER PRIMARY KEY AUTOINCREMENT id; only the rule payload is mirrored.
+ * Provenance (`source`) lives in the hot PocketBase taste_rules collection.
+ */
 export const LOOKUP_TASTE_RULES_SQL =
-  'SELECT id, kind, rule, weight, source FROM taste_rules';
+  'SELECT kind, rule, weight FROM taste_rules';
 
-/** Taste rule write: insert-or-ignore so reruns never overwrite a rule. */
+/** Taste rule write: insert-or-ignore so reruns never duplicate a rule.
+ *
+ * Dedup keys on the UNIQUE(kind, rule) index created by the cold schema; the
+ * id is autoincrement and created_at is supplied by the writer.
+ */
 export const RECORD_TASTE_RULE_SQL =
-  'INSERT OR IGNORE INTO taste_rules (id, kind, rule, weight, source) VALUES (?, ?, ?, ?, ?)';
+  'INSERT OR IGNORE INTO taste_rules (kind, rule, weight, created_at) VALUES (?, ?, ?, ?)';
 
 /** Remote-only construction from env URL + token. */
 export function createTursoClient(env: ColdEnv): Client {
@@ -92,13 +101,11 @@ export async function recordTombstone(
   ]);
 }
 
-/** Taste rule row read from the cold Turso ledger. */
+/** Taste rule payload mirrored in the cold Turso ledger. */
 export interface ColdTasteRule {
-  id: string;
   kind: string;
   rule: string;
   weight: number;
-  source: string;
 }
 
 /** Read all taste rules from the cold ledger. */
@@ -109,11 +116,9 @@ export async function lookupTasteRules(
   return rows.map((row) => {
     const record = row as Record<string, unknown>;
     return {
-      id: String(record['id']),
       kind: String(record['kind']),
       rule: String(record['rule']),
       weight: Number(record['weight']),
-      source: String(record['source'] ?? ''),
     };
   });
 }
@@ -124,10 +129,9 @@ export async function recordTasteRule(
   rule: ColdTasteRule,
 ): Promise<void> {
   await db.execute(RECORD_TASTE_RULE_SQL, [
-    rule.id,
     rule.kind,
     rule.rule,
     rule.weight,
-    rule.source,
+    new Date().toISOString(),
   ]);
 }

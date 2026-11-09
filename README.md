@@ -106,6 +106,16 @@ scripts/
 pnpm install
 ```
 
+### Cold ledger schema (Turso, once per database)
+
+```bash
+# requires TURSO_DATABASE_URL + TURSO_AUTH_TOKEN (env or .env)
+pnpm db:cold:apply
+```
+
+The script is idempotent (`CREATE ... IF NOT EXISTS`) and is the same path
+`infra/oracle/rebuild.sh` uses on the VM.
+
 ### Build
 
 ```bash

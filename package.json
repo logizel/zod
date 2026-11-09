@@ -14,9 +14,11 @@
     "dev:local": "node scripts/dev-local.mjs",
     "verify:local": "node scripts/verify-local.mjs",
     "dev:scheduler": "tsx apps/scheduler/src/index.ts",
-    "start:scheduler": "node apps/scheduler/dist/index.js"
+    "start:scheduler": "node apps/scheduler/dist/index.js",
+    "db:cold:apply": "node scripts/apply-turso-schema.mjs"
   },
   "devDependencies": {
+    "@libsql/client": "^0.18.0",
     "@types/node": "^26.6.5",
     "tsx": "^4.23.15",
     "typescript": "~5.9",

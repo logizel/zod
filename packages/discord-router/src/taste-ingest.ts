@@ -40,10 +40,13 @@ export interface TasteIngestionDeps {
 /**
  * Write a taste rule to the cold Turso ledger (primary), falling back to
  * PocketBase when cold is unavailable. Never throws.
+ *
+ * `source` is hot-only provenance: it is kept for the PocketBase fallback and
+ * is not persisted in the cold schema (which mirrors kind/rule/weight only).
  */
 async function writeTasteRule(
   deps: { pb: any; cold?: StatementExecutor; log: { warn: (args: any, msg: string) => void } },
-  rule: ColdTasteRule,
+  rule: ColdTasteRule & { source: string },
 ): Promise<void> {
   const { pb, cold, log } = deps;
   if (cold) {
@@ -183,7 +186,6 @@ export function createTasteIngestionHandler(deps: TasteIngestionDeps): TasteInge
 
       const pb = await getPb();
       await writeTasteRule({ pb, cold, log: pbLog }, {
-        id: crypto.randomUUID(),
         kind: tasteRule.kind,
         rule: tasteRule.rule,
         weight: tasteRule.weight,
@@ -228,7 +230,6 @@ export function createTasteIngestionHandler(deps: TasteIngestionDeps): TasteInge
 
         const pb = await getPb();
         await writeTasteRule({ pb, cold, log: pbLog }, {
-          id: crypto.randomUUID(),
           kind: tasteRule.kind,
           rule: tasteRule.rule,
           weight: tasteRule.weight,
@@ -258,7 +259,6 @@ export function createTasteIngestionHandler(deps: TasteIngestionDeps): TasteInge
 
         const pb = await getPb();
         await writeTasteRule({ pb, cold, log: pbLog }, {
-          id: crypto.randomUUID(),
           kind: tasteRule.kind,
           rule: tasteRule.rule,
           weight: tasteRule.weight,

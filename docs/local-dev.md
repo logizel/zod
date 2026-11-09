@@ -20,6 +20,13 @@ stack, and `pnpm verify:local` runs every local gate and drill.
   empty, `pnpm dev` uses `owner@example.com` for both the dashboard server and
   the local proxy.
 
+- Turso cold ledger credentials (`TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`).
+  Apply the idempotent schema once per database:
+
+  ```bash
+  pnpm db:cold:apply
+  ```
+
 ## Quickstart
 
 ```bash

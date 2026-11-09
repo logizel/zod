@@ -149,14 +149,7 @@ if [ "$DRY_RUN" -eq 1 ]; then
 else
   [ -n "${TURSO_DATABASE_URL:-}" ] || hard "TURSO_DATABASE_URL unset — refusing to skip the cold-ledger reapply silently"
   [ -n "${TURSO_AUTH_TOKEN:-}" ] || hard "TURSO_AUTH_TOKEN unset — refusing to skip the cold-ledger reapply silently"
-  (cd "$REPO_DIR" && node --input-type=module -e "
-    import { createClient } from '@libsql/client';
-    import fs from 'node:fs';
-    const db = createClient({ url: process.env.TURSO_DATABASE_URL, authToken: process.env.TURSO_AUTH_TOKEN });
-    const stmts = fs.readFileSync(process.argv[1], 'utf8').split(/;\s*\n/).map((s) => s.trim()).filter(Boolean);
-    for (const sql of stmts) { await db.execute(sql); }
-    console.log('turso schema reapplied (' + stmts.length + ' statements, idempotent)');
-  " "$SCHEMA")
+  (cd "$REPO_DIR" && node scripts/apply-turso-schema.mjs)
 fi
 
 # --- 5. cloudflared install (apt cloudflare-main, auto-update on) ------------
