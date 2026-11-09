@@ -24,10 +24,9 @@ describe('buildJobsMessages system prompt', () => {
   const system = messages.find((m) => m.role === 'system')?.content ?? '';
 
   it('contains all admission classes', () => {
-    expect(system).toContain('fresher');
-    expect(system).toContain('fellowship-aligned');
-    expect(system).toContain('borderline-review');
+    expect(system).toContain('admit');
     expect(system).toContain('reject');
+    expect(system).toContain('unverified');
   });
 
   it('contains fellowship program names', () => {
@@ -180,7 +179,7 @@ describe('parseJobsVerdict', () => {
       reason_code: null,
       experience_span: '0-1 years',
       stated_min_years: 0,
-      fellowship_program: 'GSoC',
+      fellowship_program: null,
       stack_tags: ['React'],
       scam_signals: [],
       geo_verdict: 'admit_india',

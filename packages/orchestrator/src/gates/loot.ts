@@ -20,7 +20,7 @@ export interface LootGateResult {
 export interface LootVerdictInput {
   shipping_verified: boolean;
   shipping_region: 'india' | 'worldwide' | 'us' | 'eu' | 'unknown';
-  shipping_quote: string;
+  shipping_quote: string | null;
   card_required: boolean | null;
   offer_cost: 'free' | 'requires_payment' | 'unknown';
   claim_steps: Array<{ step: string; quote: string }>;

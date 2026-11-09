@@ -21,10 +21,19 @@ export const LootVerdictSchema = z.object({
   perk: z.string().min(1),
   perk_description: z.string().min(1),
   shipping_verified: z.boolean(),
-  shipping_region: z.enum(['india', 'worldwide', 'us', 'eu', 'unknown']),
-  shipping_quote: z.string().min(1),
+  shipping_region: z.preprocess(
+    (val) => (typeof val === 'string' ? val.toLowerCase() : val),
+    z.enum(['india', 'worldwide', 'us', 'eu', 'unknown']),
+  ),
+  shipping_quote: z.preprocess(
+    (val) => (typeof val === 'string' && val.trim() === '' ? null : val),
+    z.string().nullable().default(null),
+  ),
   card_required: z.boolean().nullable(),
-  offer_cost: z.enum(['free', 'requires_payment', 'unknown']),
+  offer_cost: z.preprocess(
+    (val) => (typeof val === 'string' ? val.toLowerCase() : val),
+    z.enum(['free', 'requires_payment', 'unknown']),
+  ),
   claim_steps: z
     .array(
       z.object({
@@ -32,7 +41,7 @@ export const LootVerdictSchema = z.object({
         quote: z.string().min(1),
       }),
     )
-    .min(1),
+    .default([]),
   audit_summary: z.string().min(1),
 });
 
