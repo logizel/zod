@@ -83,8 +83,27 @@ describe('parseLocalVerdict', () => {
       expect(verdict.location).toBe('Surathkal, DK');
       expect(verdict.isOffline).toBe(true);
       expect(verdict.hasSelectionRound).toBe(true);
+      expect(verdict.organizer_score).toBe(7);
       expect(verdict.audit_summary).toBe('Local hackathon at NITK DK');
     }
+  });
+
+  it('prompt asks for organizer_score (kept in sync with the schema)', () => {
+    const built = buildLocalMessages({
+      pipeline: 'local',
+      candidateUrl: 'https://example-college.edu/event/hackathon-2026',
+      candidateTitle: 'NITK Hackathon 2026',
+      fetchedText: 'A 24-hour hackathon at NITK Surathkal.',
+    });
+    const prompt = built.find((m) => m.role === 'system')?.content ?? '';
+    expect(prompt).toContain('organizer_score');
+  });
+
+  it('defaults a missing organizer_score to 0 instead of rejecting the verdict', () => {
+    const { organizer_score: _omit, ...withoutScore } = validVerdict;
+    const verdict = parseLocalVerdict(withoutScore);
+    expect(verdict).not.toBeNull();
+    if (verdict) expect(verdict.organizer_score).toBe(0);
   });
 
   it('parses isOffline false (online event)', () => {
@@ -146,6 +165,7 @@ describe('parseLocalVerdict', () => {
       location: 'Udupi',
       isOffline: true,
       hasSelectionRound: false,
+      organizer_score: 0,
       category: 'general',
       prize_cash_inr: null,
       prize_text: 'TBA',

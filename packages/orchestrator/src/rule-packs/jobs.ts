@@ -18,6 +18,7 @@ import type { ChatMessage } from '@zod/llm';
 // ---------------------------------------------------------------------------
 
 export const JobsVerdictSchema = z.object({
+  company: z.string().default(''),
   admission_class: z.enum(['admit', 'reject', 'unverified']),
   reason_code: z.string().nullable().default(null),
   experience_span: z.string().nullable().default(null),
@@ -86,6 +87,7 @@ export function buildJobsMessages(ctx: JobsCtx): ChatMessage[] {
       `- reject: 2+ years minimum, unpaid non-fellowship, scam signals, geo-locked, work-auth-required.\n\n` +
       `Fellowship programs that clear unpaid listings: ${fellowshipsList}.\n\n` +
       `Return a JSON object with exactly these fields:\n` +
+      `- company: string — hiring company/org name (never blank; use the board/ATS name if unstated)\n` +
       `- admission_class: "${ADMISSION_CLASSES.join(' | ')}"\n` +
       `- reason_code: string | null (required when rejecting; one of: experience_min_2plus, unpaid_non_fellowship, scam_training_fee, scam_registration_deposit, scam_pay_to_join, scam_chat_only, scam_missing_identity, scam_earn_per_day, geo_locked, work_auth_required, verdict_parse_failed, auditor_error)\n` +
       `- experience_span: string | null (stated minimum experience, e.g. "0-1 years", "2+ years", "0–1 yrs", null if unstated)\n` +

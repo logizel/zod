@@ -21,6 +21,7 @@ import { NvidiaAdapter } from './adapters/nvidia.js';
 import { LadderConfig, DEFAULT_LADDER, type LadderBucketDef } from './ladder.js';
 import { PriorityQueue, type Priority } from './priority.js';
 import { SpendCircuitBreaker } from './circuit-breaker.js';
+import { parseLlmJson } from './json.js';
 import { env } from '@zod/config';
 import { createLogger } from '@zod/logger';
 
@@ -153,18 +154,21 @@ export class LlmRouter {
     // per-lane + global in-flight caps (T-03-08).
     let jobId: string | null = null;
     if (priority !== undefined) {
-      jobId = this.queue.enqueue({ messages, step1, step2, slot, pipeline, url }, priority);
+      // Inline admission: complete() runs the job in this call, so it must
+      // occupy an in-flight slot (not a pending lane slot) or it leaks and
+      // saturates the lane after cap calls.
+      jobId = this.queue.admit({ messages, step1, step2, slot, pipeline, url }, priority);
       if (jobId === null) {
         return { verdict: POOL_SATURATED, bucket: null, path, reason: 'shared-pool at in-flight cap' };
       }
     }
 
     try {
-      // Build the full message set: caller messages + step1 + step2 context.
-      const fullMessages: ChatMessage[] = [
-        ...messages,
-        { role: 'user', content: `step_1: ${step1}\nstep_2: ${step2}` },
-      ];
+      // Build the full message set. Rule-pack callers already include step_1 +
+      // step_2 in their messages; only append the carried context when present.
+      const fullMessages: ChatMessage[] = step1 || step2
+        ? [...messages, { role: 'user', content: `step_1: ${step1}\nstep_2: ${step2}` }]
+        : [...messages];
 
       // Phase 1: Tier1 buckets (canFire only).
       let verdict: unknown = null;
@@ -204,8 +208,10 @@ export class LlmRouter {
       }
 
       // Phase 2: Tier2 overflow — only when Tier1 produced no verdict.
+      // Tier2 bucket order is task-aware: reasoning-heavy pipelines prefer
+      // Nemotron, citation/JSON-heavy pipelines prefer Cohere.
       if (verdict === null) {
-        for (const def of this.ladder.tier2) {
+        for (const def of this.ladder.tier2For(pipeline)) {
           const key = `${def.provider}:${def.model}`;
           if (!this.adapters.has(key)) {
             log.debug({ provider: def.provider, model: def.model }, 'tier2 bucket skipped: no adapter (key not configured)');
@@ -319,28 +325,30 @@ export class LlmRouter {
       return { verdict: null, bucket: null };
     }
 
-    // Normal completion — parse JSON verdict.
-    try {
-      const verdict = JSON.parse(result.text);
+    // Normal completion — parse JSON verdict. Models sometimes wrap the
+    // object in markdown fences or prose, so extract the first balanced JSON
+    // value instead of requiring the entire response to be JSON.
+    const verdict = parseLlmJson(result.text);
+    if (verdict !== null) {
       await this.writeTelemetry(slot, def.provider, def.model, pipeline, url, 'done', `verdict from ${bucketPath}`);
       return { verdict, bucket: bucketPath };
-    } catch {
-      // Not valid JSON — try stitch to complete it.
-      const stitched = await this.tryStitch(
-        def.provider,
-        def.model,
-        result.text ? [{ role: 'assistant', content: result.text }] : messages,
-        slot,
-        pipeline,
-        url,
-      );
-      if (stitched !== null) {
-        await this.writeTelemetry(slot, def.provider, def.model, pipeline, url, 'done', `stitch-repaired verdict from ${bucketPath}`);
-        return { verdict: stitched, bucket: bucketPath };
-      }
-      log.warn({ provider: def.provider, model: def.model }, 'non-JSON verdict, no stitcher or stitch failed');
-      return { verdict: null, bucket: null };
     }
+
+    // Not valid JSON — try stitch to complete it.
+    const stitched = await this.tryStitch(
+      def.provider,
+      def.model,
+      result.text ? [{ role: 'assistant', content: result.text }] : messages,
+      slot,
+      pipeline,
+      url,
+    );
+    if (stitched !== null) {
+      await this.writeTelemetry(slot, def.provider, def.model, pipeline, url, 'done', `stitch-repaired verdict from ${bucketPath}`);
+      return { verdict: stitched, bucket: bucketPath };
+    }
+    log.warn({ provider: def.provider, model: def.model }, 'non-JSON verdict, no stitcher or stitch failed');
+    return { verdict: null, bucket: null };
   }
 
   /** Issue the centralized length-stitch continuation; returns null on failure (caller falls back). */
@@ -399,6 +407,15 @@ export class LlmRouter {
   /** Current bucket states (for operator visibility / debugging). */
   getBucketStates() {
     return this.registry.getStates();
+  }
+
+  /** True when every bucket is cooling down or daily-capped (no audit can fire). */
+  allBucketsUnavailable(): boolean {
+    const states = this.registry.getStates();
+    if (states.length === 0) return false;
+    return states.every(
+      (b) => b.state === BucketState.COOLDOWN || b.state === BucketState.DAILY_CAP,
+    );
   }
 
   /** Scheduler-invoked: recover a COOLDOWN bucket when its cooldownUntil has elapsed.

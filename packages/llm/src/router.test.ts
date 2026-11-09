@@ -484,3 +484,68 @@ describe('LlmRouter.complete', () => {
     expect(result.path).toEqual(['tier1/groq:llama-3.1-8b-instant']);
   });
 });
+
+describe('LlmRouter inline audit admission + task-aware Tier2', () => {
+  const tier1: LadderBucketDef[] = [
+    {
+      provider: 'groq',
+      model: 'test-audit-model',
+      tier: 'tier1',
+      capability: { supportsJSON: true, maxOutputTokens: 4096, costTier: 'zero' },
+    },
+  ];
+
+  it('>8 sequential priority-2 audits never saturate the Auditor lane', async () => {
+    const { router } = buildRouterWithLadder(tier1, [], {
+      'groq:test-audit-model': makeChatResult('{"verdict":"ok"}'),
+    });
+
+    for (let i = 0; i < 12; i += 1) {
+      const result = await router.complete({ ...OPTIONS, priority: 2 });
+      // The 9th+ call used to return POOL_SATURATED because complete()
+      // enqueued but never dequeued, leaking pending lane slots.
+      expect(result.verdict).toEqual({ verdict: 'ok' });
+    }
+
+    expect(router.getQueueStats().perLane.Auditor.inFlight).toBe(0);
+    expect(router.getQueueStats().perLane.Auditor.pending).toBe(0);
+  });
+
+  it('parses fenced/prose-wrapped verdicts without stitching', async () => {
+    const { router } = buildRouterWithLadder(tier1, [], {
+      'groq:test-audit-model': makeChatResult(
+        'Here is the audit:\n```json\n{"verdict":"fenced","score":77}\n```',
+      ),
+    });
+
+    const result = await router.complete(OPTIONS);
+
+    expect(result.verdict).toEqual({ verdict: 'fenced', score: 77 });
+  });
+
+  it('orders Tier2 by task: Nemotron first for reasoning, Cohere first for citations', () => {
+    expect(DEFAULT_LADDER.tier2For('events')[0].model).toBe(
+      'nvidia/nemotron-3.5-lightning:free',
+    );
+    expect(DEFAULT_LADDER.tier2For('jobs')[0].model).toBe(
+      'nvidia/nemotron-3.5-lightning:free',
+    );
+    expect(DEFAULT_LADDER.tier2For('social')[0].model).toBe(
+      'nvidia/nemotron-3.5-lightning:free',
+    );
+    expect(DEFAULT_LADDER.tier2For('loot')[0].model).toBe(
+      'cohere/north-mini-code:free',
+    );
+    expect(DEFAULT_LADDER.tier2For('local')[0].model).toBe(
+      'cohere/north-mini-code:free',
+    );
+    // Every configured bucket stays reachable.
+    expect(DEFAULT_LADDER.tier2For('loot')).toHaveLength(DEFAULT_LADDER.tier2.length);
+  });
+
+  it('removes the dead OpenRouter free slug from the ladder', () => {
+    expect(
+      DEFAULT_LADDER.all.some((d) => d.model === 'meta-llama/llama-3.1-8b-instruct:free'),
+    ).toBe(false);
+  });
+});

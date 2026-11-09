@@ -24,6 +24,10 @@ export interface OrchestratorSchedulerOpts {
   router: DrainOpts['router'];
   /** Page size for bounded STEP_2 getList. Default 25. */
   pageSize?: number;
+  /** Max rows audited per tick. Default 3 (Groq 8K TPM headroom). */
+  maxAudits?: number;
+  /** Delay between audit calls. Default 20s (Groq free-tier pacing). */
+  interAuditDelayMs?: number;
   /** Injected scheduler module (tests use fakes). Defaults to real cron. */
   mod?: SchedulerModule;
 }
@@ -39,7 +43,7 @@ export class OrchestratorScheduler {
 
   /** Register + start the audit-drain job via the single scheduler registry. */
   start(log: TickLogger): void {
-    const { pb, router, pageSize = 25, mod } = this.opts;
+    const { pb, router, pageSize = 25, maxAudits = 3, interAuditDelayMs = 20_000, mod } = this.opts;
     const tickHandler = async (def: { name: string }, _log: TickLogger): Promise<void> => {
       switch (def.name) {
         case 'audit-drain':
@@ -48,6 +52,8 @@ export class OrchestratorScheduler {
             router: router as unknown as DrainOpts['router'],
             log: log as unknown as Logger,
             pageSize,
+            maxAudits,
+            interAuditDelayMs,
           });
           break;
       }
@@ -58,7 +64,7 @@ export class OrchestratorScheduler {
 
   /** Expose the drain tickHandler for external registration (cycle-free: scheduler never imports orchestrator). */
   getTickHandler(): (def: { name: string }, log: TickLogger) => Promise<void> | void {
-    const { pb, router, pageSize = 25 } = this.opts;
+    const { pb, router, pageSize = 25, maxAudits = 3, interAuditDelayMs = 20_000 } = this.opts;
     return async (def: { name: string }, _log: TickLogger): Promise<void> => {
       if (def.name !== 'audit-drain') return;
       await drainStep2Rows({
@@ -66,6 +72,8 @@ export class OrchestratorScheduler {
         router: router as unknown as DrainOpts['router'],
         log: _log as unknown as Logger,
         pageSize,
+        maxAudits,
+        interAuditDelayMs,
       });
     };
   }

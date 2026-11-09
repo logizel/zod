@@ -3,6 +3,7 @@
 // Re-exports telemetry reads + gateway scheduler integration (per PLAN 03-03).
 
 export { LlmRouter, complete, type TelemetrySink } from './router.js';
+export { parseLlmJson } from './json.js';
 export type { BucketState } from './bucket.js';
 export { BucketRegistry } from './bucket.js';
 export { writeBucketState, readBucketState, bucketStatusHistory } from './telemetry.js';

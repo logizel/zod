@@ -50,7 +50,28 @@ function makePb() {
   const pb: any = {
     collection: (name: string) => {
       if (name === 'tombstone_ledger') {
-        return { create: async (data: any) => { tombstones.push(data); return data; } };
+        return {
+          getFirstListItem: async (filter: string) => {
+            const hash = /url_hash = '([^']+)'/.exec(filter)?.[1];
+            const found = tombstones.find((t) => t.url_hash === hash);
+            if (!found) {
+              const err: any = new Error('not found');
+              err.status = 404;
+              throw err;
+            }
+            return found;
+          },
+          create: async (data: any) => {
+            if (tombstones.some((t) => t.url_hash === data.url_hash)) {
+              const err: any = new Error('Value must be unique');
+              err.status = 400;
+              err.response = { data: { url_hash: { code: 'validation_not_unique' } } };
+              throw err;
+            }
+            tombstones.push(data);
+            return data;
+          },
+        };
       }
       return coll(name);
     },
@@ -146,6 +167,17 @@ describe('scratchpad', () => {
     expect(res.tombstoned).toBe(true);
     expect(pb.__tombstones.length).toBe(1);
     expect(pb.__tombstones[0].terminal_status).toBe('fetch_failed');
+  });
+
+  it('Test 7b: repeated failures at/after 5 never duplicate the tombstone', async () => {
+    const pb = makePb();
+    const r = await getOrCreateScratchpad(pb, 'https://example.com/event');
+    for (let i = 0; i < 4; i++) await recordFailure(pb, r.id, 'err');
+    const first = await recordFailure(pb, r.id, 'err');
+    const second = await recordFailure(pb, r.id, 'err');
+    expect(first.tombstoned).toBe(true);
+    expect(second.tombstoned).toBe(true);
+    expect(pb.__tombstones.length).toBe(1);
   });
 
   it('Test 8: crash resume - STEP_2 row, fetch skipped', async () => {

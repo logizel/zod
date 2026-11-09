@@ -83,6 +83,24 @@ export class PriorityQueue<Payload = unknown> {
   }
 
   /**
+   * Reserve an in-flight slot for a caller-driven job.
+   *
+   * `enqueue()` + `dequeue()` is the worker-pool API: a job sits pending until
+   * a worker dequeues it. `admit()` is for callers that run the job inline
+   * (LlmRouter.complete) — it puts the job straight into the in-flight map so
+   * `complete()` actually releases it. Without this, every inline call leaks a
+   * pending lane slot and the lane saturates permanently after its cap.
+   */
+  admit(payload: Payload, priority: Priority): string | null {
+    if (this.laneLoad(priority) >= this.perLaneCaps[priority]) return null; // lane full
+    if (this.inFlight.size >= this.globalCap) return null; // global pool full
+
+    const job: Job<Payload> = { id: nextId(), payload, priority, enqueuedAt: Date.now() };
+    this.inFlight.set(job.id, job);
+    return job.id;
+  }
+
+  /**
    * Dequeue the next runnable job: highest-priority lane first, respecting the
    * global in-flight cap. Curator(1) always dequeues before Scout(3).
    */

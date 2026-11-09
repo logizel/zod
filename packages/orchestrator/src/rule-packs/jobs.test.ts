@@ -164,8 +164,18 @@ describe('parseJobsVerdict', () => {
     ).toBeNull();
   });
 
+  it('defaults a missing company to an empty string (organizer fallback applied downstream)', () => {
+    const verdict = parseJobsVerdict({
+      admission_class: 'admit',
+      audit_summary: 'ok',
+    });
+    expect(verdict).not.toBeNull();
+    if (verdict) expect(verdict.company).toBe('');
+  });
+
   it('infers the JobsVerdict type from the schema', () => {
     const _check: JobsVerdict = {
+      company: 'Acme',
       admission_class: 'admit',
       reason_code: null,
       experience_span: '0-1 years',

@@ -26,7 +26,9 @@ export const LocalVerdictSchema = z.object({
   location: z.string().min(1),
   isOffline: z.boolean(),
   hasSelectionRound: z.boolean(),
-  organizer_score: z.number().min(0).max(10),
+  // Defaulted so a model that omits the score still yields an admissible
+  // verdict (score 0 only affects the travel-curated quality gate).
+  organizer_score: z.number().min(0).max(10).default(0),
   category: z.enum(['sys-cp-sec', 'general']).default('general'),
   prize_cash_inr: z.number().min(0).nullable(),
   prize_text: z.string(),
@@ -76,6 +78,7 @@ export function buildLocalMessages(ctx: LocalCtx): ChatMessage[] {
       `- location: string — the venue city / event location (primary signal for geo classification)\n` +
       `- isOffline: boolean — true for in-person events, false for online events\n` +
       `- hasSelectionRound: boolean — true when "selection round" or "registration" keywords appear\n` +
+      `- organizer_score: number — organizer credibility from 0 (unknown) to 10 (top-tier institution/company)\n` +
       `- category: 'sys-cp-sec' | 'general' — 'sys-cp-sec' for systems/cybersecurity/programming events, 'general' otherwise\n` +
       `- prize_cash_inr: number | null — explicit liquid cash prize in INR (credits/vouchers/certificates stripped → null)\n` +
       `- prize_text: string — human-readable prize line as stated\n` +

@@ -5,8 +5,9 @@
 // valid JSON only") and returns the completion to merge with the partial.
 // One implementation for all adapters — router calls this, never inline stitch logic.
 
-import type { ChatOutcome, ChatResult } from './adapters/groq.js';
+import type { ChatOutcome } from './adapters/groq.js';
 import type { ChatMessage } from './adapters/groq.js';
+import { parseLlmJson } from './json.js';
 
 export interface LLMAdapter {
   chat(messages: ChatMessage[]): Promise<ChatOutcome>;
@@ -49,6 +50,10 @@ export class Stitcher {
   async stitchAndParse(partialText: string): Promise<unknown> {
     const continuation = await this.continue(partialText);
     const merged = partialText + continuation;
-    return JSON.parse(merged);
+    const verdict = parseLlmJson(merged);
+    if (verdict === null) {
+      throw new Error('stitch.stitchAndParse: merged output is not valid JSON');
+    }
+    return verdict;
   }
 }

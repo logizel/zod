@@ -45,11 +45,35 @@ export const TIER1_MODELS: LadderBucketDef[] = [
 
 /** Tier 2 — overflow; engages only after Tier1 exhausts. */
 export const TIER2_MODELS: LadderBucketDef[] = [
+  // Reasoning-heavy default order (events/jobs/social). Nemotron's 1M context
+  // and reasoning strength wins on long event/job pages; Cohere is a
+  // citation/JSON specialist and sits last here.
+  { provider: 'openrouter', model: 'nvidia/nemotron-3.5-lightning:free', tier: 'tier2', capability: OPENROUTER_CAP },
   { provider: 'mistral', model: 'mistral-small-latest', tier: 'tier2', capability: MISTRAL_CAP },
   { provider: 'zai', model: 'glm-5.2', tier: 'tier2', capability: ZAI_CAP },
   { provider: 'nvidia', model: 'nemotron-3.5-lightning', tier: 'tier2', capability: NVIDIA_CAP },
-  { provider: 'openrouter', model: 'meta-llama/llama-3.1-8b-instruct:free', tier: 'tier2', capability: OPENROUTER_CAP },
+  { provider: 'openrouter', model: 'cohere/north-mini-code:free', tier: 'tier2', capability: OPENROUTER_CAP },
 ];
+
+/** Per-pipeline Tier2 preference order (keys are `provider:model`). */
+const TIER2_REASONING_ORDER = [
+  'openrouter:nvidia/nemotron-3.5-lightning:free',
+  'mistral:mistral-small-latest',
+  'zai:glm-5.2',
+  'nvidia:nemotron-3.5-lightning',
+  'openrouter:cohere/north-mini-code:free',
+];
+
+const TIER2_CITATION_ORDER = [
+  'openrouter:cohere/north-mini-code:free',
+  'mistral:mistral-small-latest',
+  'openrouter:nvidia/nemotron-3.5-lightning:free',
+  'zai:glm-5.2',
+  'nvidia:nemotron-3.5-lightning',
+];
+
+/** Pipelines whose verdicts are quote/citation-heavy rather than reasoning-heavy. */
+const CITATION_TASKS = new Set(['loot', 'local']);
 
 /** Full provider × model bucket table (Tier1 + Tier2). Cerebras absent from both. */
 export class LadderConfig {
@@ -64,6 +88,32 @@ export class LadderConfig {
       : TIER1_MODELS.filter((d) => d.capability.costTier !== 'paid-opt-in');
     this.tier2 = TIER2_MODELS;
     this.all = [...this.tier1, ...this.tier2];
+  }
+
+  /**
+   * Tier2 buckets ordered for a pipeline. Reasoning-heavy pipelines (events,
+   * jobs, social) try Nemotron first; citation/JSON-heavy pipelines (loot,
+   * local) try Cohere first. Unknown/custom buckets always remain reachable.
+   */
+  tier2For(task?: string): LadderBucketDef[] {
+    const byKey = new Map(this.tier2.map((def) => [`${def.provider}:${def.model}`, def]));
+    const order = task !== undefined && CITATION_TASKS.has(task)
+      ? TIER2_CITATION_ORDER
+      : TIER2_REASONING_ORDER;
+
+    const ordered: LadderBucketDef[] = [];
+    for (const key of order) {
+      const def = byKey.get(key);
+      if (def) {
+        ordered.push(def);
+        byKey.delete(key);
+      }
+    }
+    // Preserve any custom/unknown tier2 buckets (tests, future providers).
+    for (const def of this.tier2) {
+      if (byKey.has(`${def.provider}:${def.model}`)) ordered.push(def);
+    }
+    return ordered;
   }
 
   /** Assert Cerebras is absent from both tiers (throws if mis-configured). */

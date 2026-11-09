@@ -10,6 +10,7 @@
 import { hashUrl, normalizeUrl } from '@zod/dedup';
 import { attemptMerge, createMergeStore } from '@zod/dedup/merger';
 import type { TaskScratchpadRow } from '@zod/db-hot/schema';
+import { createTombstoneIfAbsent } from '@zod/db-hot/tombstone';
 import { LlmRouter } from '@zod/llm';
 import { createLogger, type Logger } from '@zod/logger';
 import { buildJobsMessages, parseJobsVerdict, type JobsVerdict } from './rule-packs/jobs.js';
@@ -63,12 +64,15 @@ interface OpportunitiesCollection {
   getList?(page: number, perPage: number, options?: unknown): Promise<{ items: unknown[]; totalItems: number }>;
 }
 
-interface TombstoneCollection {
-  create(data: Record<string, unknown>): Promise<unknown>;
+/** Structural collection shape shared with taste-apply's PbLike. */
+interface GenericCollection {
+  getList?: (page: number, perPage: number, opts?: unknown) => Promise<{ items: unknown[]; totalItems: number }>;
+  create?: (data: Record<string, unknown>) => Promise<unknown>;
+  update?: (id: string, data: Record<string, unknown>) => Promise<void>;
 }
 
 interface PbLike {
-  collection(name: string): ScratchpadCollection | OpportunitiesCollection | TombstoneCollection;
+  collection(name: string): GenericCollection;
 }
 
 function scratchpadColl(pb: PbLike): ScratchpadCollection {
@@ -77,10 +81,6 @@ function scratchpadColl(pb: PbLike): ScratchpadCollection {
 
 function opportunitiesColl(pb: PbLike): OpportunitiesCollection {
   return pb.collection('opportunities') as unknown as OpportunitiesCollection;
-}
-
-function tombstonesColl(pb: PbLike): TombstoneCollection {
-  return pb.collection('tombstone_ledger') as unknown as TombstoneCollection;
 }
 
 // ---------------------------------------------------------------------------
@@ -93,6 +93,10 @@ export interface DrainOpts {
   log?: Logger;
   /** Page size for the bounded STEP_2 getList (T-05-04). Default 25. */
   pageSize?: number;
+  /** Max rows audited per tick (the rest stay queued). Defaults to pageSize. */
+  maxAudits?: number;
+  /** Delay between audit calls to stay under free-tier TPM/RPM. Default 0. */
+  interAuditDelayMs?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -104,31 +108,89 @@ export interface DrainOpts {
  * Per-row isolation: a single bad row never aborts the batch.
  */
 export async function drainStep2Rows(opts: DrainOpts): Promise<void> {
-  const { pb, router, pageSize = 25 } = opts;
-  const drainLog = (opts.log ?? log).child({ component: 'orchestrator/drain', pageSize });
+  const { pb, router, pageSize = 25, maxAudits = pageSize, interAuditDelayMs = 0 } = opts;
+  const drainLog = (opts.log ?? log).child({ component: 'orchestrator/drain', pageSize, maxAudits });
   drainLog.info('drain start');
 
-  const page = await scratchpadColl(pb).getList(1, pageSize, {
-    filter: "step_position = 'STEP_2'",
-    sort: '-created',
+  // Query non-local pipelines first so a large local backlog can never occupy
+  // the whole page. Within each query rows are oldest-first.
+  const nonLocalPage = await scratchpadColl(pb).getList(1, pageSize, {
+    filter: "step_position = 'STEP_2' && pipeline != 'local'",
+    sort: 'created',
   });
+  const nonLocal = nonLocalPage.items ?? [];
 
-  const rows = page.items ?? [];
-  drainLog.info({ count: rows.length }, 'STEP_2 rows fetched');
+  const localSlots = Math.max(0, maxAudits - nonLocal.length);
+  const local = localSlots > 0
+    ? (await scratchpadColl(pb).getList(1, localSlots, {
+        filter: "step_position = 'STEP_2' && pipeline = 'local'",
+        sort: 'created',
+      })).items ?? []
+    : [];
 
+  // Dedupe by id (test fakes may return every row for both filters) and keep
+  // the non-local-first, oldest-first order.
+  const byId = new Map<string, TaskScratchpadRow>();
+  for (const row of [...nonLocal, ...local]) byId.set(row.id, row);
+  const rows = [...byId.values()]
+    .sort((a, b) => pipelineRank(a.pipeline) - pipelineRank(b.pipeline) || createdAtMs(a) - createdAtMs(b))
+    .slice(0, Math.max(0, maxAudits));
+  drainLog.info(
+    { count: rows.length, nonLocal: nonLocal.length, local: local.length },
+    'STEP_2 rows fetched',
+  );
+
+  let attempted = 0;
   for (const row of rows) {
+    if (allBucketsUnavailable(router)) {
+      drainLog.warn({ attempted }, 'all LLM buckets cooling down/daily-capped; stopping drain');
+      break;
+    }
+
+    if (attempted > 0 && interAuditDelayMs > 0) {
+      await sleep(interAuditDelayMs);
+    }
+
     const rowLog = drainLog.child({ rowId: row.id, pipeline: row.pipeline, url: row.candidate_url });
     try {
       await processRow(pb, router, rowLog, row);
     } catch (err) {
       rowLog.warn({ stage: 'row', error: String(err) }, 'row failed, continuing');
     }
+    attempted += 1;
   }
 
   // TBA re-audit scan within the existing audit-drain tick (D-10 — no new scheduler job).
   await tbaReauditScan({ pb, router, log: drainLog });
 
-  drainLog.info({ processed: rows.length }, 'drain done');
+  drainLog.info({ processed: attempted }, 'drain done');
+}
+
+/** Local rows drain last so the real pipelines always get first claim. */
+function pipelineRank(pipeline: string): number {
+  return pipeline === 'local' ? 1 : 0;
+}
+
+function createdAtMs(row: TaskScratchpadRow): number {
+  const ms = Date.parse(row.created);
+  return Number.isFinite(ms) ? ms : 0;
+}
+
+function allBucketsUnavailable(router: LlmRouter): boolean {
+  const probe = (router as unknown as { allBucketsUnavailable?: () => boolean }).allBucketsUnavailable;
+  return typeof probe === 'function' ? probe.call(router) : false;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** First non-blank string, else a safe fallback (PocketBase rejects blank fields). */
+function firstNonEmpty(...values: Array<string | null | undefined>): string {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim().length > 0) return value.trim();
+  }
+  return 'Unknown';
 }
 
 async function processRow(
@@ -199,8 +261,10 @@ async function processJobsRow(
   // Call LlmRouter.complete — auditor lane, priority 2 per plan.
   const result = await router.complete({
     messages,
+    // Rule-pack messages already contain step_1 + step_2. Passing them again
+    // would double the prompt size and burn the free-tier TPM budget.
     step1: '',
-    step2: fetchedText,
+    step2: '',
     slot: 'auditor-jobs-1',
     pipeline,
     url: candidateUrl,
@@ -278,8 +342,8 @@ async function processJobsRow(
     pipeline,
     bucket_channel: bucketChannel,
     status: 'audited',
-    title: candidateTitle,
-    organizer: '',
+    title: firstNonEmpty(candidateTitle, verdict.company),
+    organizer: firstNonEmpty(verdict.company, candidateTitle),
     links: { official: candidateUrl },
     deadlines: { tba: false },
     experience_span: verdict.experience_span ?? null,
@@ -353,8 +417,9 @@ export async function drainLootRow(
   // Call LlmRouter.complete — auditor-loot-1 lane, priority 2 per plan.
   const result = await router.complete({
     messages,
+    // Rule-pack messages already contain step_1 + step_2 (no duplicate prompt).
     step1: '',
-    step2: faqText.slice(0, 8000),
+    step2: '',
     slot: 'auditor-loot-1',
     pipeline: 'loot',
     url: candidateUrl,
@@ -399,8 +464,8 @@ export async function drainLootRow(
     pipeline: 'loot',
     bucket_channel: bucketChannel,
     status: 'audited',
-    title: candidateTitle,
-    organizer: '',
+    title: firstNonEmpty(candidateTitle, verdict.perk),
+    organizer: firstNonEmpty(verdict.brand, candidateTitle),
     links: { official: candidateUrl },
     deadlines: { tba: false },
     shipping_verified: verdict.shipping_verified,
@@ -447,7 +512,7 @@ async function writeTombstone(
   source: string,
 ): Promise<void> {
   const urlHash = hashUrl(normalizeUrl(candidateUrl));
-  await tombstonesColl(pb).create({
+  await createTombstoneIfAbsent(pb, {
     url_hash: urlHash,
     fingerprint: urlHash,
     terminal_status: terminalStatus,
@@ -513,8 +578,9 @@ async function processEventsRow(
 
   const result = await router.complete({
     messages,
+    // Rule-pack messages already contain step_1 + step_2 (no duplicate prompt).
     step1: '',
-    step2: fetchedText,
+    step2: '',
     slot: 'auditor-events-1',
     pipeline: 'events',
     url: candidateUrl,
@@ -547,8 +613,8 @@ async function processEventsRow(
       pipeline: 'events',
       bucket_channel: '#⏳-early-tba-radar',
       status: 'audited',
-      title: candidateTitle,
-      organizer: verdict.organizer,
+      title: firstNonEmpty(candidateTitle, verdict.title),
+      organizer: firstNonEmpty(verdict.organizer, candidateTitle),
       links: { official: candidateUrl },
       prize_cash_inr: null,
       prize_text: verdict.prize_text,
@@ -634,8 +700,8 @@ async function processEventsRow(
       pipeline: 'events',
       bucket_channel: bucketChannel,
       status: 'audited',
-      title: candidateTitle,
-      organizer: verdict.organizer,
+      title: firstNonEmpty(candidateTitle, verdict.title),
+      organizer: firstNonEmpty(verdict.organizer, candidateTitle),
       links: { official: candidateUrl },
       prize_cash_inr: verdict.prize_cash_inr ?? null,
       prize_text: verdict.prize_text,
@@ -723,8 +789,9 @@ async function processSocialRow(
 
   const result = await router.complete({
     messages,
+    // Rule-pack messages already contain step_1 + step_2 (no duplicate prompt).
     step1: '',
-    step2: fetchedText,
+    step2: '',
     slot: 'auditor-social-1',
     pipeline: 'social',
     url: candidateUrl,
@@ -754,8 +821,8 @@ async function processSocialRow(
       pipeline: 'social',
       bucket_channel: '#⏳-early-tba-radar',
       status: 'audited',
-      title: candidateTitle,
-      organizer: verdict.organizer,
+      title: firstNonEmpty(candidateTitle, verdict.title),
+      organizer: firstNonEmpty(verdict.organizer, candidateTitle),
       links: { official: candidateUrl },
       prize_cash_inr: null,
       prize_text: verdict.prize_text,
@@ -834,8 +901,8 @@ async function processSocialRow(
       pipeline: 'social',
       bucket_channel: bucketChannel,
       status: 'audited',
-      title: candidateTitle,
-      organizer: verdict.organizer,
+      title: firstNonEmpty(candidateTitle, verdict.title),
+      organizer: firstNonEmpty(verdict.organizer, candidateTitle),
       links: { official: candidateUrl },
       prize_cash_inr: verdict.prize_cash_inr ?? null,
       prize_text: verdict.prize_text,
@@ -925,8 +992,9 @@ async function drainLocalRow(
 
   const result = await router.complete({
     messages,
+    // Rule-pack messages already contain step_1 + step_2 (no duplicate prompt).
     step1: '',
-    step2: fetchedText,
+    step2: '',
     slot: 'auditor-local-1',
     pipeline: 'local',
     url: candidateUrl,
@@ -959,8 +1027,8 @@ async function drainLocalRow(
       pipeline: 'local',
       bucket_channel: '#⏳-early-tba-radar',
       status: 'audited',
-      title: candidateTitle,
-      organizer: verdict.organizer,
+      title: firstNonEmpty(candidateTitle, verdict.title),
+      organizer: firstNonEmpty(verdict.organizer, candidateTitle),
       links: { official: candidateUrl },
       prize_cash_inr: null,
       prize_text: verdict.prize_text,
@@ -1021,8 +1089,8 @@ async function drainLocalRow(
     pipeline: 'local',
     bucket_channel: bucketChannel,
     status: 'audited',
-    title: candidateTitle,
-    organizer: verdict.organizer,
+    title: firstNonEmpty(candidateTitle, verdict.title),
+    organizer: firstNonEmpty(verdict.organizer, candidateTitle),
     links: { official: candidateUrl },
     prize_cash_inr: verdict.prize_cash_inr ?? null,
     prize_text: verdict.prize_text,

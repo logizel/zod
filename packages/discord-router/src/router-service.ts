@@ -3,7 +3,6 @@ import { createLogger, type Logger } from '@zod/logger';
 import type { OpportunityRow } from '@zod/db-hot/schema';
 import { buildAuditCard } from './embed.js';
 import { getClient } from './gateway.js';
-import { recordFailure } from '@zod/db-hot/scratchpad';
 import { createPbClient } from '@zod/db-hot';
 
 export interface RouterServiceDeps {
@@ -45,15 +44,12 @@ export async function processOpportunity(
     });
     return true;
   } catch (err) {
-    try {
-      const { attempts, tombstoned } = await recordFailure(pb, opportunity.id, String(err));
-      log.warn(
-        { id: opportunity.id, attempts, tombstoned, error: String(err) },
-        'discord post failed; recordFailure applied',
-      );
-    } catch (inner) {
-      log.warn({ id: opportunity.id, error: String(inner) }, 'recordFailure itself failed');
-    }
+    // NOTE: recordFailure() operates on task_scratchpad rows, not opportunities.
+    // The row stays 'audited' and the poll loop retries it next tick.
+    log.warn(
+      { id: opportunity.id, error: String(err) },
+      'discord post failed; opportunity left audited for retry',
+    );
     return false;
   }
 }
@@ -132,16 +128,7 @@ export function createRouterService(deps: RouterServiceDeps): RouterService {
             }
           } catch (err) {
             const id = (opp as { id?: string }).id ?? 'unknown';
-            const pbForFailure = pbDeps ?? (await getPb());
-            try {
-              const { attempts, tombstoned } = await recordFailure(pbForFailure, id, String(err));
-              pbLog.warn(
-                { id, attempts, tombstoned, error: String(err) },
-                'discord post failed; recordFailure applied',
-              );
-            } catch (inner) {
-              pbLog.warn({ id, error: String(inner) }, 'recordFailure itself failed');
-            }
+            pbLog.warn({ id, error: String(err) }, 'discord post failed; row left audited for retry');
           }
         }
       } catch (err) {

@@ -21,6 +21,10 @@
     "./scratchpad": {
       "types": "./dist/scratchpad.d.ts",
       "default": "./dist/scratchpad.js"
+    },
+    "./tombstone": {
+      "types": "./dist/tombstone.d.ts",
+      "default": "./dist/tombstone.js"
     }
   },
   "scripts": {

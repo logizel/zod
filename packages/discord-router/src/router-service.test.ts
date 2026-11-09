@@ -3,7 +3,7 @@ import { processOpportunity } from './router-service.js';
 import type { OpportunityRow } from '@zod/db-hot/schema';
 import type { Env } from '@zod/config';
 
-// Mock recordFailure from scratchpad
+// Mock scratchpad so a mistaken recordFailure import can never hit a real client.
 vi.mock('@zod/db-hot/scratchpad', () => ({
   recordFailure: vi.fn(),
 }));
@@ -102,7 +102,7 @@ describe('processOpportunity', () => {
     expect(updated[0][1]).toMatchObject({ status: 'routed' });
   });
 
-  it('invokes recordFailure on Discord send failure', async () => {
+  it('leaves the opportunity audited on Discord send failure (no scratchpad recordFailure)', async () => {
     const pb = {
       collection: () => ({
         getList: () => Promise.resolve({ items: [fixture] }),
@@ -119,14 +119,11 @@ describe('processOpportunity', () => {
       },
     };
 
-    // recordFailure returns tombstoned=true on 5th call
-    vi.mocked(recordFailure).mockImplementation(async () => ({ attempts: 5, tombstoned: true }));
-
     const ok = await processOpportunity(pb, testEnv, client, fixture, makeLog());
 
     expect(ok).toBe(false);
-    expect(vi.mocked(recordFailure)).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(recordFailure)).toHaveBeenCalledWith(pb, fixture.id, expect.any(String));
+    // The scratchpad failure counter is for scrape rows, not opportunities.
+    expect(vi.mocked(recordFailure)).not.toHaveBeenCalled();
   });
 
   it('returns false when channel not found (unknown channel keeps skip path)', async () => {

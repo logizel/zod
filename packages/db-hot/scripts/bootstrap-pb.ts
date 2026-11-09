@@ -61,7 +61,7 @@ type CollectionSpec = {
   fields: FieldSpec[];
 };
 
-type UpsertCounts = { created: number; updated: number };
+type SeedCounts = { created: number; existing: number };
 
 // ---------------------------------------------------------------------------
 // Field builders
@@ -395,7 +395,7 @@ export const SEED_OPPORTUNITIES: unknown[] = [
     url_hash: 'seed-url-01',
     pipeline: 'events',
     bucket_channel: '#📍-local-dk-udupi',
-    status: 'audited',
+    status: 'routed',
     title: 'Udupi Dev Meetup 2026',
     organizer: 'Udupi Devs',
     links: { official: 'https://example.com/seed/udupi-dev-meetup-2026' },
@@ -427,7 +427,7 @@ export const SEED_OPPORTUNITIES: unknown[] = [
     url_hash: 'seed-url-03',
     pipeline: 'events',
     bucket_channel: '#-online-1lakh-plus',
-    status: 'audited',
+    status: 'routed',
     title: 'National CTF Online 2026',
     organizer: 'National Cyber League',
     links: { official: 'https://example.com/seed/national-ctf-online-2026' },
@@ -460,7 +460,7 @@ export const SEED_OPPORTUNITIES: unknown[] = [
     url_hash: 'seed-url-05',
     pipeline: 'jobs',
     bucket_channel: '#🔥-priority-sys-cp-sec',
-    status: 'audited',
+    status: 'routed',
     title: 'Cloud DevOps Intern',
     organizer: 'Acme Cloud',
     links: { official: 'https://example.com/seed/cloud-devops-intern' },
@@ -497,7 +497,7 @@ export const SEED_OPPORTUNITIES: unknown[] = [
     url_hash: 'seed-url-07',
     pipeline: 'loot',
     bucket_channel: '#🎁-free-swag-and-credits',
-    status: 'audited',
+    status: 'routed',
     title: 'GitHub Copilot Student Pack',
     organizer: 'GitHub',
     links: { official: 'https://example.com/seed/github-copilot-student-pack' },
@@ -552,33 +552,34 @@ function escapeFilterValue(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 
-async function upsertByFilter(
+async function createSeedIfMissing(
   pb: PbClient,
   collection: string,
   field: string,
   value: string,
   payload: Record<string, unknown>,
-): Promise<'created' | 'updated'> {
+): Promise<'created' | 'existing'> {
   const matches = await pb.collection(collection).getFullList<{ id: string }>({
     filter: `${field} = "${escapeFilterValue(value)}"`,
   });
   if (matches.length > 0) {
-    await pb.collection(collection).update(matches[0].id, payload);
-    return 'updated';
+    // Never overwrite runtime state on boot: a seed row the router already
+    // routed must not flip back to 'audited' and re-ping Discord.
+    return 'existing';
   }
   await pb.collection(collection).create(payload);
   return 'created';
 }
 
 async function seedDevData(pb: PbClient): Promise<{
-  opportunities: UpsertCounts;
-  telemetry: UpsertCounts;
+  opportunities: SeedCounts;
+  telemetry: SeedCounts;
 }> {
-  const opportunities: UpsertCounts = { created: 0, updated: 0 };
+  const opportunities: SeedCounts = { created: 0, existing: 0 };
   for (const raw of SEED_OPPORTUNITIES) {
     // Boundary failures stay loud — the same schema production writers use.
     const payload = Opportunity.parse(raw);
-    const outcome = await upsertByFilter(
+    const outcome = await createSeedIfMissing(
       pb,
       'opportunities',
       'url_hash',
@@ -588,10 +589,10 @@ async function seedDevData(pb: PbClient): Promise<{
     opportunities[outcome] += 1;
   }
 
-  const telemetry: UpsertCounts = { created: 0, updated: 0 };
+  const telemetry: SeedCounts = { created: 0, existing: 0 };
   for (const raw of SEED_TELEMETRY) {
     const payload = AgentTelemetry.parse(raw);
-    const outcome = await upsertByFilter(
+    const outcome = await createSeedIfMissing(
       pb,
       'agent_telemetry',
       'slot',
@@ -633,10 +634,10 @@ async function main(): Promise<void> {
 
   const seeded = await seedDevData(pb);
   console.log(
-    `seed opportunities: ${seeded.opportunities.created} created, ${seeded.opportunities.updated} updated`,
+    `seed opportunities: ${seeded.opportunities.created} created, ${seeded.opportunities.existing} already present (left untouched)`,
   );
   console.log(
-    `seed agent_telemetry: ${seeded.telemetry.created} created, ${seeded.telemetry.updated} updated`,
+    `seed agent_telemetry: ${seeded.telemetry.created} created, ${seeded.telemetry.existing} already present (left untouched)`,
   );
 }
 

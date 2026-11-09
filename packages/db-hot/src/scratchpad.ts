@@ -2,6 +2,7 @@ import * as z from 'zod';
 import type PocketBase from 'pocketbase';
 import { Pipeline, TaskScratchpadRow } from './schema.js';
 import { hashUrl, normalizeUrl } from '@zod/dedup';
+import { createTombstoneIfAbsent } from './tombstone.js';
 
 export const StepPosition = z.enum(['STEP_1', 'STEP_2', 'STEP_3', 'STEP_4']);
 export type StepPosition = z.infer<typeof StepPosition>;
@@ -19,16 +20,8 @@ interface ScratchpadCollection {
   getOne(id: string): Promise<TaskScratchpadRow>;
 }
 
-interface TombstoneCollection {
-  create(data: Record<string, unknown>): Promise<unknown>;
-}
-
 function scratchpad(pb: PocketBase): ScratchpadCollection {
   return pb.collection('task_scratchpad') as unknown as ScratchpadCollection;
-}
-
-function tombstones(pb: PocketBase): TombstoneCollection {
-  return pb.collection('tombstone_ledger') as unknown as TombstoneCollection;
 }
 
 async function readRow(pb: PocketBase, id: string): Promise<TaskScratchpadRow> {
@@ -110,7 +103,7 @@ export async function recordFailure(
   if (attempts >= 5) {
     const url = row.candidate_url;
     const urlHash = hashUrl(normalizeUrl(url));
-    await tombstones(pb).create({
+    await createTombstoneIfAbsent(pb, {
       url_hash: urlHash,
       fingerprint: urlHash,
       terminal_status: 'fetch_failed',

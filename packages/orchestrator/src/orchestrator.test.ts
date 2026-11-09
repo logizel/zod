@@ -777,7 +777,8 @@ describe('orchestrator drainStep2Rows — drain limit and isolation', () => {
     await drainStep2Rows({ pb, router: router as any, pageSize: 25 });
 
     expect(getListSpy).toHaveBeenCalledWith(1, 25, expect.objectContaining({
-      filter: "step_position = 'STEP_2'",
+      filter: "step_position = 'STEP_2' && pipeline != 'local'",
+      sort: 'created',
     }));
   });
 
@@ -793,8 +794,61 @@ describe('orchestrator drainStep2Rows — drain limit and isolation', () => {
     await drainStep2Rows({ pb, router: router as any, pageSize: 10 });
 
     expect(getListSpy).toHaveBeenCalledWith(1, 10, expect.objectContaining({
-      filter: "step_position = 'STEP_2'",
+      filter: "step_position = 'STEP_2' && pipeline != 'local'",
+      sort: 'created',
     }));
+  });
+
+  it('drains non-local rows before local rows (oldest-first within a rank)', async () => {
+    const { pb } = makePb({
+      scratchpadRows: [
+        makeLocalScratchRow({
+          id: 'scratch-local-old',
+          created: '2026-01-01T00:00:00Z',
+          candidate_url: 'https://local.example.com/event',
+        }),
+        makeJobsScratchRow({
+          id: 'scratch-jobs-new',
+          created: '2026-02-01T00:00:00Z',
+          candidate_url: 'https://boards.greenhouse.io/acme/jobs/1',
+        }),
+      ],
+      existingOpportunities: [],
+    });
+
+    const seen: string[] = [];
+    const router = {
+      complete: vi.fn(async (opts: { pipeline: string }) => {
+        seen.push(opts.pipeline);
+        return { verdict: 'UNVERIFIED', bucket: null, path: [] };
+      }),
+    };
+
+    await drainStep2Rows({ pb, router: router as any, pageSize: 25 });
+
+    expect(seen).toEqual(['jobs', 'local']);
+  });
+
+  it('honors maxAudits and stops when every bucket is cooling down', async () => {
+    const rows = [
+      makeJobsScratchRow({ id: 'j1', candidate_url: 'https://boards.greenhouse.io/acme/jobs/1' }),
+      makeJobsScratchRow({ id: 'j2', candidate_url: 'https://boards.greenhouse.io/acme/jobs/2' }),
+      makeJobsScratchRow({ id: 'j3', candidate_url: 'https://boards.greenhouse.io/acme/jobs/3' }),
+    ];
+    const { pb } = makePb({ scratchpadRows: rows, existingOpportunities: [] });
+
+    const capped = {
+      complete: vi.fn(async () => ({ verdict: 'UNVERIFIED', bucket: null, path: [] })),
+    };
+    await drainStep2Rows({ pb, router: capped as any, pageSize: 25, maxAudits: 2 });
+    expect(capped.complete).toHaveBeenCalledTimes(2);
+
+    const cooling = {
+      complete: vi.fn(async () => ({ verdict: 'UNVERIFIED', bucket: null, path: [] })),
+      allBucketsUnavailable: () => true,
+    };
+    await drainStep2Rows({ pb, router: cooling as any, pageSize: 25 });
+    expect(cooling.complete).not.toHaveBeenCalled();
   });
 
   it('per-row isolation: a throwing router call does not abort the batch', async () => {

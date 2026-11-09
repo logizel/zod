@@ -168,6 +168,26 @@ describe('social source (X/LinkedIn CandidateSource)', () => {
     });
   });
 
+  it('emits at most one candidate per listing page when no per-post URL exists', async () => {
+    gMockEnv.SOCIAL_COOKIES_PATH = '/opt/zod/social-cookies/cookies.json';
+    gMockRealpathSync.mockImplementation(() => '/opt/zod/social-cookies/cookies.json');
+    gMockReadFileSync.mockReturnValue(JSON.stringify(sampleCookies));
+    gMockFetch.mockImplementation(
+      async () =>
+        new Response(
+          '<html><body>NITK Hackathon 2026 with cash prize\nAnother unrelated feed line\nThird feed line</body></html>',
+          { status: 200 },
+        ),
+    );
+
+    const candidates = await runWithFakeTimers();
+
+    // Two listing pages (X + LinkedIn), one candidate each — never several
+    // candidates sharing the same listing URL.
+    expect(candidates).toHaveLength(2);
+    expect(new Set(candidates.map((c) => c.url)).size).toBe(candidates.length);
+  });
+
   // --- readSocialCookies unit tests (realpathSync + ALLOWED_COOKIE_DIR confinement) ---
 
   it('readSocialCookies parses JSON array of cookie objects within allowed dir', () => {

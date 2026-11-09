@@ -107,7 +107,6 @@ function extractCandidatesFromHtml(html: string, sourceUrl: string): PollCandida
   // Look for common post patterns in server-rendered or embedded JSON
   const text = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, ' ');
   const lines = text.split(/\n+/);
-  let count = 0;
   for (const line of lines) {
     const trimmed = line.trim();
     if (trimmed.length < 10 || trimmed.length > 500) continue;
@@ -120,12 +119,14 @@ function extractCandidatesFromHtml(html: string, sourceUrl: string): PollCandida
       title: trimmed.slice(0, 120),
       snippet: trimmed.slice(0, 200),
     });
-    count += 1;
     if (postUrl) {
       // Post URL found — one candidate per post, stop after first.
       break;
     }
-    if (count >= 3) break; // cap per page when no post URL found
+    // No per-post URL: emit at most ONE candidate for the listing URL.
+    // Emitting several candidates with the same URL only creates duplicate
+    // scratchpad rows that all audit the same page.
+    break;
   }
   return candidates;
 }

@@ -141,8 +141,15 @@ describe('parseLootVerdict', () => {
     expect(verdict).toBeNull();
   });
 
+  it('defaults a missing brand to an empty string (organizer fallback applied downstream)', () => {
+    const verdict = parseLootVerdict(validVerdict);
+    expect(verdict).not.toBeNull();
+    if (verdict) expect(verdict.brand).toBe('');
+  });
+
   it('infers the LootVerdict type from the schema', () => {
     const _check: LootVerdict = {
+      brand: 'CNCF',
       perk: 'Free voucher',
       perk_description: 'A free perk',
       shipping_verified: true,
