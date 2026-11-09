@@ -81,6 +81,7 @@ export async function advanceToStep2(
   await scratchpad(pb).update(id, {
     step_position: 'STEP_2',
     partial_buffer: markdown.slice(0, 8000),
+    last_error: null,
   });
 }
 
@@ -90,6 +91,7 @@ export async function advanceToStep3(
 ): Promise<void> {
   await scratchpad(pb).update(id, {
     step_position: 'STEP_3',
+    last_error: null,
   });
 }
 
@@ -102,7 +104,7 @@ export async function recordFailure(
   const attempts = (row.attempts ?? 0) + 1;
   await scratchpad(pb).update(id, {
     attempts,
-    last_error: error,
+    last_error: error.slice(0, 8000),
   });
   let tombstoned = false;
   if (attempts >= 5) {

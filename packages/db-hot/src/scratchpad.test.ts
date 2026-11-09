@@ -90,6 +90,27 @@ describe('scratchpad', () => {
     expect(row.partial_buffer).toBe('hello world');
   });
 
+  it('Test 4b: advanceToStep2 clears last_error and caps markdown at 8000', async () => {
+    const pb = makePb();
+    const r = await getOrCreateScratchpad(pb, 'https://example.com/event');
+    await recordFailure(pb, r.id, 'boom');
+    await advanceToStep2(pb, r.id, 'x'.repeat(9000));
+    const row = await pb.collection('task_scratchpad').getOne(r.id);
+    expect(row.step_position).toBe('STEP_2');
+    expect(row.partial_buffer).toHaveLength(8000);
+    expect(row.last_error).toBeNull();
+  });
+
+  it('Test 4c: advanceToStep3 clears last_error', async () => {
+    const pb = makePb();
+    const r = await getOrCreateScratchpad(pb, 'https://example.com/event');
+    await recordFailure(pb, r.id, 'boom');
+    await advanceToStep3(pb, r.id);
+    const row = await pb.collection('task_scratchpad').getOne(r.id);
+    expect(row.step_position).toBe('STEP_3');
+    expect(row.last_error).toBeNull();
+  });
+
   it('Test 5: recordFailure increments attempts + sets last_error', async () => {
     const pb = makePb();
     const r = await getOrCreateScratchpad(pb, 'https://example.com/event');
@@ -97,6 +118,14 @@ describe('scratchpad', () => {
     expect(res.attempts).toBe(1);
     const row = await pb.collection('task_scratchpad').getOne(r.id);
     expect(row.last_error).toBe('boom');
+  });
+
+  it('Test 5b: recordFailure truncates last_error to 8000 chars', async () => {
+    const pb = makePb();
+    const r = await getOrCreateScratchpad(pb, 'https://example.com/event');
+    await recordFailure(pb, r.id, 'e'.repeat(9000));
+    const row = await pb.collection('task_scratchpad').getOne(r.id);
+    expect(row.last_error).toHaveLength(8000);
   });
 
   it('Test 6: recordFailure at 4 returns tombstoned false', async () => {

@@ -35,6 +35,7 @@ yarn-error.log*
 **/*token*.json
 **/.cloudflared/*.json
 pb_data/
+pb_migrations/
 .pnpm-store/
 
 # build output

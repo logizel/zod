@@ -67,8 +67,16 @@ type UpsertCounts = { created: number; updated: number };
 // Field builders
 // ---------------------------------------------------------------------------
 
-function text(name: string, required = false): FieldSpec {
-  return { name, type: 'text', required, hidden: false, presentable: false, system: false };
+function text(name: string, required = false, max?: number): FieldSpec {
+  return {
+    name,
+    type: 'text',
+    required,
+    hidden: false,
+    presentable: false,
+    system: false,
+    ...(max !== undefined ? { max } : {}),
+  };
 }
 
 function numberField(name: string, required = false, onlyInt = false): FieldSpec {
@@ -156,8 +164,8 @@ const OPPORTUNITY_FIELDS: FieldSpec[] = [
   dateField('end_date'),
   jsonField('reminders'),
   bool('bookmark'),
-  text('audit_summary'),
-  text('description_raw'),
+  text('audit_summary', false, 8000),
+  text('description_raw', false, 8000),
   text('experience_span'),
   jsonField('stack_tags'),
   text('eligibility_summary'),
@@ -189,9 +197,9 @@ const TASK_SCRATCHPAD_FIELDS: FieldSpec[] = [
   text('step_position', true),
   selectField('pipeline', PIPELINES),
   text('candidate_title'),
-  text('partial_buffer'),
+  text('partial_buffer', false, 8000),
   numberField('attempts', false, true),
-  text('last_error'),
+  text('last_error', false, 8000),
   autodateField('created'),
   autodateField('updated'),
 ];
@@ -386,7 +394,7 @@ export const SEED_OPPORTUNITIES: unknown[] = [
     fingerprint_hash: 'seed-opportunity-01',
     url_hash: 'seed-url-01',
     pipeline: 'events',
-    bucket_channel: '#local-dk-udupi',
+    bucket_channel: '#📍-local-dk-udupi',
     status: 'audited',
     title: 'Udupi Dev Meetup 2026',
     organizer: 'Udupi Devs',
@@ -402,7 +410,7 @@ export const SEED_OPPORTUNITIES: unknown[] = [
     fingerprint_hash: 'seed-opportunity-02',
     url_hash: 'seed-url-02',
     pipeline: 'events',
-    bucket_channel: '#travel-bengaluru',
+    bucket_channel: '#✈️-travel-curated',
     status: 'routed',
     title: 'Bengaluru Hackathon 2026',
     organizer: 'Bengaluru Tech Collective',
@@ -435,7 +443,7 @@ export const SEED_OPPORTUNITIES: unknown[] = [
     fingerprint_hash: 'seed-opportunity-04',
     url_hash: 'seed-url-04',
     pipeline: 'local',
-    bucket_channel: '#-tba-queue',
+    bucket_channel: '#⏳-early-tba-radar',
     status: 'candidate',
     title: 'Mystery Prize Hackathon (TBA)',
     organizer: 'TBA Collective',
@@ -470,7 +478,7 @@ export const SEED_OPPORTUNITIES: unknown[] = [
     fingerprint_hash: 'seed-opportunity-06',
     url_hash: 'seed-url-06',
     pipeline: 'jobs',
-    bucket_channel: '#-jobs-general',
+    bucket_channel: '#💼-jobs-general-swe',
     status: 'routed',
     title: 'Backend Engineer (0-1 yr)',
     organizer: 'Nimbus Systems',
@@ -488,7 +496,7 @@ export const SEED_OPPORTUNITIES: unknown[] = [
     fingerprint_hash: 'seed-opportunity-07',
     url_hash: 'seed-url-07',
     pipeline: 'loot',
-    bucket_channel: '#loot-perks',
+    bucket_channel: '#🎁-free-swag-and-credits',
     status: 'audited',
     title: 'GitHub Copilot Student Pack',
     organizer: 'GitHub',
