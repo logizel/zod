@@ -109,22 +109,34 @@ export function parseRuleCommand(
 
 /** Extract rule context (title + optional URL) from an audit card message embed. */
 function extractRuleContext(message: any): string {
-  const embed = message?.embeds?.[0];
-  const title = embed?.title ?? message?.content ?? '';
-  let url = '';
-  if (embed?.url) {
-    url = embed.url;
-  } else {
-    // Look for markdown link in embed fields (Links field: [Official](url))
-    for (const field of embed?.fields ?? []) {
-      const match = String(field.value ?? '').match(/\((https?:\/\/[^)]+)\)/);
-      if (match) {
-        url = match[1];
-        break;
+  try {
+    const embed = Array.isArray(message?.embeds) ? message.embeds[0] : undefined;
+    const title =
+      typeof embed?.title === 'string' && embed.title.trim().length > 0
+        ? embed.title.trim()
+        : typeof message?.content === 'string' && message.content.trim().length > 0
+          ? message.content.trim()
+        : '';
+    let url = '';
+    if (typeof embed?.url === 'string' && embed.url.trim().length > 0) {
+      url = embed.url.trim();
+    } else {
+      const fields = Array.isArray(embed?.fields) ? embed.fields : [];
+      for (const field of fields) {
+        const match = String(field?.value ?? '').match(/\((https?:\/\/[^)]+)\)/);
+        if (match) {
+          url = match[1];
+          break;
+        }
       }
     }
+    if (title) {
+      return url ? `${title} — ${url}` : title;
+    }
+    return 'audit card';
+  } catch {
+    return 'audit card';
   }
-  return title ? `${title}${url ? ` — ${url}` : ''}` : 'audit card';
 }
 
 /** Create a taste ingestion handler with injected dependencies (testable). */
@@ -197,7 +209,15 @@ export function createTasteIngestionHandler(deps: TasteIngestionDeps): TasteInge
         `✅ Taste rule created: ${kind} — ${rule}`,
       );
     } catch (err) {
-      pbLog.warn({ err: String(err) }, 'taste ingestion reaction handler error');
+      pbLog.warn(
+        {
+          err: String(err),
+          channelId: reaction.message?.channelId,
+          channelName: reaction.message?.channel?.name,
+          emojiName: reaction.emoji?.name,
+        },
+        'taste ingestion reaction handler error',
+      );
     }
   });
 
