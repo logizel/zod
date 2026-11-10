@@ -18,6 +18,7 @@ import { createLogger, type Logger } from '@zod/logger';
 import { getClient } from './gateway.js';
 import { resolveChannel } from './router-service.js';
 import { createPbClient } from '@zod/db-hot';
+import { recordMachineEvent } from '@zod/db-hot/machine-events';
 
 const RELAY_CURSOR_SLOT = 'relay-cursor';
 
@@ -152,6 +153,32 @@ export function createRelayService(deps: RelayDeps): RelayService {
     }>; // oldest first as returned by discord.js
     let newLastId = lastId;
 
+    // Best-effort machine log for each relayed message.
+    const pb = await getPb().catch(() => null);
+    const emitRelay = (
+      messageId: string,
+      status: 'ok' | 'error',
+      detail: string,
+      extra: Record<string, unknown> = {},
+    ): void => {
+      if (!pb) return;
+      try {
+        recordMachineEvent(pb, {
+          trace_id: `relay:${messageId}`,
+          agent: 'discord:relay',
+          pipeline: '',
+          event_type: 'discord',
+          tool: 'discord.relay',
+          step: 'STEP_4-delivery',
+          status,
+          detail,
+          meta: { sourceChannel: sourceChannelId, targetChannel: targetChannelId, ...extra },
+        });
+      } catch {
+        // Observability must never break the relay.
+      }
+    };
+
     for (const msg of msgArray) {
       try {
         await targetChannel.send({ content: msg.content });
@@ -159,9 +186,13 @@ export function createRelayService(deps: RelayDeps): RelayService {
         if (!newLastId || msg.id > newLastId) {
           newLastId = msg.id;
         }
+        emitRelay(msg.id, 'ok', 'relayed message to #raw-incoming-feeds', {
+          chars: msg.content.length,
+        });
       } catch (err) {
         // Per-message error isolation — never abort the batch on one failure
         pbLog.warn({ err: String(err), messageId: msg.id }, 'failed to relay message');
+        emitRelay(msg.id, 'error', `relay failed: ${String(err)}`);
       }
     }
 

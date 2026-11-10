@@ -16,6 +16,7 @@ import { attemptMerge, createMergeStore } from '@zod/dedup/merger';
 import { prefilter } from '@zod/scout';
 import { screenListing } from '@zod/scout/jobs-screen';
 import { resumeByUrl, advanceToStep2, recordFailure } from '@zod/db-hot/scratchpad';
+import { recordMachineEvent, type MachineEventInput } from '@zod/db-hot/machine-events';
 import type { Pipeline } from '@zod/db-hot/schema';
 import { fetch as fetchFacade } from '@zod/sanitize';
 import {
@@ -393,6 +394,47 @@ export async function runStubTick(
     (typeof opts.fetch === 'function' ? opts.fetch : undefined) ??
     fetchFacade;
 
+  // Fine-grained machinery log. Best-effort: a failed telemetry write must
+  // never break the tick, and a tick without an injected pb simply skips it.
+  const emitMachine = (
+    fields: Omit<MachineEventInput, 'trace_id' | 'agent' | 'pipeline'> & {
+      trace_id?: string;
+      agent?: string;
+      pipeline?: Pipeline | '';
+    },
+  ): void => {
+    if (pb === undefined) return;
+    try {
+      recordMachineEvent(pb, {
+        trace_id: fields.trace_id ?? `job:${def.name}`,
+        agent: fields.agent ?? `scheduler:${def.name}`,
+        pipeline: fields.pipeline ?? '',
+        event_type: fields.event_type,
+        tool: fields.tool,
+        provider: fields.provider ?? '',
+        model: fields.model ?? '',
+        step: fields.step ?? '',
+        status: fields.status,
+        duration_ms: fields.duration_ms,
+        url: fields.url ?? '',
+        input_summary: fields.input_summary ?? '',
+        output_summary: fields.output_summary ?? '',
+        detail: fields.detail ?? '',
+        baton_to: fields.baton_to ?? '',
+        meta: fields.meta ?? {},
+      });
+    } catch {
+      // Never let observability break the observed pipeline.
+    }
+  };
+
+  emitMachine({
+    event_type: 'scheduler',
+    tool: `job.${def.name}`,
+    status: 'start',
+    detail: def.description,
+  });
+
   // --- Candidate source resolution (D-01, Phase 5) ---
   // Order:
   //  (1) def.candidateSource declared + source exists in bag → source.list() (live path)
@@ -441,21 +483,51 @@ export async function runStubTick(
   const sourcePipeline = source?.pipeline ?? def.candidateSource ?? 'events';
   const mergePipeline: 'events' | 'jobs' | null =
     sourcePipeline === 'jobs' ? 'jobs' : sourcePipeline === 'events' ? 'events' : null;
+  const eventPipeline: Pipeline | '' =
+    sourcePipeline === 'events' ||
+    sourcePipeline === 'jobs' ||
+    sourcePipeline === 'loot' ||
+    sourcePipeline === 'local' ||
+    sourcePipeline === 'social'
+      ? sourcePipeline
+      : '';
 
   if (pb === undefined || hot === undefined || cold === undefined) {
     jobLog.warn({ job: def.name }, 'poll deps not provided; skipping candidate processing');
   } else {
     for (const cand of candidates) {
       const cLog = jobLog.child({ candidate: cand.url });
+      const traceId = hashUrl(normalizeUrl(cand.url));
       // 1. dedup gate first
       let verdict: string;
       try {
         verdict = await runPrecheckSafe(cand);
       } catch (err) {
         cLog.warn({ stage: 'precheck', error: String(err) }, 'precheck failed');
+        emitMachine({
+          trace_id: traceId,
+          pipeline: eventPipeline,
+          event_type: 'dedup',
+          tool: 'dedup.precheck',
+          status: 'error',
+          step: 'STEP_1-scout',
+          url: cand.url,
+          detail: String(err),
+        });
         continue;
       }
       cLog.info({ stage: 'precheck', verdict }, 'precheck result');
+      emitMachine({
+        trace_id: traceId,
+        pipeline: eventPipeline,
+        event_type: 'dedup',
+        tool: 'dedup.precheck',
+        status: verdict === 'hot-hit' || verdict === 'tombstoned' ? 'skip' : 'ok',
+        step: 'STEP_1-scout',
+        url: cand.url,
+        detail: verdict,
+        meta: { verdict },
+      });
       if (verdict === 'hot-hit' || verdict === 'tombstoned') {
         cLog.info({ stage: 'precheck', verdict }, 'skip: candidate gated by dedup');
         continue;
@@ -478,6 +550,32 @@ export async function runStubTick(
         );
 
         cLog.info({ stage: 'merge', verdict: mergeResult }, 'intake merge result');
+        let mergeMasterId = '';
+        let mergePossibleDupe = false;
+        if (mergeResult.merged) {
+          mergeMasterId = mergeResult.masterId;
+        } else if (mergeResult.possibleDupe) {
+          mergePossibleDupe = true;
+          mergeMasterId = mergeResult.masterId ?? '';
+        }
+        emitMachine({
+          trace_id: traceId,
+          pipeline: eventPipeline,
+          event_type: 'dedup',
+          tool: 'dedup.merge',
+          status: mergeResult.merged ? 'skip' : 'ok',
+          step: 'STEP_1-scout',
+          url: cand.url,
+          detail: mergeResult.merged
+            ? 'merged into master'
+            : mergePossibleDupe
+              ? 'possible duplicate flagged'
+              : 'distinct candidate',
+          meta: {
+            masterId: mergeMasterId,
+            possibleDupe: mergePossibleDupe,
+          },
+        });
 
         if (mergeResult.merged) {
           cLog.info(
@@ -522,6 +620,17 @@ export async function runStubTick(
           cLog.warn({ stage: 'scout', error: String(err) }, 'scout tombstone write failed');
         }
         cLog.info({ stage: 'scout', reason: pf.reason, detail: pf.detail }, 'skip: scout rejected');
+        emitMachine({
+          trace_id: traceId,
+          pipeline: eventPipeline,
+          event_type: 'scout',
+          tool: 'scout.prefilter',
+          status: 'skip',
+          step: 'STEP_1-scout',
+          url: cand.url,
+          detail: [pf.reason, pf.detail].filter(Boolean).join(': '),
+          meta: { reason: pf.reason ?? '', detail: pf.detail ?? '' },
+        });
         continue;
       }
 
@@ -551,12 +660,33 @@ export async function runStubTick(
             cLog.warn({ stage: 'listing-screen', error: String(err) }, 'listing-screen tombstone write failed');
           }
           cLog.info({ stage: 'listing-screen', reason: 'senior_role' }, 'skip: senior role rejected at listing stage');
+          emitMachine({
+            trace_id: traceId,
+            pipeline: eventPipeline,
+            event_type: 'scout',
+            tool: 'scout.listing_screen',
+            status: 'skip',
+            step: 'STEP_1-scout',
+            url: cand.url,
+            detail: 'senior_role',
+          });
           continue;
         }
         // flag-only: child-log warn with candidate URL + flag class names,
         // never values beyond title-stage text already logged, never a tombstone.
         if (screen?.flags?.length) {
           cLog.warn({ stage: 'listing-screen', flags: screen.flags }, 'listing flags raised (telemetry only)');
+          emitMachine({
+            trace_id: traceId,
+            pipeline: eventPipeline,
+            event_type: 'scout',
+            tool: 'scout.listing_screen',
+            status: 'ok',
+            step: 'STEP_1-scout',
+            url: cand.url,
+            detail: `flags: ${screen.flags.join(', ')}`,
+            meta: { flags: screen.flags },
+          });
         }
       }
 
@@ -572,8 +702,28 @@ export async function runStubTick(
         );
       } catch (err) {
         cLog.warn({ stage: 'scratchpad', error: String(err) }, 'scratchpad resume failed');
+        emitMachine({
+          trace_id: traceId,
+          pipeline: eventPipeline,
+          event_type: 'scratchpad',
+          tool: 'scratchpad.resume',
+          status: 'error',
+          step: 'STEP_1-scout',
+          url: cand.url,
+          detail: String(err),
+        });
         continue;
       }
+      emitMachine({
+        trace_id: traceId,
+        pipeline: eventPipeline,
+        event_type: 'scratchpad',
+        tool: 'scratchpad.resume',
+        status: resume.shouldFetch ? 'ok' : 'skip',
+        step: String(resume.row?.step_position ?? 'STEP_1'),
+        url: cand.url,
+        detail: resume.shouldFetch ? 'ready to fetch' : 'already advanced',
+      });
       if (!resume.shouldFetch) {
         cLog.info({ stage: 'scratchpad', step: resume.row?.step_position }, 'skip: already STEP_2');
         continue;
@@ -583,8 +733,42 @@ export async function runStubTick(
       // ATS-JSON sources: call source.detail() first, fall back to the shared
       // fetch facade when it returns null. Pass source.pipeline + cand.title
       // into resumeByUrl so the scratchpad row carries pipeline + title.
+      const fetchStartedAt = Date.now();
+      emitMachine({
+        trace_id: traceId,
+        pipeline: eventPipeline,
+        event_type: 'fetch',
+        tool: 'fetch.facade',
+        status: 'start',
+        step: 'STEP_1-fetch',
+        url: cand.url,
+        detail: 'fetching candidate detail',
+      });
       try {
         const sourceDef = bagSources?.[def.candidateSource ?? ''];
+        const fetchObserver = (event: {
+          tool: string;
+          phase: 'fetch' | 'sanitize';
+          status: 'start' | 'ok' | 'error';
+          duration_ms?: number;
+          detail?: string;
+          chars?: number;
+          capped?: boolean;
+        }): void => {
+          emitMachine({
+            trace_id: traceId,
+            pipeline: eventPipeline,
+            event_type: event.phase,
+            tool: event.tool,
+            status: event.status,
+            step: 'STEP_1-fetch',
+            url: cand.url,
+            duration_ms: event.duration_ms,
+            output_summary: event.chars !== undefined ? `${event.chars} chars` : '',
+            detail: event.detail ?? (event.capped ? 'capped' : ''),
+            meta: { phase: event.phase, capped: event.capped ?? false },
+          });
+        };
         let result: { markdown: string; capped: boolean; source: string };
         if (
           sourceDef?.fetch === 'ats-json' &&
@@ -598,17 +782,45 @@ export async function runStubTick(
               source: 'ats-json',
             };
           } else {
-            result = await fetchFn(cand.url);
+            result = await fetchFn(cand.url, { onEvent: fetchObserver });
           }
         } else {
-          result = await fetchFn(cand.url);
+          result = await fetchFn(cand.url, { onEvent: fetchObserver });
         }
-        await advanceToStep2(pb, resume.row.id, result.markdown);
+        await advanceToStep2(pb, resume.row.id, result.markdown, cand.url);
+        emitMachine({
+          trace_id: traceId,
+          pipeline: eventPipeline,
+          event_type: 'fetch',
+          tool: `fetch.${result.source}`,
+          status: 'ok',
+          step: 'STEP_1-fetch',
+          url: cand.url,
+          duration_ms: Date.now() - fetchStartedAt,
+          output_summary: `${result.markdown.length} chars of markdown`,
+          detail: `${result.source}${result.capped ? ' (capped)' : ''}`,
+          meta: {
+            source: result.source,
+            capped: result.capped,
+            markdownChars: result.markdown.length,
+          },
+        });
         cLog.info(
           { stage: 'fetch', source: result.source, capped: result.capped },
           'candidate advanced to STEP_2',
         );
       } catch (err) {
+        emitMachine({
+          trace_id: traceId,
+          pipeline: eventPipeline,
+          event_type: 'fetch',
+          tool: 'fetch.facade',
+          status: 'error',
+          step: 'STEP_1-fetch',
+          url: cand.url,
+          duration_ms: Date.now() - fetchStartedAt,
+          detail: String(err),
+        });
         try {
           const { attempts, tombstoned } = await recordFailure(pb, resume.row.id, String(err));
           cLog.warn({ stage: 'fetch', attempts, tombstoned, error: String(err) }, 'fetch failed');
@@ -625,6 +837,14 @@ export async function runStubTick(
   const durationMs = Date.now() - startedAt;
   const outcome: TickOutcome = { job: def.name, durationMs };
   jobLog.info({ durationMs }, 'tick done');
+  emitMachine({
+    event_type: 'scheduler',
+    tool: `job.${def.name}`,
+    status: 'ok',
+    duration_ms: durationMs,
+    detail: `${candidates.length} candidate${candidates.length === 1 ? '' : 's'} scanned`,
+    meta: { candidates: candidates.length, durationMs },
+  });
   opts.sink?.record({ job: def.name, phase: 'done', durationMs, at: new Date().toISOString() });
   if (opts.heartbeatDir !== undefined) {
     writeHeartbeat(opts.heartbeatDir, def.name, outcome, log);
@@ -680,13 +900,39 @@ export async function runGatewayTick(
   jobLog.info('tick start');
   opts.sink?.record({ job: def.name, phase: 'start', at: new Date(startedAt).toISOString() });
 
+  const emitGatewayMachine = (
+    status: MachineEventInput['status'],
+    detail: string,
+    durationMs?: number,
+  ): void => {
+    if (opts.pb === undefined) return;
+    try {
+      recordMachineEvent(opts.pb, {
+        trace_id: `job:${def.name}`,
+        agent: `scheduler:${def.name}`,
+        pipeline: '',
+        event_type: 'scheduler',
+        tool: `job.${def.name}`,
+        status,
+        duration_ms: durationMs,
+        detail,
+      });
+    } catch {
+      // Best-effort.
+    }
+  };
+
+  emitGatewayMachine('start', def.description);
+
   try {
     await opts.tickHandler?.(def, jobLog);
   } catch (err) {
     jobLog.warn({ job: def.name, error: String(err) }, 'gateway tick handler threw');
+    emitGatewayMachine('error', String(err), Date.now() - startedAt);
   }
 
   const durationMs = Date.now() - startedAt;
   jobLog.info({ durationMs }, 'tick done');
+  emitGatewayMachine('ok', 'tick complete', durationMs);
   opts.sink?.record({ job: def.name, phase: 'done', durationMs, at: new Date().toISOString() });
 }

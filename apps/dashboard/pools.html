@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Pool Health · Zod</title>
+  <link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body data-page="pools" data-mode="poll">
+  <div class="app">
+    <aside class="sidebar" id="sidebar"></aside>
+    <div class="main">
+      <header class="topbar" id="topbar"></header>
+      <main class="page">
+        <div class="stats-grid" id="pool-stats"></div>
+        <section class="card panel">
+          <div class="card-head">
+            <div>
+              <h2 class="card-title">Provider × model buckets</h2>
+              <p class="card-sub">State, cooldown countdown, and today’s free-tier usage.</p>
+            </div>
+            <span class="pill" id="pool-count">0 buckets</span>
+          </div>
+          <div class="pools-grid" id="pools"></div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <script src="/assets/icons.js"></script>
+  <script src="/assets/shell.js"></script>
+  <script src="/assets/api.js"></script>
+  <script>
+    (function () {
+      'use strict';
+      const UI = window.ZodUI;
+      const Api = window.ZodApi;
+      const icon = UI.icon;
+
+      const statsEl = document.getElementById('pool-stats');
+      const poolsEl = document.getElementById('pools');
+      const countEl = document.getElementById('pool-count');
+
+      let pools = [];
+      let hasData = false;
+
+      const TINTS = {
+        groq: ['#efeaff', '#5b44c9'],
+        cerebras: ['#fff0e6', '#d1783a'],
+        'github-models': ['#eaf2ff', '#3f78c4'],
+        sambanova: ['#e8f8f1', '#2d9770'],
+        mistral: ['#fdeaf2', '#c4557f'],
+        openrouter: ['#fff4e2', '#b87818'],
+        local: ['#f2eff8', '#8c86a3'],
+      };
+
+      function tintFor(provider) {
+        return TINTS[String(provider || '').toLowerCase()] || ['#efeaff', '#5b44c9'];
+      }
+
+      function renderStats() {
+        const active = pools.filter((pool) => pool.state === 'ACTIVE').length;
+        const cooling = pools.filter((pool) => pool.state === '60s-COOLDOWN').length;
+        const capped = pools.filter((pool) => pool.state === 'DAILY-CAP').length;
+        const calls = pools.reduce((sum, pool) => sum + Number(pool.callsToday || 0), 0);
+        const errors = pools.reduce((sum, pool) => sum + Number(pool.errorsToday || 0), 0);
+        const cards = [
+          { tint: 'tint-lav', icon: 'pools', value: UI.fmtNumber(pools.length), label: 'Buckets', sub: 'provider × model', note: 'free tier' },
+          { tint: 'tint-sky', icon: 'activity', value: UI.fmtNumber(active), label: 'Active', sub: 'reported active now', note: 'live' },
+          { tint: 'tint-amber', icon: 'clock', value: UI.fmtNumber(cooling), label: 'Cooling', sub: '60-second 429 cooldown', note: '429' },
+          { tint: 'tint-pink', icon: 'alert', value: UI.fmtNumber(errors), label: 'Errors today', sub: 'failed attempts', note: 'today' },
+          { tint: 'tint-mint', icon: 'zap', value: UI.fmtNumber(calls), label: 'Calls today', sub: 'all reported attempts', note: '24h' },
+        ];
+        statsEl.innerHTML = cards
+          .map(
+            (card) =>
+              '<article class="stat-card ' +
+              card.tint +
+              '">' +
+              '<div class="stat-top"><span class="stat-icon">' +
+              icon(card.icon, 17) +
+              '</span><span class="stat-note">' +
+              card.note +
+              '</span></div>' +
+              '<div class="stat-value">' +
+              card.value +
+              '</div>' +
+              '<div class="stat-label">' +
+              card.label +
+              '</div>' +
+              '<div class="stat-sub">' +
+              card.sub +
+              '</div>' +
+              '</article>',
+          )
+          .join('');
+        if (capped > 0) {
+          statsEl.insertAdjacentHTML(
+            'beforeend',
+            '<div class="hint" style="grid-column:1/-1">' +
+              capped +
+              ' bucket' +
+              (capped === 1 ? '' : 's') +
+              ' hit the daily cap.</div>',
+          );
+        }
+      }
+
+      function cooldownMarkup(pool) {
+        if (pool.state !== '60s-COOLDOWN' || !pool.cooldownUntil) return '';
+        return (
+          '<span class="cooldown" data-cooldown="' +
+          UI.esc(pool.cooldownUntil) +
+          '">cooldown</span>'
+        );
+      }
+
+      function renderPools() {
+        countEl.textContent = pools.length + (pools.length === 1 ? ' bucket' : ' buckets');
+        if (!pools.length) {
+          poolsEl.innerHTML = UI.emptyState(
+            'No model buckets yet',
+            'Bucket states appear after the first audit attempt.',
+            'pools',
+          );
+          return;
+        }
+        poolsEl.innerHTML = pools
+          .map((pool) => {
+            const tint = tintFor(pool.provider);
+            return (
+              '<article class="pool-card">' +
+              '<div class="pool-head">' +
+              '<span class="provider-avatar" style="--provider-tint:' +
+              tint[0] +
+              ';--provider-color:' +
+              tint[1] +
+              '">' +
+              UI.esc((pool.provider || '?').slice(0, 1)) +
+              '</span>' +
+              '<div class="pool-name"><div class="pool-model" title="' +
+              UI.esc(pool.model) +
+              '">' +
+              UI.esc(pool.model) +
+              '</div><div class="pool-provider">' +
+              UI.esc(pool.provider) +
+              '</div></div>' +
+              '<span class="pill ' +
+              UI.pillClass(pool.state) +
+              '">' +
+              UI.esc(UI.statusLabel(pool.state)) +
+              '</span>' +
+              '</div>' +
+              '<div class="pool-metrics">' +
+              '<div class="pool-metric"><strong>' +
+              UI.fmtNumber(pool.callsToday) +
+              '</strong><span>calls</span></div>' +
+              '<div class="pool-metric"><strong>' +
+              UI.fmtNumber(pool.errorsToday) +
+              '</strong><span>errors</span></div>' +
+              '<div class="pool-metric"><strong>' +
+              UI.fmtNumber(pool.cooldownsToday) +
+              '</strong><span>cooldowns</span></div>' +
+              '</div>' +
+              '<div class="pool-foot"><span>' +
+              (pool.lastCallAt ? 'last call ' + UI.timeAgo(pool.lastCallAt) : 'no calls yet') +
+              '</span>' +
+              (cooldownMarkup(pool) ||
+                '<span class="mono">' +
+                  UI.esc(pool.lastTool || 'idle') +
+                  (pool.lastDurationMs !== null && pool.lastDurationMs !== undefined
+                    ? ' · ' + UI.fmtDuration(pool.lastDurationMs)
+                    : '') +
+                  '</span>') +
+              '</div>' +
+              '</article>'
+            );
+          })
+          .join('');
+        updateCountdowns();
+      }
+
+      function updateCountdowns() {
+        document.querySelectorAll('[data-cooldown]').forEach(function (node) {
+          const until = Date.parse(node.getAttribute('data-cooldown'));
+          if (!Number.isFinite(until)) return;
+          const left = until - Date.now();
+          if (left <= 0) {
+            node.textContent = 'ready';
+            node.classList.add('ready');
+          } else {
+            node.textContent = 'cooldown ' + Math.ceil(left / 1000) + 's';
+            node.classList.remove('ready');
+          }
+        });
+      }
+
+      async function refresh() {
+        try {
+          const data = await Api.pools();
+          pools = Array.isArray(data.pools) ? data.pools : [];
+          hasData = true;
+          renderStats();
+          renderPools();
+        } catch (error) {
+          if (!hasData) {
+            statsEl.innerHTML = UI.errorState('Pool health unavailable', error.message || String(error));
+            poolsEl.innerHTML = '';
+          }
+        }
+      }
+
+      statsEl.innerHTML = UI.loadingState('Reading bucket state…');
+      poolsEl.innerHTML = UI.loadingState('Reading bucket state…');
+      UI.poll(refresh, 10_000);
+      setInterval(updateCountdowns, 1000);
+    })();
+  </script>
+</body>
+</html>

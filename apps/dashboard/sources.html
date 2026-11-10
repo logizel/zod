@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Sources · Zod</title>
+  <link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body data-page="sources" data-mode="poll">
+  <div class="app">
+    <aside class="sidebar" id="sidebar"></aside>
+    <div class="main">
+      <header class="topbar" id="topbar"></header>
+      <main class="page">
+        <div class="stats-grid" id="source-stats"></div>
+
+        <div class="toolbar">
+          <div class="filters">
+            <div class="field">
+              <label for="f-kind">Kind</label>
+              <select class="select" id="f-kind">
+                <option value="">All kinds</option>
+                <option value="portal">portal</option>
+                <option value="jobs">jobs</option>
+                <option value="loot">loot</option>
+                <option value="local">local</option>
+                <option value="social">social</option>
+                <option value="other">other</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="f-health">Health</label>
+              <select class="select" id="f-health">
+                <option value="">All states</option>
+                <option value="ok">ok</option>
+                <option value="error">error</option>
+                <option value="idle">idle</option>
+              </select>
+            </div>
+          </div>
+          <div class="inline-actions">
+            <span class="hint" id="source-updated">Waiting for adapter health…</span>
+            <span class="hint">Refreshes every 30 s</span>
+            <button class="btn subtle" id="source-refresh" type="button"></button>
+          </div>
+        </div>
+
+        <section class="card panel flush">
+          <div class="table-toolbar">
+            <div>
+              <h2 class="table-title">Adapters</h2>
+              <p class="table-sub" id="source-sub">Last poll, candidates found, and the last error per source.</p>
+            </div>
+            <span class="pill" id="source-count">0 sources</span>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Source</th>
+                  <th>Kind</th>
+                  <th>Last poll</th>
+                  <th>Status</th>
+                  <th class="num">Duration</th>
+                  <th class="num">Candidates</th>
+                  <th class="num">Runs / failures today</th>
+                  <th>Last error</th>
+                </tr>
+              </thead>
+              <tbody id="source-rows"></tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <script src="/assets/icons.js"></script>
+  <script src="/assets/shell.js"></script>
+  <script src="/assets/api.js"></script>
+  <script>
+    (function () {
+      'use strict';
+      const UI = window.ZodUI;
+      const Api = window.ZodApi;
+      const icon = UI.icon;
+
+      const statsEl = document.getElementById('source-stats');
+      const rowsEl = document.getElementById('source-rows');
+      const subEl = document.getElementById('source-sub');
+      const countEl = document.getElementById('source-count');
+      const updatedEl = document.getElementById('source-updated');
+      const refreshBtn = document.getElementById('source-refresh');
+      const kindSelect = document.getElementById('f-kind');
+      const healthSelect = document.getElementById('f-health');
+
+      const KIND_ICONS = {
+        portal: 'sources',
+        jobs: 'boards',
+        loot: 'dollar',
+        local: 'route',
+        social: 'activity',
+        other: 'server',
+      };
+
+      let sources = [];
+      let hasData = false;
+
+      function healthOf(source) {
+        if (!source.lastStatus) return 'idle';
+        return source.lastStatus === 'ok' ? 'ok' : 'error';
+      }
+
+      function visibleSources() {
+        const kind = kindSelect.value;
+        const health = healthSelect.value;
+        return sources.filter((source) => {
+          if (kind && source.kind !== kind) return false;
+          if (health && healthOf(source) !== health) return false;
+          return true;
+        });
+      }
+
+      function renderStats() {
+        if (!hasData) {
+          statsEl.innerHTML = UI.loadingState('Reading adapter health…');
+          return;
+        }
+        const healthy = sources.filter((source) => healthOf(source) === 'ok').length;
+        const failing = sources.filter((source) => healthOf(source) === 'error').length;
+        const idle = sources.filter((source) => healthOf(source) === 'idle').length;
+        const runs = sources.reduce((sum, source) => sum + Number(source.runsToday || 0), 0);
+        const failures = sources.reduce(
+          (sum, source) => sum + Number(source.failuresToday || 0),
+          0,
+        );
+        const cards = [
+          {
+            tint: 'tint-lav',
+            icon: 'sources',
+            value: UI.fmtNumber(sources.length),
+            label: 'Adapters',
+            sub: 'known sources and discovered jobs',
+            note: 'all',
+          },
+          {
+            tint: 'tint-mint',
+            icon: 'check',
+            value: UI.fmtNumber(healthy),
+            label: 'Healthy',
+            sub: 'last poll succeeded',
+            note: 'ok',
+          },
+          {
+            tint: 'tint-pink',
+            icon: 'alert',
+            value: UI.fmtNumber(failing),
+            label: 'Failing',
+            sub: 'last poll returned an error',
+            note: 'error',
+          },
+          {
+            tint: 'tint-amber',
+            icon: 'clock',
+            value: UI.fmtNumber(idle),
+            label: 'Idle',
+            sub: 'no poll in the 24h ring',
+            note: 'idle',
+          },
+          {
+            tint: 'tint-sky',
+            icon: 'refresh',
+            value: UI.fmtNumber(runs),
+            label: 'Runs today',
+            sub: UI.fmtNumber(failures) + ' failure' + (failures === 1 ? '' : 's'),
+            note: 'today',
+          },
+        ];
+        statsEl.innerHTML = cards
+          .map(
+            (card) =>
+              '<article class="stat-card ' +
+              card.tint +
+              '">' +
+              '<div class="stat-top"><span class="stat-icon">' +
+              icon(card.icon, 17) +
+              '</span><span class="stat-note">' +
+              card.note +
+              '</span></div>' +
+              '<div class="stat-value">' +
+              card.value +
+              '</div>' +
+              '<div class="stat-label">' +
+              card.label +
+              '</div>' +
+              '<div class="stat-sub">' +
+              card.sub +
+              '</div>' +
+              '</article>',
+          )
+          .join('');
+      }
+
+      function renderRows() {
+        const visible = visibleSources();
+        countEl.textContent = visible.length + (visible.length === 1 ? ' source' : ' sources');
+        if (!hasData) {
+          rowsEl.innerHTML = '<tr><td colspan="8" class="table-empty">Reading adapter health…</td></tr>';
+          return;
+        }
+        if (!visible.length) {
+          rowsEl.innerHTML =
+            '<tr><td colspan="8" class="table-empty">No adapters match this filter.</td></tr>';
+          return;
+        }
+        subEl.textContent =
+          visible.length +
+          ' of ' +
+          sources.length +
+          ' adapters · latest scheduler tick per source';
+        rowsEl.innerHTML = visible
+          .map((source) => {
+            const health = healthOf(source);
+            const kind = String(source.kind || 'other');
+            const candidates =
+              source.candidates === null || source.candidates === undefined
+                ? '—'
+                : UI.fmtNumber(source.candidates);
+            const error = source.error
+              ? '<span class="ev-detail" title="' +
+                UI.esc(source.error) +
+                '" style="color:var(--rose);max-width:260px;display:inline-block">' +
+                UI.esc(source.error) +
+                '</span>'
+              : '<span class="muted">—</span>';
+            return (
+              '<tr>' +
+              '<td><div class="source-name"><span class="source-icon">' +
+              icon(KIND_ICONS[kind] || 'server', 15) +
+              '</span><div><div class="row-title">' +
+              UI.esc(source.label || source.name) +
+              '</div><div class="row-sub mono">' +
+              UI.esc(source.name) +
+              '</div></div></div></td>' +
+              '<td><span class="kind-tag kind-' +
+              UI.esc(kind) +
+              '">' +
+              UI.esc(kind) +
+              '</span></td>' +
+              '<td>' +
+              (source.lastAt
+                ? '<span title="' + UI.esc(UI.fmtDateTime(source.lastAt)) + '">' +
+                  UI.esc(UI.timeAgo(source.lastAt)) +
+                  '</span>'
+                : '<span class="muted">never</span>') +
+              '</td>' +
+              '<td><span class="pill ' +
+              (health === 'ok' ? 'ok' : health === 'error' ? 'error' : 'neutral') +
+              '">' +
+              (health === 'ok' ? 'ok' : health === 'error' ? 'error' : 'idle') +
+              '</span></td>' +
+              '<td class="num">' +
+              (source.durationMs === null || source.durationMs === undefined
+                ? '<span class="muted">—</span>'
+                : UI.fmtDuration(source.durationMs)) +
+              '</td>' +
+              '<td class="num">' +
+              candidates +
+              '</td>' +
+              '<td class="num">' +
+              UI.fmtNumber(source.runsToday || 0) +
+              ' / ' +
+              '<span style="color:' +
+              (source.failuresToday ? 'var(--rose)' : 'inherit') +
+              '">' +
+              UI.fmtNumber(source.failuresToday || 0) +
+              '</span></td>' +
+              '<td>' +
+              error +
+              '</td>' +
+              '</tr>'
+            );
+          })
+          .join('');
+      }
+
+      async function refresh() {
+        try {
+          const data = await Api.sources();
+          sources = Array.isArray(data.sources) ? data.sources : [];
+          hasData = true;
+          renderStats();
+          renderRows();
+          updatedEl.textContent =
+            'Updated ' + UI.fmtTime(new Date(data.ts || Date.now()).toISOString());
+        } catch (error) {
+          if (!hasData) {
+            statsEl.innerHTML = UI.errorState(
+              'Source health unavailable',
+              error.message || String(error),
+            );
+            rowsEl.innerHTML =
+              '<tr><td colspan="8" class="table-empty">Could not load adapters: ' +
+              UI.esc(error.message || String(error)) +
+              '</td></tr>';
+          }
+          updatedEl.textContent = 'Last refresh failed';
+        }
+      }
+
+      refreshBtn.innerHTML = icon('refresh', 14) + 'Refresh';
+      refreshBtn.addEventListener('click', refresh);
+      kindSelect.addEventListener('change', renderRows);
+      healthSelect.addEventListener('change', renderRows);
+
+      statsEl.innerHTML = UI.loadingState('Reading adapter health…');
+      rowsEl.innerHTML = '<tr><td colspan="8" class="table-empty">Reading adapter health…</td></tr>';
+      UI.poll(refresh, 30_000);
+    })();
+  </script>
+</body>
+</html>

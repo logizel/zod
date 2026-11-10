@@ -9,6 +9,7 @@
 // (e.g. the kelektiv/* git-shorthand family, which lacks this API).
 
 import cron, { type ScheduledTask, type TaskFn } from 'node-cron';
+import { recordMachineEvent } from '@zod/db-hot/machine-events';
 import {
   SCHEDULER_TIMEZONE,
   STUB_JOBS,
@@ -72,6 +73,24 @@ export interface RegisterOptions
 }
 
 const GUARD_PREFIX = '[scheduler-guard]';
+
+/** Emit a machine event when node-cron skips an overlapping tick (best-effort). */
+function recordOverlapSkip(pb: unknown, job: string): void {
+  if (!pb) return;
+  try {
+    recordMachineEvent(pb as never, {
+      trace_id: `job:${job}`,
+      agent: `scheduler:${job}`,
+      pipeline: '',
+      event_type: 'scheduler',
+      tool: `job.${job}`,
+      status: 'skip',
+      detail: 'previous run pending',
+    });
+  } catch {
+    // Observability must never interfere with scheduling.
+  }
+}
 
 /**
  * Boot assertion: the installed scheduler build must expose the overlap-guard
@@ -171,6 +190,7 @@ export function registerStubJobs(
     task.on('execution:overlap', () => {
       log.child({ job: def.name }).warn('tick skipped: previous run pending');
       opts.sink?.record({ job: def.name, phase: 'skip', at: new Date().toISOString() });
+      recordOverlapSkip(opts.pb, def.name);
     });
     void task.start();
     return task;
@@ -200,7 +220,7 @@ function registerGatewayJobSet(
   const tasks = defs.map((def) => {
     const task = mod.schedule(
       def.expression,
-      () => runGatewayTick(def, log, { sink: opts.sink, heartbeatDir, tickHandler: opts.tickHandler }),
+      () => runGatewayTick(def, log, { sink: opts.sink, heartbeatDir, tickHandler: opts.tickHandler, pb: opts.pb }),
       {
         name: def.name,
         timezone: SCHEDULER_TIMEZONE,
@@ -211,6 +231,7 @@ function registerGatewayJobSet(
     task.on('execution:overlap', () => {
       log.child({ job: def.name }).warn('tick skipped: previous run pending');
       opts.sink?.record({ job: def.name, phase: 'skip', at: new Date().toISOString() });
+      recordOverlapSkip(opts.pb, def.name);
     });
     void task.start();
     return task;
@@ -293,6 +314,7 @@ export function registerPollJobs(
     task.on('execution:overlap', () => {
       log.child({ job: def.name }).warn('tick skipped: previous run pending');
       opts.sink?.record({ job: def.name, phase: 'skip', at: new Date().toISOString() });
+      recordOverlapSkip(opts.pb, def.name);
     });
     void task.start();
     return task;
@@ -321,7 +343,7 @@ export function registerAuditDrain(
   const tasks = AUDIT_JOBS.map((def) => {
     const task = mod.schedule(
       def.expression,
-      () => runGatewayTick(def, log, { sink: opts.sink, heartbeatDir, tickHandler: opts.tickHandler }),
+      () => runGatewayTick(def, log, { sink: opts.sink, heartbeatDir, tickHandler: opts.tickHandler, pb: opts.pb }),
       {
         name: def.name,
         timezone: SCHEDULER_TIMEZONE,
@@ -332,6 +354,7 @@ export function registerAuditDrain(
     task.on('execution:overlap', () => {
       log.child({ job: def.name }).warn('tick skipped: previous run pending');
       opts.sink?.record({ job: def.name, phase: 'skip', at: new Date().toISOString() });
+      recordOverlapSkip(opts.pb, def.name);
     });
     void task.start();
     return task;
@@ -364,7 +387,7 @@ export function registerGcJob(
   const tasks = GC_JOBS.map((def) => {
     const task = mod.schedule(
       def.expression,
-      () => runGatewayTick(def, log, { sink: opts.sink, heartbeatDir, tickHandler: opts.tickHandler }),
+      () => runGatewayTick(def, log, { sink: opts.sink, heartbeatDir, tickHandler: opts.tickHandler, pb: opts.pb }),
       {
         name: def.name,
         timezone: SCHEDULER_TIMEZONE,
@@ -375,6 +398,7 @@ export function registerGcJob(
     task.on('execution:overlap', () => {
       log.child({ job: def.name }).warn('tick skipped: previous run pending');
       opts.sink?.record({ job: def.name, phase: 'skip', at: new Date().toISOString() });
+      recordOverlapSkip(opts.pb, def.name);
     });
     void task.start();
     return task;

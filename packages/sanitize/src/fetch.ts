@@ -10,6 +10,19 @@ interface FacadeResult {
 
 type BrowserFetcher = (url: string) => Promise<string>;
 
+/** Fine-grained fetch/sanitize signal for the machine-glass feed. */
+export interface SanitizeEvent {
+  tool: 'fetch.jina' | 'fetch.browser' | 'sanitize.jina' | 'sanitize.browser';
+  phase: 'fetch' | 'sanitize';
+  status: 'start' | 'ok' | 'error';
+  duration_ms?: number;
+  detail?: string;
+  chars?: number;
+  capped?: boolean;
+}
+
+export type SanitizeObserver = (event: SanitizeEvent) => void;
+
 let jinaCoolingUntil = 0;
 
 function isPrivateHost(host: string): boolean {
@@ -58,30 +71,128 @@ function resolveBrowserFetcher(opts?: unknown): BrowserFetcher {
   return defaultFetchViaBrowser;
 }
 
+function resolveObserver(opts?: unknown): SanitizeObserver | undefined {
+  if (typeof opts === 'function') return undefined; // legacy browser-fetcher form
+  const o = opts as { onEvent?: SanitizeObserver } | undefined;
+  return typeof o?.onEvent === 'function' ? o.onEvent : undefined;
+}
+
 export async function fetch(url: string, opts?: unknown): Promise<FacadeResult> {
   const u = validateUrl(url);
   const normalized = u.toString();
   const browserFetcher = resolveBrowserFetcher(opts);
+  const observer = resolveObserver(opts);
+  const emit = (event: SanitizeEvent): void => {
+    try {
+      observer?.(event);
+    } catch {
+      // Observability must never break fetching.
+    }
+  };
+  const runSanitize = (
+    tool: 'sanitize.jina' | 'sanitize.browser',
+    sanitize: () => { markdown: string; capped: boolean },
+  ): { markdown: string; capped: boolean } => {
+    emit({ tool, phase: 'sanitize', status: 'start' });
+    const startedAt = Date.now();
+    try {
+      const result = sanitize();
+      emit({
+        tool,
+        phase: 'sanitize',
+        status: 'ok',
+        duration_ms: Date.now() - startedAt,
+        chars: result.markdown.length,
+        capped: result.capped,
+      });
+      return result;
+    } catch (err) {
+      emit({
+        tool,
+        phase: 'sanitize',
+        status: 'error',
+        duration_ms: Date.now() - startedAt,
+        detail: String(err),
+      });
+      throw err;
+    }
+  };
 
   // Throttle cooling: park Jina path.
   if (Date.now() < jinaCoolingUntil) {
-    const html = await browserFetcher(normalized);
-    const sanitized = sanitizeHtml(html);
-    return { markdown: sanitized.markdown, capped: sanitized.capped, source: 'browser' };
+    emit({ tool: 'fetch.browser', phase: 'fetch', status: 'start', detail: 'jina cooling' });
+    const browserStarted = Date.now();
+    try {
+      const html = await browserFetcher(normalized);
+      emit({
+        tool: 'fetch.browser',
+        phase: 'fetch',
+        status: 'ok',
+        duration_ms: Date.now() - browserStarted,
+        detail: 'jina cooling fallback',
+      });
+      const sanitized = runSanitize('sanitize.browser', () => sanitizeHtml(html));
+      return { markdown: sanitized.markdown, capped: sanitized.capped, source: 'browser' };
+    } catch (err) {
+      emit({
+        tool: 'fetch.browser',
+        phase: 'fetch',
+        status: 'error',
+        duration_ms: Date.now() - browserStarted,
+        detail: String(err),
+      });
+      throw err;
+    }
   }
 
+  emit({ tool: 'fetch.jina', phase: 'fetch', status: 'start' });
+  const jinaStarted = Date.now();
   try {
     const body = await fetchViaJina(normalized);
-    const sanitized = sanitizeMarkdown(body);
+    emit({
+      tool: 'fetch.jina',
+      phase: 'fetch',
+      status: 'ok',
+      duration_ms: Date.now() - jinaStarted,
+      chars: body.length,
+    });
+    const sanitized = runSanitize('sanitize.jina', () => sanitizeMarkdown(body));
     return { markdown: sanitized.markdown, capped: sanitized.capped, source: 'jina' };
   } catch (err) {
     if (err instanceof JinaFetchError && err.throttle) {
       jinaCoolingUntil = Date.now() + 60_000;
     }
+    emit({
+      tool: 'fetch.jina',
+      phase: 'fetch',
+      status: 'error',
+      duration_ms: Date.now() - jinaStarted,
+      detail: String(err),
+    });
     // Browser fallback.
-    const html = await browserFetcher(normalized);
-    const sanitized = sanitizeHtml(html);
-    return { markdown: sanitized.markdown, capped: sanitized.capped, source: 'browser' };
+    emit({ tool: 'fetch.browser', phase: 'fetch', status: 'start', detail: 'jina failed' });
+    const browserStarted = Date.now();
+    try {
+      const html = await browserFetcher(normalized);
+      emit({
+        tool: 'fetch.browser',
+        phase: 'fetch',
+        status: 'ok',
+        duration_ms: Date.now() - browserStarted,
+        detail: 'jina fallback',
+      });
+      const sanitized = runSanitize('sanitize.browser', () => sanitizeHtml(html));
+      return { markdown: sanitized.markdown, capped: sanitized.capped, source: 'browser' };
+    } catch (browserErr) {
+      emit({
+        tool: 'fetch.browser',
+        phase: 'fetch',
+        status: 'error',
+        duration_ms: Date.now() - browserStarted,
+        detail: String(browserErr),
+      });
+      throw browserErr;
+    }
   }
 }
 

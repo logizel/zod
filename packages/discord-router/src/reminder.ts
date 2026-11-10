@@ -15,6 +15,7 @@ import { createLogger, type Logger } from '@zod/logger';
 import { createPbClient } from '@zod/db-hot';
 import { getClient } from './gateway.js';
 import { resolveChannel } from './router-service.js';
+import { recordMachineEvent } from '@zod/db-hot/machine-events';
 
 export interface ReminderTickResult {
   scanned: number;
@@ -87,6 +88,30 @@ export function createReminderTick(deps: ReminderDeps): (logPrefix?: string) => 
       const items = page.items ?? [];
       result.scanned = items.length;
 
+      const emitReminder = (
+        opp: any,
+        status: 'ok' | 'error',
+        detail: string,
+        extra: Record<string, unknown> = {},
+      ): void => {
+        try {
+          recordMachineEvent(pb, {
+            trace_id: opp.url_hash ?? '',
+            agent: 'discord:reminder',
+            pipeline: opp.pipeline ?? '',
+            event_type: 'discord',
+            tool: 'discord.reminder',
+            step: 'STEP_4-delivery',
+            status,
+            url: opp.links?.official ?? '',
+            detail,
+            meta: { opportunityId: opp.id, ...extra },
+          });
+        } catch {
+          // Observability must never break reminders.
+        }
+      };
+
       for (const opp of items) {
         try {
           const reminders = opp.reminders ?? [];
@@ -103,6 +128,9 @@ export function createReminderTick(deps: ReminderDeps): (logPrefix?: string) => 
               const channel = await resolveChannel(env, client, reminder.channel);
               if (!channel) {
                 pbLog.warn({ channel: reminder.channel, oppId: opp.id }, 'reminder channel not found; skipping');
+                emitReminder(opp, 'error', `channel not found: ${reminder.channel}`, {
+                  reminderAt: reminder.at,
+                });
                 result.skipped++;
                 continue;
               }
@@ -121,10 +149,17 @@ export function createReminderTick(deps: ReminderDeps): (logPrefix?: string) => 
               });
 
               result.fired++;
+              emitReminder(opp, 'ok', `reminder fired for ${reminder.at}`, {
+                reminderAt: reminder.at,
+                channel: reminder.channel,
+              });
               pbLog.info({ oppId: opp.id, reminderAt: reminder.at }, 'reminder fired and marked sent');
             } catch (err) {
               // Per-reminder error isolation — never abort the batch
               pbLog.warn({ err: String(err), oppId: opp.id, reminderAt: reminder.at }, 'reminder fire failed');
+              emitReminder(opp, 'error', `reminder fire failed: ${String(err)}`, {
+                reminderAt: reminder.at,
+              });
               result.errors++;
             }
           }

@@ -18,19 +18,36 @@ LOCAL=0
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 SHELL="$REPO_DIR/apps/dashboard/index.html"
+DASH_APP_DIR="$REPO_DIR/apps/dashboard"
 CONFIG="$REPO_DIR/infra/cloudflared/config.yml"
 RUNBOOK="$REPO_DIR/infra/oracle/runbook.md"
 
 if [ "$LOCAL" -eq 1 ]; then
   checks=0
+  # 0. The dashboard app is a multi-page shell: every page plus the shared
+  #    assets are in scope for the "no attacker-controlled primitive" lint.
+  mapfile -t SHELL_FILES < <(find "$DASH_APP_DIR" -maxdepth 2 -type f \( -name '*.html' -o -name '*.js' \) | sort)
+  [ "${#SHELL_FILES[@]}" -gt 0 ] \
+    || { echo "EDGE-REJECT FAIL: dashboard app files not found" >&2; exit 1; }
   # 1. Phase 7 shell is a realtime UI (SSE + boards fetch), but every data
-  #    endpoint is a fixed data-* attribute — no attacker-controlled URL or
-  #    eval primitive can redirect the edge wall.
-  if grep -Eqi 'location\.(search|hash)|document\.location|window\.name|postMessage|eval\(|new Function' "$SHELL"; then
+  #    endpoint is a fixed literal — no attacker-controlled URL or eval
+  #    primitive can redirect the edge wall.
+  #    Blocked: eval / dynamic function construction, cross-window messaging,
+  #    named windows, and any navigation the page can be steered into.
+  if grep -Eqi 'eval\(|new Function|postMessage|window\.name|window\.open\(|location\.(assign|replace)|document\.write' "${SHELL_FILES[@]}"; then
     echo "EDGE-REJECT FAIL: shell exposes a user-controlled URL/eval primitive" >&2
     exit 1
   fi
-  grep -q 'data-stream-url' "$SHELL" && grep -q 'data-boards-url' "$SHELL" \
+  # A query-string read is allowed ONLY as a read-only, escaped API filter
+  # (e.g. the Glass trace deep link). It must never reach a URL, an
+  # href/src, or a navigation.
+  if grep -Eqi '(href|src|fetch\(|open\()[^;]*location\.(search|hash)' "${SHELL_FILES[@]}"; then
+    echo "EDGE-REJECT FAIL: shell routes a location-derived value into a URL" >&2
+    exit 1
+  fi
+  # The realtime endpoints are fixed literals in the shared assets (never
+  # attacker-supplied): /api/stream for SSE, /api/boards for the board fetch.
+  grep -rq "'/api/stream'" "${SHELL_FILES[@]}" && grep -rq "'/api/boards'" "${SHELL_FILES[@]}" \
     || { echo "EDGE-REJECT FAIL: shell realtime endpoints are not fixed data-* attributes" >&2; exit 1; }
   checks=$((checks + 1))
   # 2. App-layer defense-in-depth: the dashboard server rejects unauth stream

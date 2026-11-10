@@ -117,12 +117,16 @@ describe('parseLootVerdict', () => {
     expect(parseLootVerdict('POOL_SATURATED')).toBeNull();
   });
 
-  it('empty claim_steps → null (claim steps required)', () => {
+  it('empty claim_steps → accepted as an empty list (schema leniency, commit 2fbb4f2)', () => {
+    // The loot schema is deliberately lenient: a model that omits claim steps
+    // still yields a parsed verdict, and the deterministic loot gates decide
+    // admission. See commit 2fbb4f2 ("loot schema leniency").
     const verdict = parseLootVerdict({
       ...validVerdict,
       claim_steps: [],
     });
-    expect(verdict).toBeNull();
+    expect(verdict).not.toBeNull();
+    if (verdict) expect(verdict.claim_steps).toEqual([]);
   });
 
   it('claim step with empty quote → null (quote required)', () => {
@@ -133,12 +137,13 @@ describe('parseLootVerdict', () => {
     expect(verdict).toBeNull();
   });
 
-  it('missing shipping_quote → null (shipping evidence required)', () => {
+  it('missing shipping_quote → accepted as null (schema leniency, commit 2fbb4f2)', () => {
     const verdict = parseLootVerdict({
       ...validVerdict,
       shipping_quote: '',
     });
-    expect(verdict).toBeNull();
+    expect(verdict).not.toBeNull();
+    if (verdict) expect(verdict.shipping_quote).toBeNull();
   });
 
   it('defaults a missing brand to an empty string (organizer fallback applied downstream)', () => {

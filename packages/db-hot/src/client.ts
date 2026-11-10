@@ -77,6 +77,11 @@ export async function createPbClient(
   const tokenFile = options.tokenFile ?? DEFAULT_TOKEN_FILE;
   const store = createTokenStore(tokenFile);
   const pb = new PocketBase(env.PB_URL, store);
+  // The SDK cancels duplicate in-flight GETs by default (a browser-UI
+  // convenience). Server-side this is a footgun: concurrent dashboard viewers,
+  // scheduler jobs, or agents issuing the same read abort each other and turn
+  // into spurious failures. Reads here are cheap and safe to run in parallel.
+  pb.autoCancellation(false);
   const authOptions: Record<string, unknown> = {};
   if (options.fetchImpl !== undefined) authOptions['fetch'] = options.fetchImpl;
   await pb

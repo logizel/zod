@@ -54,6 +54,8 @@ export interface GcPb {
 export interface PersistentGcResult extends GcRunResult {
   /** agent_telemetry rows deleted for being older than 24h. */
   telemetryDeleted: number;
+  /** machine_events rows deleted for being older than 24h. */
+  machineEventsDeleted: number;
   /** opportunity heavy-text cells cleared (24h end_date / 48h rejection). */
   opportunityTextPurged: number;
   /** True when the last-success marker was updated in PocketBase. */
@@ -247,6 +249,14 @@ export async function runPersistentGc(opts: PersistentGcOpts): Promise<Persisten
     pb.collection('agent_telemetry').getFullList(),
     pb.collection('opportunities').getFullList(),
   ]);
+  // machine_events is optional for older bootstrap states: a missing collection
+  // must not take the whole GC down.
+  let machineEventsRaw: Array<Record<string, unknown>> = [];
+  try {
+    machineEventsRaw = await pb.collection('machine_events').getFullList();
+  } catch (err) {
+    log.warn({ err: String(err) }, 'GC could not read machine_events (collection missing?)');
+  }
   const telemetryRows = telemetryRaw as unknown as TelemetryRow[];
   const opportunityRows = opportunitiesRaw as unknown as OpportunityRow[];
   const originalText = new Map(
@@ -307,6 +317,27 @@ export async function runPersistentGc(opts: PersistentGcOpts): Promise<Persisten
     }
   }
 
+  // machine_events is a 24h ring like agent_telemetry: old rows are deleted
+  // outright so the glass feed and its indexes stay bounded.
+  let machineEventsDeleted = 0;
+  for (const row of machineEventsRaw) {
+    let expired = false;
+    try {
+      expired = isTelemetryExpired(String(row['created'] ?? ''), nowMs);
+    } catch {
+      persistenceErrors += 1;
+      continue;
+    }
+    if (!expired) continue;
+    try {
+      await pb.collection('machine_events').delete(String(row['id']));
+      machineEventsDeleted += 1;
+    } catch (err) {
+      persistenceErrors += 1;
+      log.warn({ err: String(err), id: row['id'] }, 'GC failed to delete expired machine event');
+    }
+  }
+
   const errors = pure.errors + persistenceErrors;
   let persisted = false;
   if (errors === 0) {
@@ -326,6 +357,7 @@ export async function runPersistentGc(opts: PersistentGcOpts): Promise<Persisten
     lastSuccessMs: persisted ? nowMs : (marker.lastSuccessMs ?? 0),
     alertRaised: pure.alertRaised,
     telemetryDeleted,
+    machineEventsDeleted,
     opportunityTextPurged,
     persisted,
   };
@@ -333,7 +365,8 @@ export async function runPersistentGc(opts: PersistentGcOpts): Promise<Persisten
   if (opts.summaryAlert !== false) {
     const summary =
       `GC midnight summary: purged=${result.purged} compacted=${result.compacted} ` +
-      `telemetryDeleted=${result.telemetryDeleted} opportunityText=${result.opportunityTextPurged} ` +
+      `telemetryDeleted=${result.telemetryDeleted} machineEventsDeleted=${result.machineEventsDeleted} ` +
+      `opportunityText=${result.opportunityTextPurged} ` +
       `errors=${result.errors} lastSuccess=${result.lastSuccessMs || 'never'}`;
     await sendAlert(result.errors > 0 ? `${summary} — FAILED` : summary);
   }

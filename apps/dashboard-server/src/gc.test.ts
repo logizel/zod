@@ -323,6 +323,41 @@ describe('runPersistentGc', () => {
     expect(result.errors).toBe(0);
   });
 
+  it('deletes 24h-old machine_events and keeps fresh glass rows', async () => {
+    const seed = persistentSeed();
+    seed.machine_events = [
+      {
+        id: 'me-old',
+        created: at(-25 * HOUR_MS),
+        agent: 'scheduler',
+        event_type: 'scheduler',
+        tool: 'scheduler.tick',
+        status: 'ok',
+      },
+      {
+        id: 'me-fresh',
+        created: at(-2 * HOUR_MS),
+        agent: 'auditor-events-1',
+        event_type: 'llm',
+        tool: 'groq.chat',
+        status: 'ok',
+      },
+    ];
+    const { pb, data } = makeFakePb(seed);
+
+    const result = await runPersistentGc({
+      pb,
+      nowMs: NOW,
+      sendAlert: vi.fn().mockResolvedValue(true),
+      summaryAlert: false,
+      env: { ...requiredEnv } as any,
+    });
+
+    expect(result.machineEventsDeleted).toBe(1);
+    expect(data.get('machine_events')!.has('me-old')).toBe(false);
+    expect(data.get('machine_events')!.has('me-fresh')).toBe(true);
+  });
+
   it('never touches tombstone_ledger or taste_rules', async () => {
     const seed = persistentSeed();
     const { pb, data } = makeFakePb(seed);

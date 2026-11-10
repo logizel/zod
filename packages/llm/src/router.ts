@@ -35,6 +35,10 @@ export interface CompleteOptions {
   pipeline: string; // pipeline name (events | jobs | loot | local | social)
   url?: string;    // candidate URL (for telemetry row)
   priority?: Priority; // shared-pool priority lane (Curator 1 > Auditor 2 > Scout 3)
+  /** Machine-glass trace key (defaults to empty; callers pass the URL hash). */
+  trace_id?: string;
+  /** Rolling agent id for machine_events (defaults to `llm:<slot>`). */
+  agent?: string;
 }
 
 export interface CompleteResult {
@@ -47,6 +51,32 @@ export interface CompleteResult {
 /** Structural sink for bucket telemetry writes (decouples router from PocketBase type). */
 export interface TelemetrySink {
   writeBucketState: (input: BucketStateInput) => Promise<void>;
+  /**
+   * Optional fine-grained machinery log sink (machine_events). Called for every
+   * provider attempt, cooldown/baton-pass, stitch, and exhaustion. Best-effort:
+   * the router swallows sink failures so observability never breaks an audit.
+   */
+  recordMachineEvent?: (event: LlmMachineEvent) => void;
+}
+
+/** Machine-event shape emitted by the router (structurally matches MachineEventInput). */
+export interface LlmMachineEvent {
+  trace_id?: string;
+  agent: string;
+  pipeline: string;
+  event_type?: 'llm';
+  tool: string;
+  provider?: string;
+  model?: string;
+  step?: string;
+  status: 'start' | 'ok' | 'error' | 'skip' | 'cooldown';
+  duration_ms?: number;
+  url?: string;
+  input_summary?: string;
+  output_summary?: string;
+  detail?: string;
+  baton_to?: string;
+  meta?: Record<string, unknown>;
 }
 
 const UNVERIFIED = 'UNVERIFIED';
@@ -148,6 +178,8 @@ export class LlmRouter {
    */
   async complete(opts: CompleteOptions): Promise<CompleteResult> {
     const { messages, step1, step2, slot, pipeline, url = '', priority } = opts;
+    const traceId = opts.trace_id ?? '';
+    const agent = opts.agent ?? `llm:${slot}`;
     const path: string[] = [];
 
     // Shared-pool admission control: Curator(1) > Auditor(2) > Scout(3),
@@ -159,6 +191,15 @@ export class LlmRouter {
       // saturates the lane after cap calls.
       jobId = this.queue.admit({ messages, step1, step2, slot, pipeline, url }, priority);
       if (jobId === null) {
+        this.emitMachine({
+          trace_id: traceId,
+          agent,
+          pipeline,
+          url,
+          tool: 'llm.pool',
+          status: 'skip',
+          detail: 'shared-pool at in-flight cap',
+        });
         return { verdict: POOL_SATURATED, bucket: null, path, reason: 'shared-pool at in-flight cap' };
       }
     }
@@ -198,7 +239,7 @@ export class LlmRouter {
           continue;
         }
 
-        const result = await this.attemptBucket(def, key, 'tier1', fullMessages, slot, pipeline, url);
+        const result = await this.attemptBucket(def, key, 'tier1', fullMessages, slot, pipeline, url, traceId, agent);
         if (result.verdict !== null) {
           verdict = result.verdict;
           usedBucket = result.bucket;
@@ -232,7 +273,7 @@ export class LlmRouter {
             continue;
           }
 
-          const result = await this.attemptBucket(def, key, 'tier2', fullMessages, slot, pipeline, url);
+          const result = await this.attemptBucket(def, key, 'tier2', fullMessages, slot, pipeline, url, traceId, agent);
           if (result.verdict !== null) {
             verdict = result.verdict;
             usedBucket = result.bucket;
@@ -243,6 +284,16 @@ export class LlmRouter {
 
       // Total exhaustion — return UNVERIFIED with reason, never crash, never Cerebras.
       if (verdict === null) {
+        this.emitMachine({
+          trace_id: traceId,
+          agent,
+          pipeline,
+          url,
+          tool: 'llm.exhausted',
+          status: 'error',
+          detail: 'all buckets exhausted (Tier1 + Tier2 unavailable)',
+          meta: { path },
+        });
         return {
           verdict: UNVERIFIED,
           bucket: null,
@@ -258,6 +309,48 @@ export class LlmRouter {
   }
 
   /**
+   * Next configured bucket after `currentKey` in ladder order (Tier1 then the
+   * pipeline's Tier2 order). Used for the 429/413 `baton_to` field.
+   */
+  private nextBucketKey(currentKey: string, pipeline: string): string {
+    const ordered = [...this.ladder.tier1, ...this.ladder.tier2For(pipeline)];
+    const idx = ordered.findIndex((d) => `${d.provider}:${d.model}` === currentKey);
+    if (idx === -1) return '';
+    for (let i = idx + 1; i < ordered.length; i += 1) {
+      const next = ordered[i];
+      if (!next) continue;
+      const key = `${next.provider}:${next.model}`;
+      if (this.adapters.has(key)) return key;
+    }
+    return '';
+  }
+
+  /** Best-effort machinery event; observability never breaks an audit. */
+  private emitMachine(event: LlmMachineEvent): void {
+    const sink = this.telemetry?.recordMachineEvent;
+    if (!sink) return;
+    try {
+      sink({
+        ...event,
+        event_type: 'llm',
+        trace_id: event.trace_id ?? '',
+        pipeline: event.pipeline ?? '',
+        provider: event.provider ?? '',
+        model: event.model ?? '',
+        step: event.step ?? '',
+        url: event.url ?? '',
+        input_summary: event.input_summary ?? '',
+        output_summary: event.output_summary ?? '',
+        detail: event.detail ?? '',
+        baton_to: event.baton_to ?? '',
+        meta: event.meta ?? {},
+      });
+    } catch {
+      // Best-effort.
+    }
+  }
+
+  /**
    * Attempt a single bucket: call adapter, interpret outcome, write telemetry.
    * Returns { verdict, bucket } when a verdict is produced, else { verdict: null }.
    */
@@ -269,35 +362,112 @@ export class LlmRouter {
     slot: string,
     pipeline: string,
     url: string,
+    traceId = '',
+    agent = `llm:${slot}`,
   ): Promise<{ verdict: unknown; bucket: string | null }> {
     const adapter = this.adapters.get(key);
     if (!adapter) {
       log.warn({ provider: def.provider, model: def.model }, 'bucket skipped: no adapter');
+      this.emitMachine({
+        trace_id: traceId,
+        agent,
+        pipeline,
+        url,
+        tool: 'llm.attempt',
+        provider: def.provider,
+        model: def.model,
+        step: `${pipeline}-audit`,
+        status: 'skip',
+        detail: 'no adapter for provider/model',
+      });
       return { verdict: null, bucket: null };
     }
+
+    const startedAt = Date.now();
+    const inputChars = messages.reduce((sum, m) => sum + m.content.length, 0);
+    this.emitMachine({
+      trace_id: traceId,
+      agent,
+      pipeline,
+      url,
+      tool: 'llm.attempt',
+      provider: def.provider,
+      model: def.model,
+      step: `${pipeline}-audit`,
+      status: 'start',
+      input_summary: `${messages.length} messages, ${inputChars} chars`,
+      detail: `${tier} bucket ${key}`,
+      meta: { tier, bucket: `${tier}/${key}` },
+    });
 
     let outcome: ChatOutcome;
     try {
       outcome = await adapter.chat(messages);
     } catch (err) {
       log.error({ provider: def.provider, model: def.model, err }, 'adapter call threw');
+      this.emitMachine({
+        trace_id: traceId,
+        agent,
+        pipeline,
+        url,
+        tool: 'llm.attempt',
+        provider: def.provider,
+        model: def.model,
+        step: `${pipeline}-audit`,
+        status: 'error',
+        duration_ms: Date.now() - startedAt,
+        detail: `adapter threw: ${String(err)}`,
+        meta: { tier, bucket: `${tier}/${key}` },
+      });
       return { verdict: null, bucket: null };
     }
 
+    const durationMs = Date.now() - startedAt;
     const bucketPath = `${tier}/${key}`;
 
     // 429 / rate_limited → mark bucket cooldown, write telemetry, hand off to next bucket.
     if ('error' in outcome && outcome.error === 'rate_limited') {
-      this.registry.markCooldown(def.provider, def.model, outcome.retryAfter ?? 60);
-      await this.writeTelemetry(slot, def.provider, def.model, pipeline, url, 'cooldown', `bucket ${bucketPath} cooled down for ${outcome.retryAfter ?? 60}s`);
-      log.warn({ provider: def.provider, model: def.model, retryAfter: outcome.retryAfter }, 'bucket rate-limited, handing off to next bucket');
+      const retryAfter = outcome.retryAfter ?? 60;
+      const batonTo = this.nextBucketKey(key, pipeline);
+      this.registry.markCooldown(def.provider, def.model, retryAfter);
+      await this.writeTelemetry(slot, def.provider, def.model, pipeline, url, 'cooldown', `bucket ${bucketPath} cooled down for ${retryAfter}s`);
+      this.emitMachine({
+        trace_id: traceId,
+        agent,
+        pipeline,
+        url,
+        tool: 'llm.attempt',
+        provider: def.provider,
+        model: def.model,
+        step: `${pipeline}-audit`,
+        status: 'cooldown',
+        duration_ms: durationMs,
+        detail: `429 rate-limited; cooling down ${retryAfter}s`,
+        baton_to: batonTo,
+        meta: { tier, bucket: bucketPath, retryAfter, baton: Boolean(batonTo) },
+      });
+      log.warn({ provider: def.provider, model: def.model, retryAfter }, 'bucket rate-limited, handing off to next bucket');
       return { verdict: null, bucket: null };
     }
 
     // 413 / length_violation → treat as shrink-or-stitch signal, never blind-retry.
     if ('error' in outcome && outcome.error === 'length_violation') {
       log.warn({ provider: def.provider, model: def.model }, 'length violation, attempting stitch');
-      const stitched = await this.tryStitch(def.provider, def.model, messages, slot, pipeline, url);
+      this.emitMachine({
+        trace_id: traceId,
+        agent,
+        pipeline,
+        url,
+        tool: 'llm.attempt',
+        provider: def.provider,
+        model: def.model,
+        step: `${pipeline}-audit`,
+        status: 'error',
+        duration_ms: durationMs,
+        detail: 'HTTP 413 length violation; stitching',
+        meta: { tier, bucket: bucketPath, code: 413 },
+      });
+      const stitched = await this.tryStitch(def.provider, def.model, messages, slot, pipeline, url, traceId, agent);
       if (stitched !== null) {
         this.registry.recordSuccess(def.provider, def.model);
         return { verdict: stitched, bucket: bucketPath };
@@ -310,6 +480,20 @@ export class LlmRouter {
 
     if (result.finishReason === 'length') {
       // Truncated mid-JSON — stitch via continuation prompt.
+      this.emitMachine({
+        trace_id: traceId,
+        agent,
+        pipeline,
+        url,
+        tool: 'llm.attempt',
+        provider: def.provider,
+        model: def.model,
+        step: `${pipeline}-audit`,
+        status: 'error',
+        duration_ms: durationMs,
+        detail: 'finish_reason=length (truncated); stitching',
+        meta: { tier, bucket: bucketPath, finishReason: result.finishReason },
+      });
       const stitched = await this.tryStitch(
         def.provider,
         def.model,
@@ -317,6 +501,8 @@ export class LlmRouter {
         slot,
         pipeline,
         url,
+        traceId,
+        agent,
       );
       if (stitched !== null) {
         await this.writeTelemetry(slot, def.provider, def.model, pipeline, url, 'done', `stitch complete for ${bucketPath}`);
@@ -331,10 +517,45 @@ export class LlmRouter {
     const verdict = parseLlmJson(result.text);
     if (verdict !== null) {
       await this.writeTelemetry(slot, def.provider, def.model, pipeline, url, 'done', `verdict from ${bucketPath}`);
+      this.emitMachine({
+        trace_id: traceId,
+        agent,
+        pipeline,
+        url,
+        tool: 'llm.attempt',
+        provider: def.provider,
+        model: def.model,
+        step: `${pipeline}-audit`,
+        status: 'ok',
+        duration_ms: durationMs,
+        output_summary: `${result.text.length} chars, verdict parsed`,
+        detail: `verdict from ${bucketPath}`,
+        meta: {
+          tier,
+          bucket: bucketPath,
+          finishReason: result.finishReason ?? '',
+          usage: result.usage ?? {},
+        },
+      });
       return { verdict, bucket: bucketPath };
     }
 
     // Not valid JSON — try stitch to complete it.
+    this.emitMachine({
+      trace_id: traceId,
+      agent,
+      pipeline,
+      url,
+      tool: 'llm.attempt',
+      provider: def.provider,
+      model: def.model,
+      step: `${pipeline}-audit`,
+      status: 'error',
+      duration_ms: durationMs,
+      output_summary: `${result.text.length} chars, no JSON verdict`,
+      detail: 'non-JSON response; stitching',
+      meta: { tier, bucket: bucketPath, finishReason: result.finishReason ?? '' },
+    });
     const stitched = await this.tryStitch(
       def.provider,
       def.model,
@@ -342,6 +563,8 @@ export class LlmRouter {
       slot,
       pipeline,
       url,
+      traceId,
+      agent,
     );
     if (stitched !== null) {
       await this.writeTelemetry(slot, def.provider, def.model, pipeline, url, 'done', `stitch-repaired verdict from ${bucketPath}`);
@@ -359,22 +582,77 @@ export class LlmRouter {
     slot: string,
     pipeline: string,
     url: string,
+    traceId = '',
+    agent = `llm:${slot}`,
   ): Promise<unknown | null> {
     const key = `${provider}:${model}`;
     const stitcher = this.stitchers.get(key);
     if (!stitcher) {
       log.error({ provider, model }, 'no stitcher for length violation');
+      this.emitMachine({
+        trace_id: traceId,
+        agent,
+        pipeline,
+        url,
+        tool: 'llm.stitch',
+        provider,
+        model,
+        step: `${pipeline}-audit`,
+        status: 'skip',
+        detail: 'no stitcher for bucket',
+      });
       return null;
     }
+    const startedAt = Date.now();
+    this.emitMachine({
+      trace_id: traceId,
+      agent,
+      pipeline,
+      url,
+      tool: 'llm.stitch',
+      provider,
+      model,
+      step: `${pipeline}-audit`,
+      status: 'start',
+      input_summary: `${messages.length} messages`,
+      detail: `continuing truncated response from ${key}`,
+    });
     try {
       // Stitcher.continue expects the partial text; rebuild from message contents.
       const partial = messages.map((m) => m.content).join('\n');
       const verdict = await stitcher.stitchAndParse(partial);
       this.registry.recordSuccess(provider, model);
       await this.writeTelemetry(slot, provider, model, pipeline, url, 'done', `stitch complete for ${key}`);
+      this.emitMachine({
+        trace_id: traceId,
+        agent,
+        pipeline,
+        url,
+        tool: 'llm.stitch',
+        provider,
+        model,
+        step: `${pipeline}-audit`,
+        status: 'ok',
+        duration_ms: Date.now() - startedAt,
+        output_summary: 'stitched verdict parsed',
+        detail: `stitch complete for ${key}`,
+      });
       return verdict;
     } catch (err) {
       log.error({ provider, model, err }, 'stitch failed');
+      this.emitMachine({
+        trace_id: traceId,
+        agent,
+        pipeline,
+        url,
+        tool: 'llm.stitch',
+        provider,
+        model,
+        step: `${pipeline}-audit`,
+        status: 'error',
+        duration_ms: Date.now() - startedAt,
+        detail: `stitch failed: ${String(err)}`,
+      });
       return null;
     }
   }

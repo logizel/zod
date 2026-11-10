@@ -4,6 +4,7 @@ import type { OpportunityRow } from '@zod/db-hot/schema';
 import { buildAuditCard } from './embed.js';
 import { getClient } from './gateway.js';
 import { createPbClient } from '@zod/db-hot';
+import { recordMachineEvent } from '@zod/db-hot/machine-events';
 
 export interface RouterServiceDeps {
   env: Env;
@@ -30,10 +31,38 @@ export async function processOpportunity(
   opportunity: OpportunityRow,
   log: Pick<Logger, 'warn' | 'info' | 'error'>,
 ): Promise<boolean> {
+  const startedAt = Date.now();
+  const traceId = opportunity.url_hash ?? '';
+  const emit = (
+    status: 'start' | 'ok' | 'error',
+    detail: string,
+    extra: Record<string, unknown> = {},
+  ): void => {
+    try {
+      recordMachineEvent(pb, {
+        trace_id: traceId,
+        agent: 'discord:router',
+        pipeline: opportunity.pipeline ?? '',
+        event_type: 'discord',
+        tool: 'discord.post',
+        step: 'STEP_4-delivery',
+        status,
+        url: opportunity.links?.official ?? '',
+        duration_ms: status === 'start' ? undefined : Date.now() - startedAt,
+        detail,
+        meta: { channel: opportunity.bucket_channel, opportunityId: opportunity.id, ...extra },
+      });
+    } catch {
+      // Observability must never break delivery.
+    }
+  };
+
+  emit('start', `posting to ${opportunity.bucket_channel}`);
   const embed = buildAuditCard(opportunity);
   const channel = await resolveChannel(env, client, opportunity.bucket_channel);
   if (!channel) {
     log.warn({ channel: opportunity.bucket_channel, id: opportunity.id }, 'channel not found; skipping post');
+    emit('error', `channel not found: ${opportunity.bucket_channel}`);
     return false;
   }
   try {
@@ -49,6 +78,7 @@ export async function processOpportunity(
       status: 'routed',
       discord_message_id: sentMessage.id,
     });
+    emit('ok', `sent to ${opportunity.bucket_channel}`, { messageId: sentMessage.id });
     return true;
   } catch (err) {
     // NOTE: recordFailure() operates on task_scratchpad rows, not opportunities.
@@ -57,6 +87,7 @@ export async function processOpportunity(
       { id: opportunity.id, error: String(err) },
       'discord post failed; opportunity left audited for retry',
     );
+    emit('error', `post failed: ${String(err)}`);
     return false;
   }
 }

@@ -58,7 +58,7 @@ export class OrchestratorScheduler {
           break;
       }
     };
-    this.handle = registerAuditDrain(log, mod, { tickHandler });
+    this.handle = registerAuditDrain(log, mod, { tickHandler, pb });
     log.info({ component: 'orchestrator' }, 'audit-drain job registered via registerAuditDrain');
   }
 

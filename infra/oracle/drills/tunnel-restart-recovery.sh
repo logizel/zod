@@ -22,7 +22,7 @@ CLOUDFLARED_SVC="$REPO_DIR/infra/cloudflared/cloudflared.service"
 DASHBOARD_SVC="$REPO_DIR/infra/cloudflared/dashboard.service"
 INDEX_TS="$REPO_DIR/apps/dashboard-server/src/index.ts"
 CONFIG="$REPO_DIR/infra/cloudflared/config.yml"
-INDEX_HTML="$REPO_DIR/apps/dashboard/index.html"
+DASH_APP_DIR="$REPO_DIR/apps/dashboard"
 
 if [ "$LOCAL" -eq 1 ]; then
   checks=0
@@ -49,9 +49,11 @@ if [ "$LOCAL" -eq 1 ]; then
   checks=$((checks + 1))
 
   # 5. Dashboard client reconnects with exponential backoff + jitter, viewer cap ~2.
-  grep -Eq 'backoff' "$INDEX_HTML" \
+  #    The multi-page app keeps the SSE client in the shared asset bundle.
+  mapfile -t DASH_FILES < <(find "$DASH_APP_DIR" -maxdepth 2 -type f \( -name '*.html' -o -name '*.js' \) | sort)
+  grep -Eq 'backoff' "${DASH_FILES[@]}" \
     || { echo "TUNNEL-RESTART-RECOVERY FAIL: dashboard lacks backoff reconnect logic" >&2; exit 1; }
-  grep -Eq 'MAX_STREAMS|viewer cap|stream limit|2' "$INDEX_HTML" \
+  grep -Eq 'MAX_STREAMS|viewer cap|stream limit|one EventSource|if \(stopped \|\| es\)' "${DASH_FILES[@]}" \
     || { echo "TUNNEL-RESTART-RECOVERY FAIL: dashboard lacks viewer cap" >&2; exit 1; }
   checks=$((checks + 1))
 

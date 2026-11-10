@@ -19,6 +19,7 @@
 
 import { hashUrl, normalizeUrl } from '@zod/dedup';
 import type { TasteRule } from '@zod/db-hot/schema';
+import { createTombstoneIfAbsent, type TombstonePbLike } from '@zod/db-hot/tombstone';
 import { lookupTasteRules, type ColdTasteRule, type StatementExecutor } from '@zod/db-cold';
 
 export interface PollCandidate {
@@ -179,12 +180,10 @@ export async function applyTastePreScoring(
   const { blocked, passed } = checkBlockRules(candidates, rules);
 
   for (const cand of blocked) {
-    const coll = pb.collection('tombstone_ledger');
-    if (typeof coll.create !== 'function') {
-      throw new Error('tombstone_ledger.create is not available');
-    }
     const urlHash = hashUrl(normalizeUrl(cand.url));
-    await coll.create({
+    // Idempotent: the URL may already be tombstoned (unique url_hash index).
+    // A raw create would throw a 400 validation_not_unique and fail the row.
+    await createTombstoneIfAbsent(pb as unknown as TombstonePbLike, {
       url_hash: urlHash,
       fingerprint: urlHash,
       terminal_status: 'taste_blocked',

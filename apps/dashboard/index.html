@@ -1,543 +1,316 @@
 <!DOCTYPE html>
-<!--
-  Zod locked dashboard shell (Phase 1, D-17/D-22) + Phase 7 live panels.
-
-  Static page deployed to Cloudflare Pages, gated by owner-only Zero Trust
-  Access (Allow + owner-email include, deny-by-default, zero bypass) BEFORE
-  anything renders. Live agent slots arrive over SSE from the VM stream
-  origin through the Cloudflare Tunnel. Tabbed boards, rich combined filters,
-  health grid, slots ticker, and audit log land here in Phase 7 (D-02:
-  framework-free static UI — vanilla JS + EventSource + hand-rolled DOM;
-  no build step, no npm deps).
--->
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex, nofollow">
-  <title>Zod &mdash; Locked Telemetry Dashboard</title>
-  <style>
-    :root { color-scheme: dark; }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      background: #0b0e14;
-      color: #e6e9f0;
-      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-    }
-    header {
-      padding: 0.75rem 1rem;
-      border-bottom: 1px solid #2a3342;
-      background: #11151d;
-    }
-    header h1 { margin: 0; font-size: 1.1rem; letter-spacing: 0.05em; }
-    header .sub { font-size: 0.75rem; color: #aeb6c6; margin-top: 0.15rem; }
-    main {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-    }
-    .badge {
-      display: inline-block;
-      padding: 0.15rem 0.6rem;
-      border-radius: 999px;
-      background: #1d2b1d;
-      color: #8fd18f;
-      font-size: 0.75rem;
-      margin-bottom: 0.5rem;
-    }
-    code { color: #d7dce6; }
-
-    /* Top panel: agent slots ticker */
-    #top-panel { padding: 0.75rem 1rem; border-bottom: 1px solid #2a3342; background: #11151d; }
-    #top-panel h2 { margin: 0 0 0.5rem; font-size: 0.95rem; display: flex; align-items: center; gap: 0.5rem; }
-    #slots-container {
-      display: flex; flex-direction: column; gap: 0.4rem; max-height: 12rem; overflow-y: auto;
-    }
-    .slot-row {
-      padding: 0.4rem 0.6rem; border: 1px solid #2a3342; border-radius: 0.5rem; background: #161a22;
-      font-size: 0.85rem; display: flex; gap: 0.5rem;
-    }
-    .slot-row .label { color: #aeb6c6; font-size: 0.75rem; }
-    .slot-row .val { color: #e6e9f0; }
-    .health-badge {
-      display: inline-block; padding: 0.1rem 0.4rem; border-radius: 0.3rem; font-size: 0.7rem; font-weight: 600; text-transform: uppercase;
-    }
-    .health-READY { background: #1d2b1d; color: #8fd18f; }
-    .health-ACTIVE { background: #2b2d1d; color: #d1d18f; }
-    .health-60s-COOLDOWN { background: #2d2b1d; color: #d1a84f; }
-    .health-DAILY-CAP { background: #2b1d1d; color: #d18f8f; }
-
-    /* Middle panel: health grid */
-    #middle-panel { padding: 0.75rem 1rem; border-bottom: 1px solid #2a3342; background: #11151d; flex: 0 0 auto; overflow-y: auto; min-height: 8rem; }
-    #middle-panel h2 { margin: 0 0 0.5rem; font-size: 0.95rem; }
-    .health-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); gap: 0.5rem; }
-    .health-cell {
-      border: 1px solid #2a3342; border-radius: 0.5rem; padding: 0.5rem; background: #161a22;
-    }
-    .health-cell .bucket { font-size: 0.75rem; color: #aeb6c6; margin-bottom: 0.25rem; }
-    .health-cell .state { font-size: 0.8rem; font-weight: 600; }
-
-    /* Glass panel: raw telemetry ticker */
-    #glass-panel { padding: 0.75rem 1rem; border-bottom: 1px solid #2a3342; background: #11151d; flex: 0 0 auto; overflow-y: auto; min-height: 6rem; }
-    #glass-panel h2 { margin: 0 0 0.5rem; font-size: 0.95rem; }
-    #glass-ticker { display: flex; flex-direction: column; gap: 0.25rem; max-height: 6rem; overflow-y: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.75rem; }
-    .glass-row { padding: 0.2rem 0.4rem; border: 1px solid #2a3342; border-radius: 0.3rem; background: #161a22; display: flex; gap: 0.4rem; align-items: center; }
-    .glass-row .slot { color: #aeb6c6; font-size: 0.7rem; min-width: 9rem; }
-    .glass-row .provider { color: #8b93a0; font-size: 0.7rem; min-width: 7rem; }
-    .glass-row .model { color: #aeb6c6; font-size: 0.7rem; min-width: 14rem; }
-    .glass-row .step { color: #9fd1cf; font-size: 0.7rem; min-width: 9rem; }
-    .glass-row .status { font-size: 0.7rem; font-weight: 600; text-transform: uppercase; min-width: 6rem; }
-    .glass-row .dur { color: #8b93a0; font-size: 0.7rem; min-width: 5rem; }
-    .glass-row .detail { color: #e6e9f0; font-size: 0.7rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
-    .status-done { color: #8fd18f; }
-    .status-active { color: #8fd1d1; }
-    .status-cooldown { color: #d1a84f; }
-    .status-error { color: #d18f8f; }
-
-    /* Bottom panel: tabbed boards */
-    #bottom-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; background: #11151d; }
-    .board-tabs { display: flex; gap: 0.25rem; padding: 0.5rem 1rem; border-bottom: 1px solid #2a3342; overflow-x: auto; }
-    .board-tab {
-      padding: 0.35rem 0.75rem; border: 1px solid #2a3342; border-radius: 0.4rem; background: #161a22; color: #aeb6c6;
-      font-size: 0.8rem; cursor: pointer; white-space: nowrap;
-    }
-    .board-tab:hover { color: #e6e9f0; border-color: #3a4a5a; }
-    .board-tab.active { background: #2a3342; color: #e6e9f0; border-color: #4a6a7a; }
-
-    .board-filters { display: flex; gap: 0.5rem; padding: 0.5rem 1rem; border-bottom: 1px solid #2a3342; overflow-x: auto; align-items: center; background: #161a22; }
-    .board-filters label { font-size: 0.7rem; color: #8b93a0; display: block; margin-bottom: 0.15rem; }
-    .board-filters input, .board-filters select {
-      font-size: 0.8rem; padding: 0.25rem 0.4rem; border: 1px solid #2a3342; border-radius: 0.3rem; background: #0b0e14; color: #e6e9f0;
-    }
-    .board-filters button { font-size: 0.8rem; padding: 0.25rem 0.6rem; border: 1px solid #2a3342; border-radius: 0.3rem; background: #1d2b1d; color: #8fd18f; cursor: pointer; }
-    .board-filters button:hover { background: #2a3b2a; }
-    .filter-chip {
-      display: inline-flex; align-items: center; gap: 0.3rem; background: #1d2b1d; border: 1px solid #2a3342; border-radius: 0.3rem; padding: 0.15rem 0.4rem; font-size: 0.75rem; color: #aeb6c6;
-    }
-    .filter-chip button { background: none; border: none; color: #8fd18f; cursor: pointer; padding: 0 0.2rem; font-size: 0.8rem; line-height: 1; }
-
-    .boards-scroll { flex: 1; overflow-y: auto; padding: 0.75rem 1rem; }
-    .board-section { display: none; }
-    .board-section.active { display: block; }
-    .board-section h3 { margin: 0 0 0.5rem; font-size: 0.9rem; color: #aeb6c6; }
-    .board-empty { color: #8b93a0; font-size: 0.85rem; font-style: italic; padding: 1rem; }
-    .board-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
-    .board-table th { text-align: left; color: #8b93a0; padding: 0.3rem 0.2rem; border-bottom: 1px solid #2a3342; font-size: 0.7rem; }
-    .board-table td { padding: 0.3rem 0.2rem; border-bottom: 1px solid #1a2028; color: #e6e9f0; }
-    .board-table tr:hover td { background: #161a22; }
-    .status-chip { display: inline-block; padding: 0.05rem 0.3rem; border-radius: 0.25rem; font-size: 0.7rem; border: 1px solid #2a3342; }
-    .status-candidate { color: #aeb6c6; }
-    .status-audited { color: #8fd18f; }
-    .status-routed { color: #8fd1d1; }
-    .status-rejected { color: #d18f8f; }
-    .status-tombstoned { color: #d1a88f; }
-    .status-expired { color: #8b8b8b; }
-
-    /* Staleness banner */
-    #staleness-banner {
-      display: none; padding: 0.5rem 1rem; background: #2d2b1d; color: #d1a84f; font-size: 0.8rem; border-bottom: 1px solid #3a331d;
-    }
-
-    /* Load older (audit log) */
-    #load-older-btn { font-size: 0.75rem; padding: 0.2rem 0.5rem; border: 1px solid #2a3342; border-radius: 0.3rem; background: #161a22; color: #aeb6c6; cursor: pointer; margin-left: auto; }
-    #load-older-btn:hover { border-color: #4a6a7a; color: #e6e9f0; }
-    #load-older-btn.loading { opacity: 0.6; }
-    #older-results { margin-top: 0.5rem; font-size: 0.75rem; color: #8b93a0; }
-  </style>
+  <title>Overview · Zod</title>
+  <link rel="stylesheet" href="/assets/styles.css">
 </head>
-<body>
-  <header>
-    <h1>Zod Telemetry</h1>
-    <div class="sub">Locked read-only dashboard &mdash; Cloudflare Zero Trust &middot; SSE from VM stream origin</div>
-  </header>
-  <div id="staleness-banner">Stream stale &mdash; last update over 90s ago</div>
+<body data-page="overview" data-mode="stream">
+  <div class="app">
+    <aside class="sidebar" id="sidebar"></aside>
+    <div class="main">
+      <header class="topbar" id="topbar"></header>
+      <main class="page">
+        <div class="stats-grid" id="stats"></div>
 
-  <main>
-    <!-- Top panel: rolling agent slots ticker -->
-    <section id="top-panel">
-      <h2>Agent Slots &middot; <span id="slot-count">0</span></h2>
-      <div id="slots-container">connecting&hellip;</div>
-    </section>
+        <div class="overview-grid">
+          <section class="card panel">
+            <div class="card-head">
+              <div>
+                <h2 class="card-title">Pipeline</h2>
+                <p class="card-sub">Every candidate between discovery and Discord.</p>
+              </div>
+              <a class="text-link" href="/flow">Open flow →</a>
+            </div>
+            <div class="stage-strip" id="stage-strip"></div>
+          </section>
 
-    <!-- Middle panel: 2D pool health grid -->
-    <section id="middle-panel">
-      <h2>Pool Health Grid &middot; <span id="health-count">0</span> buckets</h2>
-      <div id="health-grid" class="health-grid"></div>
-    </section>
+          <section class="card panel">
+            <div class="card-head">
+              <div>
+                <h2 class="card-title">Live slots</h2>
+                <p class="card-sub">Models currently on duty.</p>
+              </div>
+              <span class="pill" id="slot-count">0</span>
+            </div>
+            <div class="slot-list" id="slot-list"></div>
+          </section>
+        </div>
 
-    <!-- Glass panel: raw telemetry ticker -->
-    <section id="glass-panel">
-      <h2>Machine Glass &middot; <span id="glass-count">0</span> calls</h2>
-      <div id="glass-ticker">connecting&hellip;</div>
-    </section>
+        <section class="card panel">
+          <div class="card-head">
+            <div>
+              <h2 class="card-title">Recent tool calls</h2>
+              <p class="card-sub">Fetch, sanitize, audit, route — the last few things the machine did.</p>
+            </div>
+            <a class="text-link" href="/glass">Open glass →</a>
+          </div>
+          <div class="feed feed-compact" id="recent-feed"></div>
+        </section>
+      </main>
+    </div>
+  </div>
 
-    <!-- Bottom panel: tabbed boards -->
-    <section id="bottom-panel">
-      <div class="board-tabs" id="board-tabs"></div>
-      <div class="board-filters" id="board-filters">
-        <div>
-          <label>Date from</label><input type="datetime-local" id="f-start_date">
-        </div>
-        <div>
-          <label>Date to</label><input type="datetime-local" id="f-end_date">
-        </div>
-        <div>
-          <label>Channel</label><input type="text" id="f-channel" placeholder="e.g. #-online-1lakh-plus">
-        </div>
-        <div>
-          <label>Status</label><select id="f-status"><option value="">any</option><option>candidate</option><option>audited</option><option>routed</option><option>rejected</option><option>tombstoned</option><option>expired</option></select>
-        </div>
-        <div>
-          <label>Prize min (₹)</label><input type="number" id="f-prize_min" min="0" placeholder="0">
-        </div>
-        <div>
-          <label>Prize max (₹)</label><input type="number" id="f-prize_max" min="0" placeholder="999999999">
-        </div>
-        <div>
-          <label>Search (title/organizer)</label><input type="text" id="f-q" placeholder="free-text">
-        </div>
-        <button id="f-apply">Apply</button>
-      </div>
-      <div class="boards-scroll" id="boards-scroll">
-        <div class="board-section active" id="tab-events-local">
-          <h3>Events &middot; Local <button id="load-older-btn">Load older</button></h3>
-          <div id="older-results"></div>
-          <table class="board-table" id="tbl-events-local">
-            <thead><tr><th>Title</th><th>Organizer</th><th>Channel</th><th>Status</th><th>Prize (₹)</th><th>Ends</th></tr></thead>
-            <tbody id="tbody-events-local"></tbody>
-          </table>
-        </div>
-        <div class="board-section" id="tab-events-travel">
-          <h3>Events &middot; Travel</h3>
-          <table class="board-table" id="tbl-events-travel">
-            <thead><tr><th>Title</th><th>Organizer</th><th>Channel</th><th>Status</th><th>Prize (₹)</th><th>Ends</th></tr></thead>
-            <tbody id="tbody-events-travel"></tbody>
-          </table>
-        </div>
-        <div class="board-section" id="tab-events-online">
-          <h3>Events &middot; Online</h3>
-          <table class="board-table" id="tbl-events-online">
-            <thead><tr><th>Title</th><th>Organizer</th><th>Channel</th><th>Status</th><th>Prize (₹)</th><th>Ends</th></tr></thead>
-            <tbody id="tbody-events-online"></tbody>
-          </table>
-        </div>
-        <div class="board-section" id="tab-tba-queue">
-          <h3>TBA Queue</h3>
-          <table class="board-table" id="tbl-tba-queue">
-            <thead><tr><th>Title</th><th>Organizer</th><th>Channel</th><th>Status</th><th>Prize (₹)</th><th>Ends</th></tr></thead>
-            <tbody id="tbody-tba-queue"></tbody>
-          </table>
-        </div>
-        <div class="board-section" id="tab-jobs-sys">
-          <h3>Jobs &middot; Sys/CP/Sec</h3>
-          <table class="board-table" id="tbl-jobs-sys">
-            <thead><tr><th>Title</th><th>Organizer</th><th>Channel</th><th>Status</th><th>Prize (₹)</th><th>Ends</th></tr></thead>
-            <tbody id="tbody-jobs-sys"></tbody>
-          </table>
-        </div>
-        <div class="board-section" id="tab-jobs-general">
-          <h3>Jobs &middot; General SWE</h3>
-          <table class="board-table" id="tbl-jobs-general">
-            <thead><tr><th>Title</th><th>Organizer</th><th>Channel</th><th>Status</th><th>Prize (₹)</th><th>Ends</th></tr></thead>
-            <tbody id="tbody-jobs-general"></tbody>
-          </table>
-        </div>
-        <div class="board-section" id="tab-loot">
-          <h3>Loot</h3>
-          <table class="board-table" id="tbl-loot">
-            <thead><tr><th>Title</th><th>Organizer</th><th>Channel</th><th>Status</th><th>Prize (₹)</th><th>Ends</th></tr></thead>
-            <tbody id="tbody-loot"></tbody>
-          </table>
-        </div>
-        <div class="board-section" id="tab-audit-log">
-          <h3>Audit &amp; Rejection Log <button id="load-older-audit-btn">Load older</button></h3>
-          <div id="older-results-audit"></div>
-          <table class="board-table" id="tbl-audit-log">
-            <thead><tr><th>Title</th><th>Organizer</th><th>Channel</th><th>Status</th><th>Prize (₹)</th><th>Ends</th></tr></thead>
-            <tbody id="tbody-audit-log"></tbody>
-          </table>
-        </div>
-      </div>
-    </section>
-  </main>
+  <script src="/assets/icons.js"></script>
+  <script src="/assets/shell.js"></script>
+  <script src="/assets/api.js"></script>
+  <script src="/assets/sse.js"></script>
+  <script>
+    (function () {
+      'use strict';
+      const UI = window.ZodUI;
+      const Api = window.ZodApi;
+      const icon = UI.icon;
 
-  <script data-stream-url="/api/stream" data-boards-url="/api/boards">
-    /* ------------------------------------------------------------------ */
-    /* D-02: vanilla JS, no build step, no npm deps.                      */
-    /* D-08: exponential backoff + jitter reconnect, hard cap ~2 streams. */
-    /* ------------------------------------------------------------------ */
+      const statsEl = document.getElementById('stats');
+      const stageEl = document.getElementById('stage-strip');
+      const slotsEl = document.getElementById('slot-list');
+      const slotCountEl = document.getElementById('slot-count');
+      const feedEl = document.getElementById('recent-feed');
 
-    const STREAM_URL = (document.currentScript?.dataset?.streamUrl) || '/api/stream';
-    const BOARDS_URL = (document.currentScript?.dataset?.boardsUrl) || '/api/boards';
-    const slotsContainer = document.getElementById('slots-container');
-    const healthGrid = document.getElementById('health-grid');
-    const slotCountEl = document.getElementById('slot-count');
-    const healthCountEl = document.getElementById('health-count');
-    const glassContainer = document.getElementById('glass-ticker');
-    const glassCountEl = document.getElementById('glass-count');
-    const stalenessBanner = document.getElementById('staleness-banner');
-    const boardTabsEl = document.getElementById('board-tabs');
-    const boardsScroll = document.getElementById('boards-scroll');
+      let overview = null;
+      let slots = [];
+      let events = [];
+      let loading = true;
+      let loadError = '';
 
-    let es = null;
-    let backoff = 1000;
-    const MAX_BACKOFF = 30000;
-    let lastEvent = Date.now();
-    // D-07: staleness banner threshold (env key: STALENESS_THRESHOLD_MS, default 90000ms)
-    const STALENESS_THRESHOLD_MS = 90000;
-
-    /* ---------------- active-tab persistence (localStorage) ---------------- */
-    const TAB_STORAGE_KEY = 'zod:dashboard:activeTab';
-    const TABS = [
-      { id: 'events-local', label: 'Events · Local' },
-      { id: 'events-travel', label: 'Events · Travel' },
-      { id: 'events-online', label: 'Events · Online' },
-      { id: 'tba-queue', label: 'TBA Queue' },
-      { id: 'jobs-sys', label: 'Jobs · Sys/CP/Sec' },
-      { id: 'jobs-general', label: 'Jobs · General SWE' },
-      { id: 'loot', label: 'Loot' },
-      { id: 'audit-log', label: 'Audit & Rejection Log' },
-    ];
-    let activeTab = localStorage.getItem(TAB_STORAGE_KEY) || TABS[0].id;
-    if (!TABS.some((t) => t.id === activeTab)) activeTab = TABS[0].id;
-
-    function saveActiveTab() { localStorage.setItem(TAB_STORAGE_KEY, activeTab); }
-
-    /* ---------------- SSE client ---------------- */
-    function connect() {
-      es = new EventSource(STREAM_URL);
-      es.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          lastEvent = Date.now();
-          stalenessBanner.style.display = 'none';
-          if (data.type === 'connected') {
-            if (slotsContainer) slotsContainer.textContent = 'stream connected';
-            backoff = 1000;
-          } else if (data.type === 'delta') {
-            renderSlots(Array.isArray(data.slots) ? data.slots : []);
-            renderHealthGrid(Array.isArray(data.bucketStates) ? data.bucketStates : []);
-          }
-          // heartbeat: keep alive, no UI change
-        } catch { /* ignore malformed SSE data */ }
+      const TINTS = {
+        groq: ['#efeaff', '#5b44c9'],
+        cerebras: ['#fff0e6', '#d1783a'],
+        'github-models': ['#eaf2ff', '#3f78c4'],
+        sambanova: ['#e8f8f1', '#2d9770'],
+        mistral: ['#fdeaf2', '#c4557f'],
+        openrouter: ['#fff4e2', '#b87818'],
+        local: ['#f2eff8', '#8c86a3'],
       };
-      es.onerror = () => {
-        es.close(); es = null;
-        setTimeout(connect, backoff + Math.random() * 1000);
-        backoff = Math.min(backoff * 2, MAX_BACKOFF);
-      };
-    }
 
-    function renderSlots(slots) {
-      if (!slotsContainer) return;
-      if (slots.length === 0) { slotsContainer.textContent = 'no active slots'; slotCountEl.textContent = '0'; return; }
-      slotsContainer.innerHTML = '';
-      slotCountEl.textContent = String(slots.length);
-      for (const s of slots) {
-        const div = document.createElement('div');
-        div.className = 'slot-row';
-        div.innerHTML =
-          '<span class="label">provider</span><span class="val">' + esc(s.provider ?? '-') + '</span>' +
-          '<span class="label">model</span><span class="val">' + esc(s.model ?? '-') + '</span>' +
-          '<span class="label">step</span><span class="val">' + esc(s.step ?? '-') + '</span>' +
-          '<span class="label">status</span><span class="val status-' + esc(String(s.status ?? '-').toLowerCase()) + '">' + esc(s.status ?? '-') + '</span>' +
-          (s.batonPass
-            ? '<span class="label">baton</span><span class="val" style="color:#d1a84f">429 &rarr; ' + esc(String(s.batonPass.to).split(':')[1] ?? '-') + '</span>'
-            : '') +
-          (s.url ? '<span class="label">url</span><span class="val" title="' + esc(s.url) + '">' + esc(s.url).slice(0, 40) + '</span>' : '');
-        slotsContainer.appendChild(div);
+      function tintFor(provider) {
+        return TINTS[String(provider || '').toLowerCase()] || ['#efeaff', '#5b44c9'];
       }
-    }
 
-    function renderHealthGrid(bucketStates) {
-      if (!healthGrid) return;
-      healthGrid.innerHTML = '';
-      healthCountEl.textContent = String(bucketStates.length);
-      for (const b of bucketStates) {
-        const cell = document.createElement('div');
-        cell.className = 'health-cell';
-        const cls = 'health-' + esc(String(b.state ?? 'READY'));
-        cell.innerHTML =
-          '<div class="bucket">' + esc(b.provider ?? '-') + ' / ' + esc(b.model ?? '-') + '</div>' +
-          '<div class="state ' + cls + '">' + esc(b.state ?? 'READY') + '</div>' +
-          (b.cooldownUntil ? '<div style="font-size:0.65rem;color:#8b93a0;margin-top:0.2rem">cooldown until ' + new Date(b.cooldownUntil).toLocaleTimeString() + '</div>' : '') +
-          (b.dailyCapRemaining != null ? '<div style="font-size:0.65rem;color:#8b93a0">cap left: ' + b.dailyCapRemaining + '</div>' : '');
-        healthGrid.appendChild(cell);
+      function initials(value) {
+        const parts = String(value || 'zod').split(/[^a-zA-Z0-9]+/).filter(Boolean);
+        return (parts[0] || 'z')[0].toUpperCase() + ((parts[1] || '')[0] || '').toUpperCase();
       }
-    }
 
-    /* ---------------- boards (GET /api/boards + filters) ---------------- */
-    function renderTabs() {
-      boardTabsEl.innerHTML = '';
-      for (const t of TABS) {
-        const btn = document.createElement('button');
-        btn.className = 'board-tab' + (t.id === activeTab ? ' active' : '');
-        btn.textContent = t.label;
-        btn.onclick = () => { activeTab = t.id; saveActiveTab(); renderTabs(); loadBoards(); };
-        boardTabsEl.appendChild(btn);
-        // The tab strip and the board sections are separate elements; keep the
-        // visible section in lockstep with the selected tab.
-        const section = document.getElementById('tab-' + t.id);
-        if (section) section.classList.toggle('active', t.id === activeTab);
+      function renderStats() {
+        if (loading && !overview) {
+          statsEl.innerHTML = UI.loadingState('Reading pipeline state…');
+          return;
+        }
+        if (loadError && !overview) {
+          statsEl.innerHTML = UI.errorState('Overview unavailable', loadError);
+          return;
+        }
+        const counts = (overview && overview.counts) || {};
+        const stats = (overview && overview.stats) || {};
+        const activeAgents = Math.max(Number(stats.activeAgents || 0), slots.length);
+        const inFlight = Number(counts.fetching || 0) + Number(counts.auditing || 0) + Number(counts.routing || 0);
+        const cards = [
+          {
+            tint: 'tint-lav',
+            icon: 'activity',
+            value: UI.fmtNumber(activeAgents),
+            label: 'Active agents',
+            sub: 'seen in the last 10 minutes',
+            note: 'live',
+          },
+          {
+            tint: 'tint-sky',
+            icon: 'zap',
+            value: UI.fmtNumber(stats.recentCalls || 0),
+            label: 'Tool calls',
+            sub: 'retained in the 24h ring',
+            note: '24h',
+          },
+          {
+            tint: 'tint-peach',
+            icon: 'inbox',
+            value: UI.fmtNumber(inFlight),
+            label: 'In flight',
+            sub: 'fetching · auditing · routing',
+            note: 'now',
+          },
+          {
+            tint: 'tint-mint',
+            icon: 'send',
+            value: UI.fmtNumber(stats.deliveredToday || 0),
+            label: 'Delivered today',
+            sub: 'routed to a Discord channel',
+            note: 'today',
+          },
+          {
+            tint: 'tint-pink',
+            icon: 'shuffle',
+            value: UI.fmtNumber(stats.batonPasses || 0),
+            label: 'Baton passes',
+            sub: '429 / 413 fallback in the ring',
+            note: 'ring',
+          },
+        ];
+        statsEl.innerHTML = cards
+          .map(
+            (card) =>
+              '<article class="stat-card ' +
+              card.tint +
+              '">' +
+              '<div class="stat-top"><span class="stat-icon">' +
+              icon(card.icon, 17) +
+              '</span><span class="stat-note">' +
+              card.note +
+              '</span></div>' +
+              '<div class="stat-value">' +
+              card.value +
+              '</div>' +
+              '<div class="stat-label">' +
+              card.label +
+              '</div>' +
+              '<div class="stat-sub">' +
+              card.sub +
+              '</div>' +
+              '</article>',
+          )
+          .join('');
       }
-    }
 
-    function buildFilterQuery() {
-      const params = new URLSearchParams();
-      const g = (id) => document.getElementById(id);
-      const v = (id) => { const el = g(id); return el ? el.value : ''; };
-      if (v('f-start_date')) params.set('start_date', v('f-start_date'));
-      if (v('f-end_date')) params.set('end_date', v('f-end_date'));
-      if (v('f-channel')) params.set('channel', v('f-channel'));
-      if (v('f-status')) params.set('status', v('f-status'));
-      if (v('f-prize_min')) params.set('prize_min', v('f-prize_min'));
-      if (v('f-prize_max')) params.set('prize_max', v('f-prize_max'));
-      if (v('f-q')) params.set('q', v('f-q'));
-      return params.toString();
-    }
-
-    function loadBoards() {
-      const query = buildFilterQuery();
-      fetch(BOARDS_URL + (query ? '?' + query : ''))
-        .then((r) => { if (!r.ok) throw new Error('boards ' + r.status); return r.json(); })
-        .then((data) => renderBoard(activeTab, data))
-        .catch((err) => {
-          const msg = 'Boards failed to load: ' + (err?.message ?? String(err));
-          const section = document.getElementById('tab-' + activeTab);
-          if (section) {
-            const tbody = section.querySelector('tbody');
-            if (tbody) {
-              tbody.innerHTML = '<tr><td colspan="6" class="board-empty" style="color:#d18f8f">' + esc(msg) + '</td></tr>';
-            }
-          }
-        });
-    }
-
-    function renderBoard(tabId, data) {
-      const section = document.getElementById('tab-' + tabId);
-      if (!section || !data || !data.boards) return;
-      const board = data.boards.find((b) => b.tab === tabId);
-      const tbodyId = 'tbody-' + tabId;
-      const tbody = document.getElementById(tbodyId);
-      if (!tbody) return;
-      tbody.innerHTML = '';
-      const rows = board ? board.rows : [];
-      if (rows.length === 0) {
-        const tr = document.createElement('tr');
-        const td = document.createElement('td');
-        td.colSpan = 6;
-        td.className = 'board-empty';
-        td.textContent = 'No rows matching filters.';
-        tr.appendChild(td); tbody.appendChild(tr);
-        return;
+      function renderStages() {
+        const counts = (overview && overview.counts) || {};
+        stageEl.innerHTML = UI.stages
+          .map(
+            (stage) =>
+              '<a class="stage-cell" href="/flow" style="--stage-soft:' +
+              stage.soft +
+              ';--stage-color:' +
+              stage.color +
+              '">' +
+              '<strong>' +
+              UI.fmtNumber(counts[stage.key] || 0) +
+              '</strong>' +
+              '<div class="stage-name">' +
+              stage.label +
+              '</div>' +
+              '<div class="stage-hint">' +
+              stage.hint +
+              '</div>' +
+              '</a>',
+          )
+          .join('');
       }
-      for (const r of rows) {
-        const tr = document.createElement('tr');
-        tr.innerHTML =
-          '<td>' + esc(r.title ?? '-') + '</td>' +
-          '<td>' + esc(r.organizer ?? '-') + '</td>' +
-          '<td>' + esc(r.bucket_channel ?? '-') + '</td>' +
-          '<td><span class="status-chip status-' + esc(String(r.status ?? '').toLowerCase()) + '">' + esc(r.status ?? '-') + '</span></td>' +
-          '<td>' + (r.prize_cash_inr != null ? esc(String(r.prize_cash_inr)) : '-') + '</td>' +
-          '<td>' + esc(r.end_date ?? '-') + '</td>';
-        tbody.appendChild(tr);
-      }
-    }
 
-    function esc(s) { return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]); }
-
-    /* Filter wiring */
-    document.getElementById('f-apply').onclick = loadBoards;
-    document.getElementById('f-start_date').onchange = loadBoards;
-    document.getElementById('f-end_date').onchange = loadBoards;
-    document.getElementById('f-channel').oninput = loadBoards;
-    document.getElementById('f-status').onchange = loadBoards;
-    document.getElementById('f-prize_min').oninput = loadBoards;
-    document.getElementById('f-prize_max').oninput = loadBoards;
-    document.getElementById('f-q').oninput = loadBoards;
-
-    /* Staleness banner heartbeat */
-    setInterval(() => {
-      if (Date.now() - lastEvent > STALENESS_THRESHOLD_MS) stalenessBanner.style.display = 'block';
-    }, 15000);
-
-    /* Load older (audit log & rejection log) &gt; Turso tombstone_ledger via lookupTombstone */
-    function setupLoadOlder(btnId, tbodyId, resultsId) {
-      const btn = document.getElementById(btnId);
-      const results = document.getElementById(resultsId);
-      if (!btn || !results) return;
-      btn.onclick = () => {
-        btn.classList.add('loading');
-        btn.textContent = 'loading&hellip;';
-        // The last row's url_hash drives the point lookup into the cold ledger.
-        const tbody = document.getElementById(tbodyId);
-        const lastRow = tbody ? tbody.lastElementChild : null;
-        const urlHash = lastRow ? lastRow.getAttribute('data-hash') : '';
-        if (!urlHash) { results.textContent = 'no row hash to look up'; btn.classList.remove('loading'); btn.textContent = 'Load older'; return; }
-        fetch('/api/audit/older?url_hash=' + encodeURIComponent(urlHash))
-          .then((r) => r.json())
-          .then((data) => {
-            if (data.tombstone) {
-              results.innerHTML = '<div>Older: ' + esc(data.tombstone.terminal_status) + ' &middot; ' + esc(data.tombstone.source) + ' &middot; ' + esc(data.tombstone.decided_at) + '</div>';
-            } else {
-              results.textContent = 'no older tombstone found';
-            }
-            btn.classList.remove('loading'); btn.textContent = 'Load older';
+      function renderSlots() {
+        slotCountEl.textContent = String(slots.length);
+        if (!slots.length) {
+          slotsEl.innerHTML = UI.emptyState('No active slots', 'Telemetry will fill this in as workers start.', 'activity');
+          return;
+        }
+        slotsEl.innerHTML = slots
+          .slice(0, 10)
+          .map((slot) => {
+            const tint = tintFor(slot.provider);
+            const status = String(slot.status || '');
+            return (
+              '<div class="mini-slot">' +
+              '<span class="slot-avatar" style="--slot-tint:' +
+              tint[0] +
+              ';--slot-color:' +
+              tint[1] +
+              '">' +
+              UI.esc(initials(slot.agent || slot.provider)) +
+              '</span>' +
+              '<div style="min-width:0">' +
+              '<div class="mini-slot-name">' +
+              UI.esc(slot.agent || slot.provider || 'worker') +
+              '</div>' +
+              '<div class="mini-slot-meta">' +
+              UI.esc([slot.provider, slot.model].filter(Boolean).join(' · ') || '—') +
+              (slot.currentTool ? ' · ' + UI.esc(slot.currentTool) : '') +
+              '</div>' +
+              '</div>' +
+              '<span class="pill ' +
+              UI.pillClass(status) +
+              '">' +
+              UI.esc(UI.statusLabel(status)) +
+              '</span>' +
+              '</div>'
+            );
           })
-          .catch((err) => { results.textContent = 'load-older failed'; btn.classList.remove('loading'); btn.textContent = 'Load older'; });
-      };
-    }
-    setupLoadOlder('load-older-btn', 'tbody-events-local', 'older-results');
-    setupLoadOlder('load-older-audit-btn', 'tbody-audit-log', 'older-results-audit');
-
-    /* ---------------- glass panel: raw telemetry ticker ---------------- */
-    async function fetchGlass() {
-      try {
-        const r = await fetch('/api/telemetry');
-        if (!r.ok) throw new Error('telemetry ' + r.status);
-        const data = await r.json();
-        const rows = Array.isArray(data.rows) ? data.rows : [];
-        renderGlass(rows);
-        if (glassCountEl) glassCountEl.textContent = String(rows.length);
-      } catch (err) {
-        if (glassContainer) glassContainer.textContent = 'glass failed: ' + (err?.message ?? String(err));
+          .join('');
       }
-    }
 
-    function renderGlass(rows) {
-      if (!glassContainer) return;
-      if (rows.length === 0) {
-        glassContainer.textContent = 'no telemetry yet';
-        return;
+      function mergeEvents(incoming) {
+        const byId = new Map();
+        for (const event of events) byId.set(event.id || event.created + event.tool, event);
+        for (const event of incoming) byId.set(event.id || event.created + event.tool, event);
+        events = [...byId.values()]
+          .sort((a, b) => Date.parse(b.created) - Date.parse(a.created))
+          .slice(0, 8);
       }
-      glassContainer.innerHTML = '';
-      for (const row of rows) {
-        const div = document.createElement('div');
-        div.className = 'glass-row';
-        const statusCls = 'status-' + esc(String(row.status ?? '').toLowerCase());
-        div.innerHTML =
-          '<span class="slot">' + esc(row.slot ?? '-') + '</span>' +
-          '<span class="provider">' + esc(row.provider ?? '-') + '</span>' +
-          '<span class="model">' + esc(row.model ?? '-') + '</span>' +
-          '<span class="step">' + esc(row.step ?? '-') + '</span>' +
-          '<span class="status ' + statusCls + '">' + esc(row.status ?? '-') + '</span>' +
-          '<span class="dur">' + (row.duration_ms != null ? esc(String(row.duration_ms)) + 'ms' : '-') + '</span>' +
-          '<span class="detail" title="' + esc(row.detail ?? '') + '">' + esc((row.detail ?? '').slice(0, 60)) + '</span>';
-        glassContainer.appendChild(div);
-      }
-    }
 
-    /* Boot */
-    renderTabs();
-    loadBoards();
-    connect();
-    fetchGlass();
-    setInterval(fetchGlass, 5000);
+      function renderEvents() {
+        if (!events.length) {
+          feedEl.innerHTML = UI.emptyState('No calls yet', 'The machine event ring is empty.', 'terminal');
+          return;
+        }
+        feedEl.innerHTML = events.map((event) => UI.eventRow(event, { compact: true })).join('');
+      }
+
+      async function refresh() {
+        try {
+          const data = await Api.overview();
+          overview = data;
+          loading = false;
+          loadError = '';
+          renderStats();
+          renderStages();
+          const recent = await Api.events({ limit: 8 });
+          mergeEvents(recent.events || []);
+          renderEvents();
+        } catch (error) {
+          loading = false;
+          loadError = error.message || String(error);
+          renderStats();
+          if (!events.length) renderEvents();
+        }
+      }
+
+      function onStatus(state) {
+        if (state.state === 'connected') {
+          UI.setLive('connected', 'Live stream');
+          UI.setStale(false);
+        } else if (state.state === 'stale') {
+          UI.setLive('stale', 'Stream stale');
+          UI.setStale(true);
+        } else if (state.state === 'reconnecting') {
+          UI.setLive('reconnecting', 'Reconnecting…');
+        } else if (state.state === 'connecting') {
+          UI.setLive('connecting', 'Connecting…');
+        }
+      }
+
+      statsEl.innerHTML = UI.loadingState('Reading pipeline state…');
+      stageEl.innerHTML = UI.loadingState('Loading stages…');
+      slotsEl.innerHTML = UI.loadingState('Waiting for telemetry…');
+      renderEvents();
+
+      UI.poll(refresh, 15_000);
+
+      window.ZodSSE.connect({
+        onDelta: function (data) {
+          if (Array.isArray(data.slots)) {
+            slots = data.slots;
+            renderStats();
+            renderSlots();
+          }
+          if (Array.isArray(data.events) && data.events.length) {
+            mergeEvents(data.events);
+            renderEvents();
+          }
+        },
+        onStatus,
+      });
+    })();
   </script>
 </body>
 </html>

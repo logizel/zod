@@ -52,6 +52,40 @@ SIGKILL after 5 seconds) so no service is left holding a port.
 
 All logs are prefixed with `[pb]`, `[dashboard]`, `[proxy]`, or `[scheduler]`.
 
+## Dashboard pages
+
+The dashboard is a true multi-page app served by the dashboard server: one
+concern per page, a shared sidebar/header, vanilla HTML/CSS/JS, no build step.
+
+| Route | Page | Refresh |
+|-------|------|---------|
+| `/` | Overview — stage stats, pipeline kanban, live agent slots | SSE (`/api/stream`) |
+| `/flow` | Pipeline Flow — the candidate kanban | poll |
+| `/glass` | Machine Glass — every tool call, filterable, with a per-candidate trace drawer | SSE |
+| `/pools` | Pool Health — provider × model buckets | poll |
+| `/boards` | Boards — 8 tabs of admitted opportunities | poll |
+| `/audit` | Audit & Rejection — verdicts, tombstones, rejections | poll |
+| `/sources` | Sources — per-adapter health | poll |
+| `/system` | System — runtime, SSE, GC, scheduler jobs | poll |
+
+Read-only by construction: every route is `GET`/`HEAD`, there is no mutation
+endpoint, and the pipeline processes (not the dashboard) own all writes.
+
+### Machine glass events
+
+`machine_events` (PocketBase) is the append-only machinery log behind the
+Glass page. One row per machine operation — scheduler tick, dedup verdict,
+fetch, sanitize, LLM attempt, 429 baton-pass, orchestrator verdict, tombstone,
+Discord post, GC summary — with the agent, pipeline, tool, provider/model,
+step, status, duration, and URL.
+
+- Retention: 24h, cleared by the midnight GC like `agent_telemetry`.
+- Never seeded. The dev bootstrap deliberately writes no `machine_events`
+  rows, so the feed only ever shows real pipeline activity. Seed rows for the
+  other collections stay available for the boards/audit pages.
+- Writers are best-effort: a failed telemetry write never fails the pipeline
+  step it observes.
+
 ## First run vs. existing data
 
 - **No `pb_data/data.db`:** the superuser is created from `PB_SERVICE_EMAIL` and

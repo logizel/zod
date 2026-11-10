@@ -10,6 +10,7 @@
 import { hashUrl, normalizeUrl } from '@zod/dedup';
 import { LlmRouter, type ChatMessage } from '@zod/llm';
 import { createLogger, type Logger } from '@zod/logger';
+import { recordMachineEvent } from '@zod/db-hot/machine-events';
 import {
   buildEventsMessages,
   parseEventsVerdict,
@@ -76,6 +77,29 @@ async function reauditTbaRow(
   const pipeline = row.pipeline;
   const fetchedText = row.description_raw ?? '';
   const candidateUrl = row.links?.official ?? '';
+  const traceId = candidateUrl ? hashUrl(normalizeUrl(candidateUrl)) : '';
+  const emitTba = (
+    status: 'ok' | 'skip' | 'error',
+    detail: string,
+    extra: Record<string, unknown> = {},
+  ): void => {
+    try {
+      recordMachineEvent(pb, {
+        trace_id: traceId,
+        agent: 'orchestrator:tba',
+        pipeline,
+        event_type: 'orchestrator',
+        tool: 'tba.reaudit',
+        step: 'STEP_3',
+        status,
+        url: candidateUrl,
+        detail,
+        meta: { opportunityId: row.id, ...extra },
+      });
+    } catch {
+      // Observability must never break the TBA loop.
+    }
+  };
 
   // Build messages based on pipeline (events or local).
   let messages: ChatMessage[];
@@ -103,10 +127,13 @@ async function reauditTbaRow(
     pipeline,
     url: candidateUrl,
     priority: 2,
+    trace_id: traceId,
+    agent: 'orchestrator:tba',
   });
 
   // UNVERIFIED / POOL_SATURATED: keep TBA, refresh timestamp for next 48h scan.
   if (result.verdict === 'UNVERIFIED' || result.verdict === 'POOL_SATURATED') {
+    emitTba('skip', `no verdict: ${String(result.verdict)}; keeping TBA`);
     rowLog.info({ verdict: result.verdict }, 'TBA re-audit no verdict; keeping TBA');
     await pb.collection('opportunities').update(row.id, {
       updated: new Date().toISOString(),
@@ -124,6 +151,7 @@ async function reauditTbaRow(
   }
 
   if (!verdict) {
+    emitTba('error', 'verdict parse failed; keeping TBA');
     rowLog.warn({ stage: 'verdict_parse' }, 'TBA re-audit parse failed; keeping TBA');
     await pb.collection('opportunities').update(row.id, {
       updated: new Date().toISOString(),
@@ -152,6 +180,9 @@ async function reauditTbaRow(
         source: 'tba-loop',
         decided_at: new Date().toISOString(),
       });
+      emitTba('skip', 'Ping #2: TBA expired, event date passed', {
+        terminal_status: 'event_expired',
+      });
       rowLog.info({ rowId: row.id }, 'Ping #2: TBA expired, event date passed');
       return;
     }
@@ -179,6 +210,10 @@ async function reauditTbaRow(
       ...updateData,
       bucket_channel: TBA_RADAR_CHANNEL,
     });
+    emitTba('ok', 'Ping #2: TBA confirmed, prize/date resolved', {
+      prize_cash_inr: verdict.prize_cash_inr ?? null,
+      dates: verdict.dates ?? null,
+    });
     rowLog.info(
       { rowId: row.id, prize_cash_inr: verdict.prize_cash_inr, dates: verdict.dates },
       'Ping #2: TBA confirmed, prize/date resolved',
@@ -188,6 +223,7 @@ async function reauditTbaRow(
 
   // Still TBA — keep tba=true, refresh timestamp so next scan is 48h later.
   // Do NOT re-ping — Ping #1 already fired when TBA was first detected.
+  emitTba('skip', 'still TBA; rescheduled for next 48h scan');
   await pb.collection('opportunities').update(row.id, {
     updated: new Date().toISOString(),
     deadlines: mergeDeadlines(row.deadlines, { tba: true }),

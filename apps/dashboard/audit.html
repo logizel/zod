@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Audit &amp; Rejection · Zod</title>
+  <link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body data-page="audit" data-mode="poll">
+  <div class="app">
+    <aside class="sidebar" id="sidebar"></aside>
+    <div class="main">
+      <header class="topbar" id="topbar"></header>
+      <main class="page">
+        <div class="stats-grid" id="audit-stats"></div>
+
+        <div class="toolbar">
+          <div class="filters">
+            <div class="field">
+              <label for="f-status">Verdict</label>
+              <select class="select" id="f-status">
+                <option value="">All verdicts</option>
+                <option value="rejected">rejected</option>
+                <option value="tombstoned">tombstoned</option>
+                <option value="audited">audited</option>
+              </select>
+            </div>
+            <div class="field grow">
+              <label for="f-q">Search</label>
+              <input class="input" type="search" id="f-q" placeholder="Title, organizer, source, hash…">
+            </div>
+          </div>
+          <div class="inline-actions">
+            <span class="hint" id="audit-updated">Waiting for the audit log…</span>
+            <button class="btn subtle" id="audit-refresh" type="button"></button>
+          </div>
+        </div>
+
+        <div class="overview-grid">
+          <section class="card panel">
+            <div class="card-head">
+              <div>
+                <h2 class="card-title">Decisions timeline</h2>
+                <p class="card-sub" id="audit-sub">Rejections, tombstones, and audited rows, newest first.</p>
+              </div>
+              <span class="pill" id="audit-count">0 rows</span>
+            </div>
+            <div class="timeline" id="audit-timeline"></div>
+          </section>
+
+          <section class="card panel">
+            <div class="card-head">
+              <div>
+                <h2 class="card-title">Cold ledger lookup</h2>
+                <p class="card-sub">Point lookup by URL hash in Turso.</p>
+              </div>
+              <span class="state-icon" style="width:34px;height:34px;border-radius:11px" id="lookup-icon"></span>
+            </div>
+            <form id="lookup-form" autocomplete="off">
+              <div class="field">
+                <label for="lookup-hash">URL hash</label>
+                <input class="input mono" type="text" id="lookup-hash" placeholder="sha256-style hash…" spellcheck="false">
+              </div>
+              <div class="inline-actions" style="margin-top:10px">
+                <button class="btn primary" type="submit" id="lookup-btn">Look up</button>
+                <button class="btn ghost" type="button" id="lookup-clear">Clear</button>
+              </div>
+            </form>
+            <div class="lookup-result" id="lookup-result">
+              <p class="hint" style="margin:0">
+                Cold rows survive the 24-hour hot ring. Lookups are read-only.
+              </p>
+            </div>
+          </section>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script src="/assets/icons.js"></script>
+  <script src="/assets/shell.js"></script>
+  <script src="/assets/api.js"></script>
+  <script>
+    (function () {
+      'use strict';
+      const UI = window.ZodUI;
+      const Api = window.ZodApi;
+      const icon = UI.icon;
+
+      const statsEl = document.getElementById('audit-stats');
+      const timelineEl = document.getElementById('audit-timeline');
+      const subEl = document.getElementById('audit-sub');
+      const updatedEl = document.getElementById('audit-updated');
+      const countEl = document.getElementById('audit-count');
+      const refreshBtn = document.getElementById('audit-refresh');
+      const statusSelect = document.getElementById('f-status');
+      const searchInput = document.getElementById('f-q');
+
+      const lookupForm = document.getElementById('lookup-form');
+      const lookupInput = document.getElementById('lookup-hash');
+      const lookupBtn = document.getElementById('lookup-btn');
+      const lookupClear = document.getElementById('lookup-clear');
+      const lookupResult = document.getElementById('lookup-result');
+      const lookupIcon = document.getElementById('lookup-icon');
+
+      let rows = [];
+      let hasData = false;
+
+      lookupIcon.innerHTML = icon('database', 17);
+
+      function safeHash(value) {
+        return String(value || '').trim();
+      }
+
+      function isTombstone(row) {
+        return String(row.pipeline) === 'tombstone' || Boolean(row.terminal_status);
+      }
+
+      function rowStatus(row) {
+        if (isTombstone(row)) return 'tombstoned';
+        return String(row.status || 'audited');
+      }
+
+      function rowTime(row) {
+        return row.decided_at || row.end_date || row.updated || '';
+      }
+
+      function filtered() {
+        const status = statusSelect.value;
+        const query = searchInput.value.trim().toLowerCase();
+        return rows
+          .filter((row) => {
+            if (status && rowStatus(row) !== status) return false;
+            if (!query) return true;
+            const haystack = [
+              row.title,
+              row.organizer,
+              row.source,
+              row.url_hash,
+              row.terminal_status,
+              row.bucket_channel,
+            ]
+              .filter(Boolean)
+              .join(' ')
+              .toLowerCase();
+            return haystack.includes(query);
+          })
+          .sort((a, b) => Date.parse(rowTime(b) || 0) - Date.parse(rowTime(a) || 0));
+      }
+
+      function renderStats() {
+        if (!hasData) {
+          statsEl.innerHTML = UI.loadingState('Reading the audit log…');
+          return;
+        }
+        const rejected = rows.filter((row) => rowStatus(row) === 'rejected').length;
+        const tombstoned = rows.filter((row) => rowStatus(row) === 'tombstoned').length;
+        const audited = rows.filter((row) => rowStatus(row) === 'audited').length;
+        const hashes = new Set(rows.map((row) => safeHash(row.url_hash)).filter(Boolean)).size;
+        const latest = rows
+          .map((row) => Date.parse(rowTime(row)))
+          .filter(Number.isFinite)
+          .sort((a, b) => b - a)[0];
+        const cards = [
+          {
+            tint: 'tint-pink',
+            icon: 'x',
+            value: UI.fmtNumber(rejected),
+            label: 'Rejected',
+            sub: 'refused by the audit gate',
+            note: 'audit',
+          },
+          {
+            tint: 'tint-amber',
+            icon: 'shield',
+            value: UI.fmtNumber(tombstoned),
+            label: 'Tombstoned',
+            sub: 'cold ledger dedup marks',
+            note: 'cold',
+          },
+          {
+            tint: 'tint-sky',
+            icon: 'search',
+            value: UI.fmtNumber(audited),
+            label: 'Audited',
+            sub: 'verified, not yet routed',
+            note: 'hot',
+          },
+          {
+            tint: 'tint-lav',
+            icon: 'database',
+            value: UI.fmtNumber(hashes),
+            label: 'Hashes',
+            sub: 'lookup-able URL hashes',
+            note: 'ledger',
+          },
+          {
+            tint: 'tint-peach',
+            icon: 'clock',
+            value: latest ? UI.timeAgo(new Date(latest).toISOString()) : '—',
+            label: 'Last decision',
+            sub: latest ? UI.fmtDateTime(new Date(latest).toISOString()) : 'no decisions yet',
+            note: 'latest',
+          },
+        ];
+        statsEl.innerHTML = cards
+          .map(
+            (card) =>
+              '<article class="stat-card ' +
+              card.tint +
+              '">' +
+              '<div class="stat-top"><span class="stat-icon">' +
+              icon(card.icon, 17) +
+              '</span><span class="stat-note">' +
+              card.note +
+              '</span></div>' +
+              '<div class="stat-value">' +
+              card.value +
+              '</div>' +
+              '<div class="stat-label">' +
+              card.label +
+              '</div>' +
+              '<div class="stat-sub">' +
+              card.sub +
+              '</div>' +
+              '</article>',
+          )
+          .join('');
+      }
+
+      function dotStyle(status) {
+        if (status === 'tombstoned') return '--tl-color:#b87818;--tl-soft:#fff4e2';
+        if (status === 'rejected') return '--tl-color:#c4557f;--tl-soft:#fdebf2';
+        return '--tl-color:#3f78c4;--tl-soft:#eaf2ff';
+      }
+
+      function timelineItem(row) {
+        const status = rowStatus(row);
+        const hash = safeHash(row.url_hash);
+        const title = isTombstone(row)
+          ? row.title || 'Rejected: ' + (row.terminal_status || 'tombstoned')
+          : row.title || 'Untitled opportunity';
+        const meta = [];
+        if (row.organizer) meta.push('<span>' + UI.esc(row.organizer) + '</span>');
+        if (row.source) meta.push('<span>source: ' + UI.esc(row.source) + '</span>');
+        if (row.bucket_channel) {
+          meta.push('<span class="chip">' + UI.esc(row.bucket_channel) + '</span>');
+        }
+        if (row.prize_cash_inr !== null && row.prize_cash_inr !== undefined && !isTombstone(row)) {
+          meta.push('<span class="mono">' + UI.fmtCurrency(row.prize_cash_inr) + '</span>');
+        }
+        if (hash) meta.push('<span class="mono">' + UI.esc(hash.slice(0, 16)) + '…</span>');
+        const time = rowTime(row);
+        return (
+          '<div class="tl-item" data-hash="' +
+          UI.esc(hash) +
+          '">' +
+          '<span class="tl-dot" style="' +
+          dotStyle(status) +
+          '"></span>' +
+          '<div class="tl-card">' +
+          '<div class="tl-top"><span class="tl-title">' +
+          UI.esc(title) +
+          '</span><span class="tl-time">' +
+          (time ? UI.esc(UI.timeAgo(time)) : '—') +
+          '</span></div>' +
+          '<div class="tl-meta"><span class="pill ' +
+          (status === 'audited' ? 'start' : 'error') +
+          '">' +
+          UI.esc(UI.statusLabel(status)) +
+          '</span>' +
+          meta.join('') +
+          (time
+            ? '<span title="' + UI.esc(UI.fmtDateTime(time)) + '">' + UI.esc(UI.fmtDate(time)) + '</span>'
+            : '') +
+          '</div>' +
+          (hash
+            ? '<div class="tl-actions"><button class="btn ghost" type="button" data-lookup="' +
+              UI.esc(hash) +
+              '">' +
+              icon('database', 12) +
+              'Cold ledger</button></div>'
+            : '') +
+          '</div>' +
+          '</div>'
+        );
+      }
+
+      function renderTimeline() {
+        const visible = filtered();
+        countEl.textContent = visible.length + (visible.length === 1 ? ' row' : ' rows');
+        if (!hasData) {
+          timelineEl.innerHTML = UI.loadingState('Reading the audit log…');
+          return;
+        }
+        if (!rows.length) {
+          timelineEl.innerHTML = UI.emptyState(
+            'The audit log is empty',
+            'Rejections and audited candidates will appear here.',
+            'shield',
+          );
+          return;
+        }
+        if (!visible.length) {
+          timelineEl.innerHTML = UI.emptyState(
+            'No matching verdicts',
+            'Clear the search or pick another verdict.',
+            'filter',
+          );
+          return;
+        }
+        subEl.textContent =
+          visible.length +
+          ' of ' +
+          rows.length +
+          ' audit rows · newest decision first';
+        timelineEl.innerHTML = visible.slice(0, 150).map(timelineItem).join('');
+      }
+
+      function renderAll() {
+        renderStats();
+        renderTimeline();
+      }
+
+      async function refresh() {
+        try {
+          const data = await Api.boards({});
+          const auditBoard = (data.boards || []).find((board) => board.tab === 'audit-log');
+          rows = auditBoard ? auditBoard.rows || [] : [];
+          hasData = true;
+          renderAll();
+          updatedEl.textContent =
+            'Updated ' + UI.fmtTime(new Date(data.ts || Date.now()).toISOString());
+        } catch (error) {
+          if (!hasData) {
+            statsEl.innerHTML = UI.errorState(
+              'Audit log unavailable',
+              error.message || String(error),
+            );
+            timelineEl.innerHTML = UI.errorState(
+              'Could not load decisions',
+              error.message || String(error),
+            );
+          }
+          updatedEl.textContent = 'Last refresh failed';
+        }
+      }
+
+      function renderLookup(tombstone) {
+        if (!tombstone) {
+          lookupResult.innerHTML = UI.emptyState(
+            'No cold tombstone',
+            'That hash is not in the Turso tombstone ledger.',
+            'database',
+          );
+          return;
+        }
+        lookupResult.innerHTML =
+          '<div class="lookup-card">' +
+          '<div class="lookup-title">' +
+          UI.esc(tombstone.terminal_status || 'tombstoned') +
+          '</div>' +
+          '<dl class="kv">' +
+          '<dt>URL hash</dt><dd class="mono">' +
+          UI.esc(tombstone.url_hash) +
+          '</dd>' +
+          '<dt>Fingerprint</dt><dd class="mono">' +
+          UI.esc(tombstone.fingerprint) +
+          '</dd>' +
+          '<dt>Terminal</dt><dd>' +
+          UI.esc(tombstone.terminal_status) +
+          '</dd>' +
+          '<dt>Source</dt><dd>' +
+          UI.esc(tombstone.source || '—') +
+          '</dd>' +
+          '<dt>Decided</dt><dd>' +
+          UI.esc(UI.fmtDateTime(tombstone.decided_at)) +
+          '</dd>' +
+          '</dl>' +
+          '</div>';
+      }
+
+      async function lookup(hash) {
+        const clean = safeHash(hash);
+        if (!clean) return;
+        lookupInput.value = clean;
+        lookupResult.innerHTML = UI.loadingState('Querying the cold ledger…');
+        lookupBtn.disabled = true;
+        try {
+          const data = await Api.auditOlder(clean);
+          renderLookup(data ? data.tombstone : null);
+        } catch (error) {
+          lookupResult.innerHTML = UI.errorState(
+            'Lookup failed',
+            error.message || String(error),
+          );
+        } finally {
+          lookupBtn.disabled = false;
+        }
+      }
+
+      refreshBtn.innerHTML = icon('refresh', 14) + 'Refresh';
+
+      refreshBtn.addEventListener('click', refresh);
+      statusSelect.addEventListener('change', renderTimeline);
+      searchInput.addEventListener('input', UI.debounce(renderTimeline, 200));
+
+      lookupForm.addEventListener('submit', function (event) {
+        event.preventDefault();
+        lookup(lookupInput.value);
+      });
+
+      lookupClear.addEventListener('click', function () {
+        lookupInput.value = '';
+        lookupResult.innerHTML =
+          '<p class="hint" style="margin:0">Cold rows survive the 24-hour hot ring. Lookups are read-only.</p>';
+        lookupInput.focus();
+      });
+
+      timelineEl.addEventListener('click', function (event) {
+        const button = event.target.closest('[data-lookup]');
+        if (!button) return;
+        const hash = button.getAttribute('data-lookup');
+        lookup(hash);
+        lookupInput.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      });
+
+      statsEl.innerHTML = UI.loadingState('Reading the audit log…');
+      timelineEl.innerHTML = UI.loadingState('Reading the audit log…');
+      UI.poll(refresh, 15_000);
+    })();
+  </script>
+</body>
+</html>

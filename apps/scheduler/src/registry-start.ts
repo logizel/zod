@@ -20,6 +20,7 @@ import {
   type TickLogger,
 } from '@zod/scheduler-registry';
 import { createPbClient } from '@zod/db-hot';
+import { recordMachineEvent } from '@zod/db-hot/machine-events';
 import { runPersistentGc } from '@zod/dashboard-server/gc';
 import { createOpsAlertSender } from '@zod/dashboard-server/alerts';
 import { createTursoClient, clientExecutor } from '@zod/db-cold';
@@ -61,6 +62,13 @@ export async function startSchedulerRegistry(log: TickLogger): Promise<RegistryH
         pb as unknown as Parameters<typeof writeBucketState>[0],
         input,
       );
+    },
+    recordMachineEvent: (event) => {
+      const label = String(event.pipeline ?? '');
+      const pipeline = (['local', 'events', 'jobs', 'loot', 'social'] as const).includes(label as never)
+        ? (label as 'local' | 'events' | 'jobs' | 'loot' | 'social')
+        : '';
+      recordMachineEvent(pb, { ...event, event_type: 'llm', pipeline });
     },
   };
   const router = new LlmRouter(telemetrySink);
@@ -112,7 +120,9 @@ export async function startSchedulerRegistry(log: TickLogger): Promise<RegistryH
   // alerts (#🛠-ops-health). Scheduler never opens a second Discord gateway.
   const sendOpsAlert = createOpsAlertSender({ env, log });
   const gcHandle = registerGcJob(log, undefined, {
+    pb,
     tickHandler: async (_def, jobLog) => {
+      const startedAt = Date.now();
       const result = await runPersistentGc({
         pb,
         env,
@@ -120,6 +130,21 @@ export async function startSchedulerRegistry(log: TickLogger): Promise<RegistryH
         nowMs: Date.now(),
         sendAlert: sendOpsAlert,
       });
+      try {
+        recordMachineEvent(pb, {
+          trace_id: 'job:gc-midnight-purge',
+          agent: 'scheduler:gc-midnight-purge',
+          pipeline: '',
+          event_type: 'gc',
+          tool: 'gc.midnight',
+          status: 'ok',
+          duration_ms: Date.now() - startedAt,
+          detail: `purged ${result.purged}, compacted ${result.compacted}, errors ${result.errors}`,
+          meta: { ...result },
+        });
+      } catch {
+        // Best-effort observability.
+      }
       jobLog.info({ job: 'gc-midnight-purge', ...result }, 'gc-midnight-purge tick');
     },
   });

@@ -1,6 +1,6 @@
 // Hot-memory collection schemas (D-09, D-15).
 //
-// Five collections ship NOW even though writers land in later phases — this
+// Six collections ship NOW even though writers land in later phases — this
 // module is the contract every Phase 2+ pipeline depends on. One-way lock:
 // once data exists, changes need a migration (see 01-02 SUMMARY Task 1).
 //
@@ -40,6 +40,29 @@ export type OpportunityStatus = z.infer<typeof OpportunityStatus>;
 export const TELEMETRY_STATUSES = ['active', 'done', 'cooldown', 'error'] as const;
 export const TelemetryStatus = z.enum(TELEMETRY_STATUSES);
 export type TelemetryStatus = z.infer<typeof TelemetryStatus>;
+
+/** Fine-grained machine event classes for the local glass feed. */
+export const MACHINE_EVENT_TYPES = [
+  'scheduler',
+  'scout',
+  'dedup',
+  'fetch',
+  'sanitize',
+  'scratchpad',
+  'llm',
+  'orchestrator',
+  'discord',
+  'gc',
+  'db',
+  'system',
+] as const;
+export const MachineEventType = z.enum(MACHINE_EVENT_TYPES);
+export type MachineEventType = z.infer<typeof MachineEventType>;
+
+/** Machine event lifecycle states. */
+export const MACHINE_EVENT_STATUSES = ['start', 'ok', 'error', 'skip', 'cooldown'] as const;
+export const MachineEventStatus = z.enum(MACHINE_EVENT_STATUSES);
+export type MachineEventStatus = z.infer<typeof MachineEventStatus>;
 
 // ---------------------------------------------------------------------------
 // opportunities (MEM-01)
@@ -146,6 +169,52 @@ export const AgentTelemetryRow = AgentTelemetry.extend({
 export type AgentTelemetryRow = z.infer<typeof AgentTelemetryRow>;
 
 // ---------------------------------------------------------------------------
+// machine_events — append-only fine-grained machinery log (24h ring)
+// ---------------------------------------------------------------------------
+//
+// Complements agent_telemetry: agent_telemetry is an upsert-per-slot snapshot,
+// machine_events is history. One row per machine operation (fetch, sanitize,
+// LLM attempt, orchestrator verdict, Discord post, scheduler tick, ...) so the
+// local Machine Glass page can show every tool call for a candidate.
+
+export const MachineEvent = z.object({
+  /** Grouping key: url hash for candidate work, job name for scheduler work. */
+  trace_id: z.string().default(''),
+  /** Rolling agent/worker id (e.g. "auditor-events-1", "scheduler"). */
+  agent: z.string().min(1),
+  /** Pipeline label; empty for system-only events. */
+  pipeline: Pipeline.or(z.literal('')).default(''),
+  event_type: MachineEventType,
+  /** Concrete tool: "groq.chat", "jina.reader", "playwright.fetch", "discord.post". */
+  tool: z.string().min(1),
+  provider: z.string().default(''),
+  model: z.string().default(''),
+  /** Pipeline micro-step (e.g. "STEP_3-audit"). */
+  step: z.string().default(''),
+  status: MachineEventStatus,
+  duration_ms: z.number().min(0).optional(),
+  url: z.string().default(''),
+  /** Truncated request/input summary (GC-purged after 24h). */
+  input_summary: z.string().default(''),
+  /** Truncated response/output summary (GC-purged after 24h). */
+  output_summary: z.string().default(''),
+  /** Heavy-text detail ticker (GC-purged after 24h). */
+  detail: z.string().default(''),
+  /** Baton-pass target on 429/413 (e.g. "cerebras:qwen-3-32b"). */
+  baton_to: z.string().default(''),
+  /** Arbitrary structured metadata (counts, bytes, gate results). */
+  meta: z.record(z.string(), z.unknown()).default({}),
+});
+export type MachineEvent = z.infer<typeof MachineEvent>;
+
+export const MachineEventRow = MachineEvent.extend({
+  id: z.string().min(1),
+  created: z.iso.datetime(),
+  updated: z.iso.datetime(),
+}).catchall(z.unknown());
+export type MachineEventRow = z.infer<typeof MachineEventRow>;
+
+// ---------------------------------------------------------------------------
 // task_scratchpad — atomic STEP_1..STEP_4 position + partial stream buffer
 // ---------------------------------------------------------------------------
 
@@ -218,6 +287,7 @@ export type TasteRuleRow = z.infer<typeof TasteRuleRow>;
 export const HOT_COLLECTIONS = [
   'opportunities',
   'agent_telemetry',
+  'machine_events',
   'task_scratchpad',
   'tombstone_ledger',
   'taste_rules',
@@ -230,6 +300,8 @@ export const INDEX_NOTES: Record<HotCollection, readonly string[]> = {
   opportunities: ['fingerprint_hash (unique)', 'url_hash', 'status', 'end_date', 'pipeline + status'],
   // Ring trim scans by age; slot boards filter by slot + recency.
   agent_telemetry: ['created', 'slot + created'],
+  // Append-only glass feed: newest-first scans + per-agent/per-type/per-trace slices.
+  machine_events: ['created', 'agent + created', 'event_type + created', 'trace_id + created'],
   // Resume-by-URL after a crash must be a point lookup; step_position is the
   // drain filter for the Phase 5 audit orchestrator (STEP_2 rows).
   task_scratchpad: ['candidate_url (unique)', 'step_position'],

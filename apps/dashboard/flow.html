@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Pipeline Flow · Zod</title>
+  <link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body data-page="flow" data-mode="poll">
+  <div class="app">
+    <aside class="sidebar" id="sidebar"></aside>
+    <div class="main">
+      <header class="topbar" id="topbar"></header>
+      <main class="page">
+        <div class="toolbar">
+          <div class="inline-actions">
+            <span class="hint" id="flow-updated">Waiting for a snapshot…</span>
+          </div>
+          <div class="inline-actions">
+            <span class="hint">Refreshes every 10 s</span>
+            <button class="btn ghost" id="refresh-flow" type="button"></button>
+          </div>
+        </div>
+        <div class="kanban-wrap">
+          <div class="kanban" id="kanban"></div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script src="/assets/icons.js"></script>
+  <script src="/assets/shell.js"></script>
+  <script src="/assets/api.js"></script>
+  <script>
+    (function () {
+      'use strict';
+      const UI = window.ZodUI;
+      const Api = window.ZodApi;
+      const kanban = document.getElementById('kanban');
+      const updatedEl = document.getElementById('flow-updated');
+      const refreshBtn = document.getElementById('refresh-flow');
+
+      let hasData = false;
+
+      refreshBtn.innerHTML = UI.icon('refresh', 14) + 'Refresh';
+
+      function safeUrl(url) {
+        try {
+          const parsed = new URL(String(url));
+          return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? parsed.href : '';
+        } catch {
+          return '';
+        }
+      }
+
+      function cardMarkup(card, stage) {
+        const url = safeUrl(card.url);
+        const tag = url ? 'a' : 'div';
+        const attrs = url
+          ? ' href="' + UI.esc(url) + '" target="_blank" rel="noreferrer"'
+          : '';
+        const source = card.source || UI.hostOf(card.url) || 'unknown source';
+        const channel = card.channel
+          ? '<span class="chip chip-xs">' + UI.esc(card.channel) + '</span>'
+          : '';
+        const model = [card.provider, card.model].filter(Boolean).join(' · ');
+        return (
+          '<' +
+          tag +
+          ' class="kcard" style="--stage-soft:' +
+          stage.soft +
+          ';--stage-color:' +
+          stage.color +
+          '"' +
+          attrs +
+          '>' +
+          '<div class="kcard-top"><span class="kcard-source">' +
+          UI.icon('external', 10) +
+          UI.esc(source) +
+          '</span>' +
+          (card.prize_cash_inr !== null && card.prize_cash_inr !== undefined
+            ? '<span class="kcard-prize">' + UI.fmtCurrency(card.prize_cash_inr) + '</span>'
+            : '') +
+          '</div>' +
+          '<h3>' +
+          UI.esc(card.title || 'Untitled candidate') +
+          '</h3>' +
+          '<div class="kcard-tags"><span class="pipe-tag ' +
+          UI.pipelineClass(card.pipeline) +
+          '">' +
+          UI.esc(card.pipeline || 'unknown') +
+          '</span>' +
+          channel +
+          '</div>' +
+          (model || card.tool
+            ? '<div class="kcard-tool">' +
+              (model ? '<span class="chip chip-xs">' + UI.esc(model) + '</span>' : '') +
+              (card.tool ? '<span class="chip chip-xs">' + UI.esc(card.tool) + '</span>' : '') +
+              '</div>'
+            : '') +
+          '<div class="kcard-foot">' +
+          UI.dots(UI.stages.findIndex((s) => s.key === stage.key)) +
+          '<span class="kcard-time">' +
+          UI.esc(UI.timeAgo(card.updated)) +
+          '</span>' +
+          '</div>' +
+          '</' +
+          tag +
+          '>'
+        );
+      }
+
+      function render(data) {
+        const stages = data.stages || {};
+        const counts = data.counts || {};
+        kanban.innerHTML = UI.stages
+          .map((stage) => {
+            const cards = Array.isArray(stages[stage.key]) ? stages[stage.key] : [];
+            return (
+              '<section class="kanban-col" style="--stage-color:' +
+              stage.color +
+              ';--stage-soft:' +
+              stage.soft +
+              '">' +
+              '<div class="kanban-head"><span class="kanban-title"><span class="kanban-dot"></span>' +
+              stage.label +
+              '</span><span class="kanban-count">' +
+              UI.fmtNumber(counts[stage.key] || cards.length) +
+              '</span></div>' +
+              '<div class="kanban-hint">' +
+              stage.hint +
+              '</div>' +
+              (cards.length
+                ? cards.map((card) => cardMarkup(card, stage)).join('')
+                : '<div class="kanban-empty">No cards here</div>') +
+              '</section>'
+            );
+          })
+          .join('');
+        updatedEl.textContent =
+          'Snapshot ' +
+          UI.fmtTime(new Date(data.ts || Date.now()).toISOString()) +
+          ' IST · ' +
+          UI.fmtNumber(
+            Object.values(counts).reduce((sum, value) => sum + Number(value || 0), 0),
+          ) +
+          ' cards';
+      }
+
+      async function refresh() {
+        try {
+          const data = await Api.overview();
+          hasData = true;
+          render(data);
+        } catch (error) {
+          if (!hasData) {
+            kanban.innerHTML = UI.errorState('Flow unavailable', error.message || String(error));
+            updatedEl.textContent = 'Last refresh failed';
+          }
+        }
+      }
+
+      refreshBtn.addEventListener('click', refresh);
+      UI.poll(refresh, 10_000);
+    })();
+  </script>
+</body>
+</html>

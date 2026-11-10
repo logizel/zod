@@ -18,6 +18,10 @@
       "types": "./dist/telemetry.d.ts",
       "default": "./dist/telemetry.js"
     },
+    "./machine-events": {
+      "types": "./dist/machine-events.d.ts",
+      "default": "./dist/machine-events.js"
+    },
     "./scratchpad": {
       "types": "./dist/scratchpad.d.ts",
       "default": "./dist/scratchpad.js"

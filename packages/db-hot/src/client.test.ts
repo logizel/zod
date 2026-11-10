@@ -82,6 +82,10 @@ describe('createPbClient (mocked transport)', () => {
 
     // Auth store holds the service token + record (proves store wiring).
     expect(pb.authStore.token).toBe(AUTH_TOKEN);
+    // Server-side use: duplicate in-flight reads must not cancel each other.
+    expect((pb as unknown as { enableAutoCancellation: boolean }).enableAutoCancellation).toBe(
+      false,
+    );
     const record = pb.authStore.record as { email?: unknown } | null;
     expect(record?.email).toBe(TEST_ENV.PB_SERVICE_EMAIL);
 
@@ -118,10 +122,11 @@ describe('collection schemas (five-collection lock)', () => {
     description_raw: '<heavy text, first GC purge target>',
   };
 
-  it('exports validators for all five locked collections', () => {
+  it('exports validators for all six locked collections', () => {
     expect(HOT_COLLECTIONS).toEqual([
       'opportunities',
       'agent_telemetry',
+      'machine_events',
       'task_scratchpad',
       'tombstone_ledger',
       'taste_rules',

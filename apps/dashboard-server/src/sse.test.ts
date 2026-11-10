@@ -296,3 +296,154 @@ describe('SseHub bucket states + 429 baton-pass slots', () => {
     expect(parsed.bucketStates.find((b: any) => b.provider === 'mistral').state).toBe('60s-COOLDOWN');
   });
 });
+
+// ---------------------------------------------------------------------------
+// machine_events tail + enriched slot activity
+// ---------------------------------------------------------------------------
+
+function machineEvent(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    id: 'me-1',
+    created: '2026-11-10T10:00:00.000Z',
+    updated: '2026-11-10T10:00:00.000Z',
+    trace_id: 'trace-1',
+    agent: 'auditor-events-1',
+    pipeline: 'events',
+    event_type: 'llm',
+    tool: 'groq.chat',
+    provider: 'groq',
+    model: 'llama-3.3-70b',
+    step: 'STEP_3-audit',
+    status: 'start',
+    url: 'https://example.com/event',
+    detail: 'auditing event',
+    baton_to: '',
+    meta: {},
+    ...overrides,
+  };
+}
+
+describe('SseHub machine events', () => {
+  it('subscribes once to machine_events', () => {
+    const pb = makeFakePb();
+    const hub = new SseHub(pb, makeLog());
+    hub.start();
+
+    const subs = pb.subscriptions.get('machine_events')?.get('*') ?? [];
+    expect(subs).toHaveLength(1);
+    hub.stop();
+  });
+
+  it('delta carries new events and enriches the matching slot', () => {
+    const pb = makeFakePb();
+    const hub = new SseHub(
+      pb,
+      makeLog(),
+      [],
+      [
+        {
+          provider: 'groq',
+          model: 'llama-3.3-70b',
+          step: 'STEP_3-audit',
+          status: 'active',
+          batonPass: null,
+          agent: 'auditor-events-1',
+        },
+      ],
+    );
+    hub.start();
+
+    const handlers = pb.subscriptions.get('machine_events')!.get('*')!;
+    handlers[0]({ record: machineEvent() });
+
+    const client = makeFakeClient();
+    hub.addClient(client, false);
+    (hub as any).pushDelta();
+
+    const parsed = JSON.parse(client.written[0].replace(/^data: /, ''));
+    expect(parsed.events).toHaveLength(1);
+    expect(parsed.events[0]).toMatchObject({
+      id: 'me-1',
+      tool: 'groq.chat',
+      status: 'start',
+      trace_id: 'trace-1',
+    });
+    const slot = parsed.slots.find((s: any) => s.agent === 'auditor-events-1');
+    expect(slot).toMatchObject({
+      currentTool: 'groq.chat',
+      lastEventAt: '2026-11-10T10:00:00.000Z',
+      startedAt: '2026-11-10T10:00:00.000Z',
+      detail: 'auditing event',
+    });
+  });
+
+  it('marks a 429 cooldown event with its baton-pass target', () => {
+    const pb = makeFakePb();
+    const hub = new SseHub(pb, makeLog());
+    hub.start();
+
+    const handlers = pb.subscriptions.get('machine_events')!.get('*')!;
+    handlers[0]({
+      record: machineEvent({
+        id: 'me-429',
+        status: 'cooldown',
+        baton_to: 'cerebras:qwen-3-32b',
+        meta: { reason: '429' },
+      }),
+    });
+
+    const client = makeFakeClient();
+    hub.addClient(client);
+    const parsed = JSON.parse(client.written[0].replace(/^data: /, ''));
+    const slot = parsed.slots.find((s: any) => s.agent === 'auditor-events-1');
+    expect(slot.status).toBe('cooldown');
+    expect(slot.batonPass).toEqual({
+      from: 'groq:llama-3.3-70b',
+      to: 'cerebras:qwen-3-32b',
+      reason: '429',
+    });
+  });
+
+  it('clears pending events after a coalesced push and dedupes repeats', () => {
+    const pb = makeFakePb();
+    const hub = new SseHub(pb, makeLog());
+    hub.start();
+    const handlers = pb.subscriptions.get('machine_events')!.get('*')!;
+    const client = makeFakeClient();
+    hub.addClient(client, false);
+
+    handlers[0]({ record: machineEvent({ id: 'one' }) });
+    handlers[0]({ record: machineEvent({ id: 'one' }) });
+    (hub as any).pushDelta();
+    (hub as any).pushDelta();
+
+    const first = JSON.parse(client.written[0].replace(/^data: /, ''));
+    const second = JSON.parse(client.written[1].replace(/^data: /, ''));
+    expect(first.events.map((e: any) => e.id)).toEqual(['one']);
+    expect(second.events).toEqual([]);
+  });
+
+  it('hydrates history into the rolling tail without replaying it as new', async () => {
+    const rows = [
+      machineEvent({ id: 'newer', created: '2026-11-10T10:02:00.000Z' }),
+      machineEvent({ id: 'older', created: '2026-11-10T10:01:00.000Z', tool: 'jina.reader' }),
+    ];
+    const pb = {
+      collection: (name: string) => ({
+        subscribe: () => ({ unsubscribe: () => undefined }),
+        getList: async () => ({ items: name === 'machine_events' ? rows : [] }),
+      }),
+    } as any;
+    const hub = new SseHub(pb, makeLog());
+    await hub.hydrate();
+
+    const client = makeFakeClient();
+    hub.addClient(client);
+    const parsed = JSON.parse(client.written[0].replace(/^data: /, ''));
+    expect(parsed.events).toEqual([]);
+    // Hydration applies oldest first, so the newest tool wins on the slot.
+    const slot = parsed.slots.find((s: any) => s.agent === 'auditor-events-1');
+    expect(slot.currentTool).toBe('groq.chat');
+    expect((hub as any).machineEvents.map((e: any) => e.id)).toEqual(['newer', 'older']);
+  });
+});

@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Boards · Zod</title>
+  <link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body data-page="boards" data-mode="poll">
+  <div class="app">
+    <aside class="sidebar" id="sidebar"></aside>
+    <div class="main">
+      <header class="topbar" id="topbar"></header>
+      <main class="page">
+        <div class="stats-grid" id="board-stats"></div>
+
+        <div class="toolbar">
+          <div class="filters">
+            <div class="field">
+              <label for="f-from">From</label>
+              <input class="input" type="datetime-local" id="f-from">
+            </div>
+            <div class="field">
+              <label for="f-to">To</label>
+              <input class="input" type="datetime-local" id="f-to">
+            </div>
+            <div class="field">
+              <label for="f-channel">Channel</label>
+              <select class="select" id="f-channel"><option value="">All channels</option></select>
+            </div>
+            <div class="field">
+              <label for="f-status">Status</label>
+              <select class="select" id="f-status">
+                <option value="">All statuses</option>
+                <option value="candidate">candidate</option>
+                <option value="audited">audited</option>
+                <option value="routed">routed</option>
+                <option value="rejected">rejected</option>
+                <option value="tombstoned">tombstoned</option>
+                <option value="expired">expired</option>
+              </select>
+            </div>
+            <div class="field" style="min-width:94px">
+              <label for="f-prize-min">Prize min ₹</label>
+              <input class="input" type="number" min="0" step="1000" inputmode="numeric" id="f-prize-min" placeholder="0">
+            </div>
+            <div class="field" style="min-width:94px">
+              <label for="f-prize-max">Prize max ₹</label>
+              <input class="input" type="number" min="0" step="1000" inputmode="numeric" id="f-prize-max" placeholder="Any">
+            </div>
+            <div class="field grow">
+              <label for="f-q">Search</label>
+              <input class="input" type="search" id="f-q" placeholder="Title or organizer…">
+            </div>
+          </div>
+          <div class="inline-actions">
+            <span class="hint" id="board-updated">Waiting for a snapshot…</span>
+            <button class="btn ghost" id="board-reset" type="button"></button>
+            <button class="btn subtle" id="board-refresh" type="button"></button>
+          </div>
+        </div>
+
+        <section class="card panel flush">
+          <div class="table-toolbar">
+            <div>
+              <h2 class="table-title">Opportunity boards</h2>
+              <p class="table-sub" id="board-sub">Active and upcoming, plus the last seven days.</p>
+            </div>
+            <div class="tabs" id="board-tabs" role="tablist" aria-label="Opportunity boards"></div>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Opportunity</th>
+                  <th>Pipeline</th>
+                  <th>Channel</th>
+                  <th>Status</th>
+                  <th class="num">Prize</th>
+                  <th class="num">Deadline</th>
+                  <th class="actions">Source</th>
+                </tr>
+              </thead>
+              <tbody id="board-rows"></tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <div class="drawer-overlay" id="drawer-overlay"></div>
+  <aside class="drawer" id="drawer" aria-hidden="true" aria-label="Cold tombstone ledger">
+    <div class="drawer-head">
+      <div style="min-width:0">
+        <div class="drawer-eyebrow">Cold ledger · Turso</div>
+        <h2 class="drawer-title" id="drawer-title">Tombstone</h2>
+        <div class="drawer-sub" id="drawer-sub"></div>
+      </div>
+      <button class="icon-btn" id="drawer-close" type="button" aria-label="Close ledger lookup"></button>
+    </div>
+    <div class="drawer-body" id="drawer-body"></div>
+  </aside>
+
+  <script src="/assets/icons.js"></script>
+  <script src="/assets/shell.js"></script>
+  <script src="/assets/api.js"></script>
+  <script>
+    (function () {
+      'use strict';
+      const UI = window.ZodUI;
+      const Api = window.ZodApi;
+      const icon = UI.icon;
+
+      const TAB_KEY = 'zod:dashboard:activeTab';
+
+      const TAB_DEFS = [
+        { tab: 'events-local', label: 'Events · Local', short: 'Local' },
+        { tab: 'events-travel', label: 'Events · Travel', short: 'Travel' },
+        { tab: 'events-online', label: 'Events · Online', short: 'Online' },
+        { tab: 'tba-queue', label: 'TBA Queue', short: 'TBA' },
+        { tab: 'jobs-sys', label: 'Jobs · Systems', short: 'Sys' },
+        { tab: 'jobs-general', label: 'Jobs · General', short: 'General' },
+        { tab: 'loot', label: 'Loot', short: 'Loot' },
+        { tab: 'audit-log', label: 'Audit Log', short: 'Audit' },
+      ];
+      const TAB_KEYS = new Set(TAB_DEFS.map((def) => def.tab));
+
+      const statsEl = document.getElementById('board-stats');
+      const tabsEl = document.getElementById('board-tabs');
+      const rowsEl = document.getElementById('board-rows');
+      const subEl = document.getElementById('board-sub');
+      const updatedEl = document.getElementById('board-updated');
+      const resetBtn = document.getElementById('board-reset');
+      const refreshBtn = document.getElementById('board-refresh');
+
+      const fromInput = document.getElementById('f-from');
+      const toInput = document.getElementById('f-to');
+      const channelSelect = document.getElementById('f-channel');
+      const statusSelect = document.getElementById('f-status');
+      const prizeMinInput = document.getElementById('f-prize-min');
+      const prizeMaxInput = document.getElementById('f-prize-max');
+      const searchInput = document.getElementById('f-q');
+
+      const drawer = document.getElementById('drawer');
+      const overlay = document.getElementById('drawer-overlay');
+      const drawerTitle = document.getElementById('drawer-title');
+      const drawerSub = document.getElementById('drawer-sub');
+      const drawerBody = document.getElementById('drawer-body');
+      const drawerClose = document.getElementById('drawer-close');
+
+      let boards = [];
+      let activeTab = readStoredTab();
+      let hasData = false;
+      let requestSeq = 0;
+      let channelOptions = new Set();
+      let lastFocus = null;
+
+      function readStoredTab() {
+        try {
+          const stored = localStorage.getItem(TAB_KEY);
+          if (stored && TAB_KEYS.has(stored)) return stored;
+        } catch {
+          /* private mode */
+        }
+        return 'events-local';
+      }
+
+      function storeTab(tab) {
+        try {
+          localStorage.setItem(TAB_KEY, tab);
+        } catch {
+          /* private mode */
+        }
+      }
+
+      function safeUrl(value) {
+        try {
+          const parsed = new URL(String(value));
+          return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? parsed.href : '';
+        } catch {
+          return '';
+        }
+      }
+
+      function linkFrom(value) {
+        if (!value) return '';
+        if (typeof value === 'string') {
+          if (value.trim().startsWith('{')) {
+            try {
+              return linkFrom(JSON.parse(value));
+            } catch {
+              return safeUrl(value);
+            }
+          }
+          return safeUrl(value);
+        }
+        if (Array.isArray(value)) {
+          for (const entry of value) {
+            const found = linkFrom(entry);
+            if (found) return found;
+          }
+          return '';
+        }
+        if (typeof value === 'object') {
+          for (const key of ['url', 'href', 'link']) {
+            const found = safeUrl(value[key]);
+            if (found) return found;
+          }
+        }
+        return '';
+      }
+
+      function primaryLink(row) {
+        let links = row.links;
+        if (typeof links === 'string') {
+          try {
+            links = JSON.parse(links);
+          } catch {
+            links = null;
+          }
+        }
+        if (links && typeof links === 'object') {
+          for (const key of ['official', 'registration', 'apply', 'source', 'event']) {
+            const found = linkFrom(links[key]);
+            if (found) return found;
+          }
+          for (const value of Object.values(links)) {
+            const found = linkFrom(value);
+            if (found) return found;
+          }
+        }
+        return safeUrl(row.url);
+      }
+
+      function boardPillClass(status) {
+        const value = String(status || '').toLowerCase();
+        if (value === 'rejected' || value === 'tombstoned') return 'error';
+        if (value === 'routed') return 'ok';
+        if (value === 'audited') return 'start';
+        if (value === 'expired') return 'skip';
+        return UI.pillClass(value);
+      }
+
+      function buildParams() {
+        const params = {};
+        if (fromInput.value) {
+          const from = new Date(fromInput.value);
+          if (Number.isFinite(from.getTime())) params.start_date = from.toISOString();
+        }
+        if (toInput.value) {
+          const to = new Date(toInput.value);
+          if (Number.isFinite(to.getTime())) params.end_date = to.toISOString();
+        }
+        if (channelSelect.value) params.channel = channelSelect.value;
+        if (statusSelect.value) params.status = statusSelect.value;
+        if (prizeMinInput.value !== '') params.prize_min = prizeMinInput.value;
+        if (prizeMaxInput.value !== '') params.prize_max = prizeMaxInput.value;
+        if (searchInput.value.trim()) params.q = searchInput.value.trim();
+        return params;
+      }
+
+      function activeFilters() {
+        return Object.keys(buildParams()).length;
+      }
+
+      function collectChannels() {
+        for (const board of boards) {
+          for (const row of board.rows || []) {
+            const channel = String(row.bucket_channel || '');
+            if (channel) channelOptions.add(channel);
+          }
+        }
+        const current = channelSelect.value;
+        channelSelect.innerHTML =
+          '<option value="">All channels</option>' +
+          [...channelOptions]
+            .sort((a, b) => a.localeCompare(b))
+            .map(
+              (channel) =>
+                '<option value="' + UI.esc(channel) + '">' + UI.esc(channel) + '</option>',
+            )
+            .join('');
+        channelSelect.value = channelOptions.has(current) ? current : '';
+      }
+
+      function allRows() {
+        const seen = new Map();
+        for (const board of boards) {
+          for (const row of board.rows || []) {
+            const key = String(row.url_hash || row.id || row.title || Math.random());
+            if (!seen.has(key)) seen.set(key, row);
+          }
+        }
+        return [...seen.values()];
+      }
+
+      function renderStats() {
+        if (!hasData) {
+          statsEl.innerHTML = UI.loadingState('Reading opportunity boards…');
+          return;
+        }
+        const rows = allRows();
+        const routed = rows.filter((row) => row.status === 'routed').length;
+        const audited = rows.filter((row) => row.status === 'audited').length;
+        const rejected = rows.filter(
+          (row) => row.status === 'rejected' || row.status === 'tombstoned',
+        ).length;
+        const channels = new Set(
+          rows.map((row) => String(row.bucket_channel || '')).filter(Boolean),
+        ).size;
+        const cards = [
+          {
+            tint: 'tint-lav',
+            icon: 'boards',
+            value: UI.fmtNumber(rows.length),
+            label: 'Opportunities',
+            sub: activeFilters() ? 'matching current filters' : 'in the board window',
+            note: 'window',
+          },
+          {
+            tint: 'tint-mint',
+            icon: 'send',
+            value: UI.fmtNumber(routed),
+            label: 'Routed',
+            sub: 'posted to Discord',
+            note: 'delivered',
+          },
+          {
+            tint: 'tint-sky',
+            icon: 'search',
+            value: UI.fmtNumber(audited),
+            label: 'Audited',
+            sub: 'passed the gate, not routed',
+            note: 'verified',
+          },
+          {
+            tint: 'tint-pink',
+            icon: 'shield',
+            value: UI.fmtNumber(rejected),
+            label: 'Rejected',
+            sub: 'rejected or tombstoned',
+            note: 'audit',
+          },
+          {
+            tint: 'tint-peach',
+            icon: 'route',
+            value: UI.fmtNumber(channels),
+            label: 'Channels',
+            sub: 'distinct routing targets',
+            note: 'routes',
+          },
+        ];
+        statsEl.innerHTML = cards
+          .map(
+            (card) =>
+              '<article class="stat-card ' +
+              card.tint +
+              '">' +
+              '<div class="stat-top"><span class="stat-icon">' +
+              icon(card.icon, 17) +
+              '</span><span class="stat-note">' +
+              card.note +
+              '</span></div>' +
+              '<div class="stat-value">' +
+              card.value +
+              '</div>' +
+              '<div class="stat-label">' +
+              card.label +
+              '</div>' +
+              '<div class="stat-sub">' +
+              card.sub +
+              '</div>' +
+              '</article>',
+          )
+          .join('');
+      }
+
+      function renderTabs() {
+        const counts = new Map(boards.map((board) => [board.tab, board.count]));
+        tabsEl.innerHTML = TAB_DEFS.map((def) => {
+          const active = def.tab === activeTab;
+          return (
+            '<button class="tab' +
+            (active ? ' active' : '') +
+            '" type="button" role="tab" aria-selected="' +
+            (active ? 'true' : 'false') +
+            '" data-tab="' +
+            def.tab +
+            '">' +
+            UI.esc(def.label) +
+            '<span class="count">' +
+            UI.fmtNumber(counts.get(def.tab) || 0) +
+            '</span></button>'
+          );
+        }).join('');
+      }
+
+      function currentBoard() {
+        return boards.find((board) => board.tab === activeTab) || null;
+      }
+
+      function opportunityCell(row) {
+        const title = String(row.title || 'Untitled opportunity');
+        const organizer = String(row.organizer || '');
+        const isTombstone = String(row.pipeline) === 'tombstone' || Boolean(row.terminal_status);
+        const tags = [];
+        if (isTombstone) {
+          tags.push(
+            '<span class="chip chip-xs">' +
+              UI.esc(row.terminal_status || 'tombstoned') +
+              '</span>',
+          );
+          if (row.source) tags.push('<span class="chip chip-xs">' + UI.esc(row.source) + '</span>');
+          if (row.url_hash) {
+            tags.push(
+              '<span class="mono" title="' + UI.esc(row.url_hash) + '">' +
+                UI.esc(String(row.url_hash).slice(0, 12)) +
+                '…</span>',
+            );
+          }
+        } else if (row.deadlines && row.deadlines.tba === true) {
+          tags.push('<span class="chip chip-xs amber">TBA</span>');
+        }
+        return (
+          '<div class="row-title">' +
+          UI.esc(title) +
+          '</div>' +
+          '<div class="row-sub">' +
+          (organizer ? UI.esc(organizer) : '') +
+          (tags.length ? (organizer ? ' · ' : '') + tags.join(' ') : '') +
+          '</div>'
+        );
+      }
+
+      function sourceCell(row) {
+        const isAudit = String(row.pipeline) === 'tombstone' || Boolean(row.terminal_status);
+        const hash = String(row.url_hash || '');
+        const link = primaryLink(row);
+        if (isAudit && hash) {
+          return (
+            '<button class="btn ghost" type="button" data-hash="' +
+            UI.esc(hash) +
+            '" title="Look up ' +
+            UI.esc(hash) +
+            ' in the cold tombstone ledger">Cold ledger</button>'
+          );
+        }
+        if (link) {
+          return (
+            '<a class="text-link" href="' +
+            UI.esc(link) +
+            '" target="_blank" rel="noreferrer" title="' +
+            UI.esc(link) +
+            '">' +
+            icon('arrow-up-right', 12) +
+            'Official</a>'
+          );
+        }
+        return '<span class="muted">—</span>';
+      }
+
+      function renderRows() {
+        const board = currentBoard();
+        if (!hasData) {
+          rowsEl.innerHTML =
+            '<tr><td colspan="7" class="table-empty">Reading boards…</td></tr>';
+          subEl.textContent = 'Active and upcoming, plus the last seven days.';
+          return;
+        }
+        if (!board) {
+          rowsEl.innerHTML =
+            '<tr><td colspan="7" class="table-empty">Unknown board tab.</td></tr>';
+          return;
+        }
+        subEl.textContent =
+          board.rows.length +
+          (board.rows.length === 1 ? ' row' : ' rows') +
+          ' · ' +
+          board.window +
+          (activeFilters() ? ' · filtered' : '');
+        if (!board.rows.length) {
+          rowsEl.innerHTML =
+            '<tr><td colspan="7" class="table-empty">' +
+            (activeFilters()
+              ? 'No rows match these filters. Clear a filter to widen the view.'
+              : 'No opportunities in this board yet.') +
+            '</td></tr>';
+          return;
+        }
+        rowsEl.innerHTML = board.rows
+          .map((row) => {
+            const status = String(row.status || 'candidate');
+            const deadline = row.end_date || row.decided_at || '';
+            return (
+              '<tr data-id="' +
+              UI.esc(row.id || '') +
+              '" data-hash="' +
+              UI.esc(row.url_hash || '') +
+              '">' +
+              '<td>' +
+              opportunityCell(row) +
+              '</td>' +
+              '<td><span class="pipe-tag ' +
+              UI.pipelineClass(row.pipeline === 'tombstone' ? 'events' : row.pipeline) +
+              '">' +
+              UI.esc(row.pipeline || '—') +
+              '</span></td>' +
+              '<td>' +
+              (row.bucket_channel
+                ? '<span class="chip">' + UI.esc(row.bucket_channel) + '</span>'
+                : '<span class="muted">—</span>') +
+              '</td>' +
+              '<td><span class="pill ' +
+              boardPillClass(status) +
+              '">' +
+              UI.esc(UI.statusLabel(status)) +
+              '</span></td>' +
+              '<td class="num">' +
+              (row.prize_cash_inr === null || row.prize_cash_inr === undefined
+                ? '<span class="muted">—</span>'
+                : UI.fmtCurrency(row.prize_cash_inr)) +
+              '</td>' +
+              '<td class="num">' +
+              (deadline
+                ? '<span title="' + UI.esc(UI.fmtDateTime(deadline)) + '">' +
+                  UI.esc(UI.fmtDate(deadline)) +
+                  '</span>'
+                : '<span class="muted">—</span>') +
+              '</td>' +
+              '<td class="actions">' +
+              sourceCell(row) +
+              '</td>' +
+              '</tr>'
+            );
+          })
+          .join('');
+      }
+
+      function renderAll() {
+        renderStats();
+        renderTabs();
+        renderRows();
+      }
+
+      async function refresh() {
+        const seq = ++requestSeq;
+        try {
+          const data = await Api.boards(buildParams());
+          if (seq !== requestSeq) return;
+          boards = Array.isArray(data.boards) ? data.boards : [];
+          hasData = true;
+          collectChannels();
+          renderAll();
+          updatedEl.textContent =
+            'Updated ' +
+            UI.fmtTime(new Date(data.ts || Date.now()).toISOString()) +
+            (activeFilters() ? ' · filtered' : '');
+        } catch (error) {
+          if (seq !== requestSeq) return;
+          if (!hasData) {
+            statsEl.innerHTML = UI.errorState(
+              'Boards unavailable',
+              error.message || String(error),
+            );
+            rowsEl.innerHTML =
+              '<tr><td colspan="7" class="table-empty">Could not load boards: ' +
+              UI.esc(error.message || String(error)) +
+              '</td></tr>';
+          }
+          updatedEl.textContent = 'Last refresh failed';
+        }
+      }
+
+      function openDrawer() {
+        lastFocus = document.activeElement;
+        drawer.classList.add('open');
+        overlay.classList.add('open');
+        drawer.setAttribute('aria-hidden', 'false');
+        drawerClose.focus();
+      }
+
+      function closeDrawer() {
+        drawer.classList.remove('open');
+        overlay.classList.remove('open');
+        drawer.setAttribute('aria-hidden', 'true');
+        if (lastFocus && typeof lastFocus.focus === 'function') lastFocus.focus();
+      }
+
+      function renderTombstone(tombstone) {
+        if (!tombstone) {
+          drawerBody.innerHTML = UI.emptyState(
+            'No cold tombstone',
+            'This hash is not present in the Turso ledger.',
+            'database',
+          );
+          return;
+        }
+        drawerBody.innerHTML =
+          '<div class="lookup-card">' +
+          '<div class="lookup-title">' +
+          UI.esc(tombstone.terminal_status || 'tombstoned') +
+          '</div>' +
+          '<dl class="kv">' +
+          '<dt>URL hash</dt><dd class="mono">' +
+          UI.esc(tombstone.url_hash) +
+          '</dd>' +
+          '<dt>Fingerprint</dt><dd class="mono">' +
+          UI.esc(tombstone.fingerprint) +
+          '</dd>' +
+          '<dt>Terminal</dt><dd>' +
+          UI.esc(tombstone.terminal_status) +
+          '</dd>' +
+          '<dt>Source</dt><dd>' +
+          UI.esc(tombstone.source || '—') +
+          '</dd>' +
+          '<dt>Decided</dt><dd>' +
+          UI.esc(UI.fmtDateTime(tombstone.decided_at)) +
+          '</dd>' +
+          '</dl>' +
+          '</div>';
+      }
+
+      async function lookupTombstone(hash, row) {
+        if (!hash) return;
+        openDrawer();
+        drawerTitle.textContent = 'Tombstone';
+        drawerSub.textContent = row && row.title ? row.title : hash;
+        drawerBody.innerHTML = UI.loadingState('Querying the cold ledger…');
+        try {
+          const data = await Api.auditOlder(hash);
+          renderTombstone(data ? data.tombstone : null);
+        } catch (error) {
+          drawerBody.innerHTML = UI.errorState(
+            'Cold ledger unavailable',
+            error.message || String(error),
+          );
+        }
+      }
+
+      resetBtn.innerHTML = icon('x', 13) + 'Clear';
+      refreshBtn.innerHTML = icon('refresh', 14) + 'Refresh';
+      drawerClose.innerHTML = icon('x', 16);
+
+      tabsEl.addEventListener('click', function (event) {
+        const button = event.target.closest('[data-tab]');
+        if (!button) return;
+        const tab = button.getAttribute('data-tab');
+        if (!tab || !TAB_KEYS.has(tab)) return;
+        activeTab = tab;
+        storeTab(tab);
+        renderTabs();
+        renderRows();
+      });
+
+      rowsEl.addEventListener('click', function (event) {
+        const button = event.target.closest('[data-hash]');
+        if (!button) return;
+        const hash = button.getAttribute('data-hash');
+        const row = (currentBoard()?.rows || []).find(
+          (entry) => String(entry.url_hash || '') === hash,
+        );
+        lookupTombstone(hash, row);
+      });
+
+      resetBtn.addEventListener('click', function () {
+        fromInput.value = '';
+        toInput.value = '';
+        channelSelect.value = '';
+        statusSelect.value = '';
+        prizeMinInput.value = '';
+        prizeMaxInput.value = '';
+        searchInput.value = '';
+        refresh();
+      });
+
+      refreshBtn.addEventListener('click', refresh);
+
+      const refreshSoon = UI.debounce(refresh, 350);
+      for (const field of [fromInput, toInput, channelSelect, statusSelect]) {
+        field.addEventListener('change', refresh);
+      }
+      for (const field of [prizeMinInput, prizeMaxInput, searchInput]) {
+        field.addEventListener('input', refreshSoon);
+      }
+
+      drawerClose.addEventListener('click', closeDrawer);
+      overlay.addEventListener('click', closeDrawer);
+      document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape' && drawer.classList.contains('open')) closeDrawer();
+      });
+
+      statsEl.innerHTML = UI.loadingState('Reading opportunity boards…');
+      rowsEl.innerHTML = '<tr><td colspan="7" class="table-empty">Reading boards…</td></tr>';
+      UI.poll(refresh, 30_000);
+    })();
+  </script>
+</body>
+</html>

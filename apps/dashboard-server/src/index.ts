@@ -1,12 +1,22 @@
 // Stream server entrypoint (D-01, D-05).
 //
 // parseEnv fail-fast gate first, then pino logger, createPbClient, then
-// Node built-in http server on 127.0.0.1:3000 exposing GET /api/stream
-// (SSE text/event-stream) and GET /api/boards (application/json).
+// Node built-in http server on 127.0.0.1:3000 exposing:
+//   GET /api/stream            SSE (telemetry + slots + machine events)
+//   GET /api/boards            opportunity boards
+//   GET /api/telemetry         raw agent_telemetry rows
+//   GET /api/machine/events    cursor-paginated machine event log
+//   GET /api/overview          kanban stage snapshot
+//   GET /api/pools             provider × model pool health
+//   GET /api/sources           adapter/source health
+//   GET /api/system            process + scheduler + GC status
+//   GET /flow /glass ...       static multi-page dashboard
 // Owned by dashboard.service systemd unit (Restart=always).
+//
+// Read-only by construction: every route is GET/HEAD; there is no mutation
+// endpoint and PocketBase writes live in the pipeline processes, not here.
 
 import { createServer } from 'node:http';
-import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseEnv, type Env } from '@zod/config';
@@ -15,9 +25,23 @@ import { createPbClient, type HotEnv } from '@zod/db-hot';
 import { clientExecutor, createTursoClient } from '@zod/db-cold';
 import { SseHub } from './sse.js';
 import { handleBoards, handleAuditOlder } from './boards.js';
+import { handleMachineEvents } from './machine.js';
+import { handleOverview } from './overview.js';
+import { handlePools } from './pools.js';
+import { handleSources } from './sources.js';
+import { handleSystem } from './system.js';
+import { handleStatic } from './static.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const DASHBOARD_HTML = resolve(HERE, '../../dashboard/index.html');
+const DASHBOARD_DIR = resolve(HERE, '../../dashboard');
+const ASSETS_DIR = resolve(DASHBOARD_DIR, 'assets');
+
+type ServerResponse = import('node:http').ServerResponse;
+
+function sendJson(res: ServerResponse, status: number, body: unknown): void {
+  res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+  res.end(JSON.stringify(body));
+}
 
 // G-07-WR-01: application-layer auth check on /api/stream before hub.addClient.
 // Reads the Cloudflare Access identity header injected on tunneled requests;
@@ -59,6 +83,12 @@ async function main(): Promise<void> {
         subscribe: (event: string, handler: (e: unknown) => void) => {
           unsubscribe?: () => void;
         };
+        getList?: (
+          page: number,
+          perPage: number,
+          options?: unknown,
+        ) => Promise<{ items: Array<Record<string, unknown>> }>;
+        getFullList?: (options?: unknown) => Promise<Array<Record<string, unknown>>>;
       };
     },
     log,
@@ -69,9 +99,17 @@ async function main(): Promise<void> {
   hub.start();
 
   const server = createServer(async (req, res) => {
+    // Read-only server: no POST/PUT/PATCH/DELETE surface at all.
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      res.writeHead(405, { Allow: 'GET, HEAD', 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'method not allowed' }));
+      return;
+    }
+
     const url = req.url ?? '';
     // Filter queries must still route: compare the pathname, not the full URL.
     const pathname = url.split('?')[0] ?? '';
+
     if (pathname === '/api/stream') {
       // Application-layer defense-in-depth (G-07-WR-01): reject unauth before hub.addClient.
       if (!authorizeStream(req, env)) {
@@ -81,8 +119,7 @@ async function main(): Promise<void> {
       }
       // Server-side viewer cap (D-08): reject before any stream headers render.
       if (!hub.hasCapacity()) {
-        res.writeHead(503, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'viewer capacity reached' }));
+        sendJson(res, 503, { error: 'viewer capacity reached' });
         return;
       }
       // Zero Trust Access already rejected unauth at the edge (D-04).
@@ -109,20 +146,10 @@ async function main(): Promise<void> {
       res.write(`data: ${JSON.stringify({ type: 'connected', ts: Date.now() })}\n\n`);
       hub.addClient(client);
       req.on('close', () => hub.removeClient(client));
-    } else if (pathname === '/' || pathname === '/index.html') {
-      // Serve the read-only dashboard UI from the same origin as /api/*.
-      // Cloudflare Access gates this page at the edge; the local dev proxy
-      // serves the same file with a loopback origin rewrite.
-      try {
-        const html = readFileSync(DASHBOARD_HTML, 'utf8');
-        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
-        res.end(html);
-      } catch (err) {
-        log.error({ err: String(err), path: DASHBOARD_HTML }, 'dashboard html not found');
-        res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
-        res.end('dashboard html not found');
-      }
-    } else if (pathname === '/api/boards') {
+      return;
+    }
+
+    if (pathname === '/api/boards') {
       // Fetch opportunities from PocketBase (hot store) and apply filters
       // server-side in handleBoards. Read-only: getFullList only, no writes.
       let rows: Array<Record<string, unknown>> = [];
@@ -132,8 +159,7 @@ async function main(): Promise<void> {
         rows = records as unknown as Array<Record<string, unknown>>;
       } catch {
         // WR-02: return 503 on upstream failure so clients can detect outage
-        res.writeHead(503, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'upstream unavailable' }));
+        sendJson(res, 503, { error: 'upstream unavailable' });
         return;
       }
       try {
@@ -143,9 +169,12 @@ async function main(): Promise<void> {
         // Optional mirror: the audit-log tab still renders opportunity rows.
       }
       handleBoards({ url: req.url ?? null }, res, { rows, tombstones });
-    } else if (pathname === '/api/telemetry') {
+      return;
+    }
+
+    if (pathname === '/api/telemetry') {
       // Glass view: raw agent_telemetry rows for the machine glass panel.
-      // Read-only: getFullList only, no writes.
+      // Read-only: getList only, no writes.
       try {
         const page = await pb.collection('agent_telemetry').getList(1, 100, {
           sort: '-updated',
@@ -162,19 +191,73 @@ async function main(): Promise<void> {
           duration_ms: r.duration_ms ?? null,
           detail: r.detail ?? '',
         }));
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ts: Date.now(), rows }));
+        sendJson(res, 200, { ts: Date.now(), rows });
       } catch {
-        res.writeHead(503, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'upstream unavailable' }));
+        sendJson(res, 503, { error: 'upstream unavailable' });
       }
-    } else if (pathname.startsWith('/api/audit/older')) {
+      return;
+    }
+
+    if (pathname === '/api/machine/events') {
+      await handleMachineEvents({ url: req.url ?? null }, res, {
+        pb: pb as unknown as Parameters<typeof handleMachineEvents>[2]['pb'],
+      });
+      return;
+    }
+
+    if (pathname === '/api/overview') {
+      await handleOverview(res, {
+        pb: pb as unknown as Parameters<typeof handleOverview>[1]['pb'],
+      });
+      return;
+    }
+
+    if (pathname === '/api/pools') {
+      await handlePools(res, {
+        pb: pb as unknown as Parameters<typeof handlePools>[1]['pb'],
+      });
+      return;
+    }
+
+    if (pathname === '/api/sources') {
+      await handleSources(res, {
+        pb: pb as unknown as Parameters<typeof handleSources>[1]['pb'],
+      });
+      return;
+    }
+
+    if (pathname === '/api/system') {
+      await handleSystem(res, {
+        pb: pb as unknown as Parameters<typeof handleSystem>[1]['pb'],
+        hub: {
+          get size() {
+            return hub.size;
+          },
+          get capacity() {
+            return hub.capacity;
+          },
+          get lastEventAgeMs() {
+            return hub.lastEventAgeMs;
+          },
+        },
+      });
+      return;
+    }
+
+    if (pathname.startsWith('/api/audit/older')) {
       // Read-only point lookup into Turso cold tombstone_ledger (D-11).
       await handleAuditOlder({ url: req.url ?? null }, res, { db: coldDb });
-    } else {
-      res.writeHead(404, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'not found' }));
+      return;
     }
+
+    // Static pages/assets: served from the same origin as /api/* so fetch and
+    // SSE need no CORS or proxy. Asset paths are whitelisted; traversal is
+    // rejected. Cloudflare Access gates these at the edge later.
+    if (handleStatic(pathname, res, { dashboardDir: DASHBOARD_DIR, assetsDir: ASSETS_DIR })) {
+      return;
+    }
+
+    sendJson(res, 404, { error: 'not found' });
   });
 
   // Graceful shutdown on SIGTERM/SIGINT (WR-07).

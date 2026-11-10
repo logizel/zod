@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>System · Zod</title>
+  <link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body data-page="system" data-mode="poll">
+  <div class="app">
+    <aside class="sidebar" id="sidebar"></aside>
+    <div class="main">
+      <header class="topbar" id="topbar"></header>
+      <main class="page">
+        <div class="stats-grid" id="system-stats"></div>
+
+        <div class="toolbar">
+          <div class="inline-actions">
+            <span class="hint" id="system-updated">Waiting for a system snapshot…</span>
+          </div>
+          <div class="inline-actions">
+            <span class="hint">Refreshes every 5 s</span>
+            <button class="btn subtle" id="system-refresh" type="button"></button>
+          </div>
+        </div>
+
+        <div class="three-col">
+          <section class="card panel">
+            <div class="card-head">
+              <div>
+                <h2 class="card-title">Runtime</h2>
+                <p class="card-sub">This dashboard-server process.</p>
+              </div>
+              <span class="state-icon" style="width:34px;height:34px;border-radius:11px" id="runtime-icon"></span>
+            </div>
+            <div class="metric-list" id="runtime-metrics"></div>
+          </section>
+
+          <section class="card panel">
+            <div class="card-head">
+              <div>
+                <h2 class="card-title">SSE stream</h2>
+                <p class="card-sub">One upstream fan-out, capped viewers.</p>
+              </div>
+              <span class="state-icon" style="width:34px;height:34px;border-radius:11px" id="stream-icon"></span>
+            </div>
+            <div class="metric-list" id="stream-metrics"></div>
+          </section>
+
+          <section class="card panel">
+            <div class="card-head">
+              <div>
+                <h2 class="card-title">Retention &amp; GC</h2>
+                <p class="card-sub">24-hour hot ring, midnight cleanup.</p>
+              </div>
+              <span class="state-icon" style="width:34px;height:34px;border-radius:11px" id="gc-icon"></span>
+            </div>
+            <div class="metric-list" id="gc-metrics"></div>
+          </section>
+        </div>
+
+        <section class="card panel flush">
+          <div class="table-toolbar">
+            <div>
+              <h2 class="table-title">Scheduler jobs</h2>
+              <p class="table-sub" id="jobs-sub">Latest tick per job, from the machine event ring.</p>
+            </div>
+            <span class="pill" id="jobs-count">0 jobs</span>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Job</th>
+                  <th>Status</th>
+                  <th class="num">Last run</th>
+                  <th class="num">Duration</th>
+                  <th>Detail</th>
+                </tr>
+              </thead>
+              <tbody id="job-rows"></tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <script src="/assets/icons.js"></script>
+  <script src="/assets/shell.js"></script>
+  <script src="/assets/api.js"></script>
+  <script>
+    (function () {
+      'use strict';
+      const UI = window.ZodUI;
+      const Api = window.ZodApi;
+      const icon = UI.icon;
+
+      const statsEl = document.getElementById('system-stats');
+      const updatedEl = document.getElementById('system-updated');
+      const refreshBtn = document.getElementById('system-refresh');
+      const runtimeMetrics = document.getElementById('runtime-metrics');
+      const streamMetrics = document.getElementById('stream-metrics');
+      const gcMetrics = document.getElementById('gc-metrics');
+      const jobRows = document.getElementById('job-rows');
+      const jobsCount = document.getElementById('jobs-count');
+      const jobsSub = document.getElementById('jobs-sub');
+
+      let hasData = false;
+
+      document.getElementById('runtime-icon').innerHTML = icon('server', 17);
+      document.getElementById('stream-icon').innerHTML = icon('activity', 17);
+      document.getElementById('gc-icon').innerHTML = icon('database', 17);
+
+      function metricRow(label, value, iconName) {
+        return (
+          '<div class="metric-row"><span class="metric-label">' +
+          (iconName ? icon(iconName, 14) : '') +
+          UI.esc(label) +
+          '</span><span class="metric-value">' +
+          value +
+          '</span></div>'
+        );
+      }
+
+      function renderStats(data) {
+        if (!hasData) {
+          statsEl.innerHTML = UI.loadingState('Reading system state…');
+          return;
+        }
+        const uptime = data.uptimeSec ? data.uptimeSec * 1000 : 0;
+        const gcAge = data.gc && data.gc.ageMs !== null ? data.gc.ageMs : null;
+        const cards = [
+          {
+            tint: 'tint-lav',
+            icon: 'clock',
+            value: UI.fmtDuration(uptime),
+            label: 'Uptime',
+            sub: 'dashboard-server process',
+            note: 'runtime',
+          },
+          {
+            tint: 'tint-sky',
+            icon: 'server',
+            value: UI.fmtNumber(data.memory ? data.memory.rssMb : 0) + ' MB',
+            label: 'Memory RSS',
+            sub: 'heap ' + UI.fmtNumber(data.memory ? data.memory.heapUsedMb : 0) + ' MB',
+            note: 'process',
+          },
+          {
+            tint: 'tint-peach',
+            icon: 'database',
+            value: UI.fmtNumber(data.events ? data.events.retained : 0),
+            label: 'Events retained',
+            sub: data.events && data.events.latestAt
+              ? 'latest ' + UI.timeAgo(data.events.latestAt)
+              : 'ring is empty',
+            note: '24h ring',
+          },
+          {
+            tint: 'tint-mint',
+            icon: 'activity',
+            value:
+              UI.fmtNumber(data.sse ? data.sse.viewers : 0) +
+              ' / ' +
+              UI.fmtNumber(data.sse ? data.sse.capacity : 0),
+            label: 'SSE viewers',
+            sub: data.sse && data.sse.lastEventAgeMs !== null
+              ? 'last event ' + UI.fmtDuration(data.sse.lastEventAgeMs) + ' ago'
+              : 'no upstream event yet',
+            note: 'live',
+          },
+          {
+            tint: 'tint-amber',
+            icon: 'refresh',
+            value: gcAge === null ? '—' : UI.fmtDuration(gcAge),
+            label: 'GC age',
+            sub: data.gc && data.gc.lastSuccessMs
+              ? UI.fmtDateTime(new Date(data.gc.lastSuccessMs).toISOString())
+              : 'no success marker yet',
+            note: 'midnight',
+          },
+        ];
+        statsEl.innerHTML = cards
+          .map(
+            (card) =>
+              '<article class="stat-card ' +
+              card.tint +
+              '">' +
+              '<div class="stat-top"><span class="stat-icon">' +
+              icon(card.icon, 17) +
+              '</span><span class="stat-note">' +
+              card.note +
+              '</span></div>' +
+              '<div class="stat-value">' +
+              card.value +
+              '</div>' +
+              '<div class="stat-label">' +
+              card.label +
+              '</div>' +
+              '<div class="stat-sub">' +
+              card.sub +
+              '</div>' +
+              '</article>',
+          )
+          .join('');
+      }
+
+      function renderCards(data) {
+        runtimeMetrics.innerHTML = [
+          metricRow('Node', '<span class="mono">' + UI.esc(data.node || '—') + '</span>', 'terminal'),
+          metricRow('Uptime', UI.fmtDuration((data.uptimeSec || 0) * 1000), 'clock'),
+          metricRow('RSS', UI.fmtNumber(data.memory ? data.memory.rssMb : 0) + ' MB', 'server'),
+          metricRow('Heap used', UI.fmtNumber(data.memory ? data.memory.heapUsedMb : 0) + ' MB', 'database'),
+          metricRow('Bind', '<span class="mono">127.0.0.1:3000</span>', 'shield'),
+        ].join('');
+
+        streamMetrics.innerHTML = [
+          metricRow(
+            'Viewers',
+            UI.fmtNumber(data.sse ? data.sse.viewers : 0) +
+              ' / ' +
+              UI.fmtNumber(data.sse ? data.sse.capacity : 0),
+            'activity',
+          ),
+          metricRow(
+            'Last upstream event',
+            data.sse && data.sse.lastEventAgeMs !== null
+              ? UI.fmtDuration(data.sse.lastEventAgeMs) + ' ago'
+              : '—',
+            'clock',
+          ),
+          metricRow('Delta cadence', '<span class="mono">2 s</span>', 'zap'),
+          metricRow('Heartbeat', '<span class="mono">15 s</span>', 'spark'),
+          metricRow('Stale banner', '<span class="mono">90 s</span>', 'alert'),
+        ].join('');
+
+        gcMetrics.innerHTML = [
+          metricRow(
+            'Last success',
+            data.gc && data.gc.lastSuccessMs
+              ? UI.fmtDateTime(new Date(data.gc.lastSuccessMs).toISOString())
+              : '—',
+            'check',
+          ),
+          metricRow(
+            'Age',
+            data.gc && data.gc.ageMs !== null ? UI.fmtDuration(data.gc.ageMs) : '—',
+            'clock',
+          ),
+          metricRow('Retained events', UI.fmtNumber(data.events ? data.events.retained : 0), 'database'),
+          metricRow(
+            'Latest event',
+            data.events && data.events.latestAt ? UI.timeAgo(data.events.latestAt) : '—',
+            'activity',
+          ),
+          metricRow('Hot window', '<span class="mono">24 h</span>', 'refresh'),
+        ].join('');
+      }
+
+      function renderJobs(data) {
+        const jobs = Array.isArray(data.jobs) ? data.jobs.slice() : [];
+        jobs.sort((a, b) => Date.parse(b.lastAt || 0) - Date.parse(a.lastAt || 0));
+        jobsCount.textContent = jobs.length + (jobs.length === 1 ? ' job' : ' jobs');
+        if (!jobs.length) {
+          jobRows.innerHTML =
+            '<tr><td colspan="5" class="table-empty">No scheduler ticks in the event ring yet.</td></tr>';
+          jobsSub.textContent = 'Scheduler events appear after the first job runs.';
+          return;
+        }
+        jobsSub.textContent = jobs.length + ' jobs · latest tick per job';
+        jobRows.innerHTML = jobs
+          .map((job) => {
+            const status = String(job.lastStatus || '');
+            return (
+              '<tr>' +
+              '<td><div class="row-title mono">' +
+              UI.esc(job.name) +
+              '</div></td>' +
+              '<td><span class="pill ' +
+              UI.pillClass(status) +
+              '">' +
+              UI.esc(UI.statusLabel(status)) +
+              '</span></td>' +
+              '<td class="num"><span title="' +
+              UI.esc(UI.fmtDateTime(job.lastAt)) +
+              '">' +
+              UI.esc(UI.timeAgo(job.lastAt)) +
+              '</span></td>' +
+              '<td class="num">' +
+              (job.durationMs === null || job.durationMs === undefined
+                ? '<span class="muted">—</span>'
+                : UI.fmtDuration(job.durationMs)) +
+              '</td>' +
+              '<td>' +
+              (job.detail
+                ? '<span class="ev-detail" title="' +
+                  UI.esc(job.detail) +
+                  '" style="max-width:340px;display:inline-block">' +
+                  UI.esc(job.detail) +
+                  '</span>'
+                : '<span class="muted">—</span>') +
+              '</td>' +
+              '</tr>'
+            );
+          })
+          .join('');
+      }
+
+      function renderAll(data) {
+        renderStats(data);
+        renderCards(data);
+        renderJobs(data);
+      }
+
+      async function refresh() {
+        try {
+          const data = await Api.system();
+          hasData = true;
+          renderAll(data);
+          updatedEl.textContent =
+            'Snapshot ' + UI.fmtTime(new Date(data.ts || Date.now()).toISOString()) + ' IST';
+        } catch (error) {
+          if (!hasData) {
+            statsEl.innerHTML = UI.errorState(
+              'System snapshot unavailable',
+              error.message || String(error),
+            );
+            runtimeMetrics.innerHTML = '';
+            streamMetrics.innerHTML = '';
+            gcMetrics.innerHTML = '';
+            jobRows.innerHTML =
+              '<tr><td colspan="5" class="table-empty">Could not load system state: ' +
+              UI.esc(error.message || String(error)) +
+              '</td></tr>';
+          }
+          updatedEl.textContent = 'Last refresh failed';
+        }
+      }
+
+      refreshBtn.innerHTML = icon('refresh', 14) + 'Refresh';
+      refreshBtn.addEventListener('click', refresh);
+
+      statsEl.innerHTML = UI.loadingState('Reading system state…');
+      runtimeMetrics.innerHTML = UI.loadingState('Reading runtime…');
+      streamMetrics.innerHTML = UI.loadingState('Reading stream state…');
+      gcMetrics.innerHTML = UI.loadingState('Reading retention state…');
+      jobRows.innerHTML = '<tr><td colspan="5" class="table-empty">Reading scheduler jobs…</td></tr>';
+      UI.poll(refresh, 5_000);
+    })();
+  </script>
+</body>
+</html>

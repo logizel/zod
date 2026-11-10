@@ -149,6 +149,26 @@ The stack runs on:
 - Dashboard: http://127.0.0.1:3000
 - Dashboard proxy: http://127.0.0.1:8080
 
+The proxy serves a multi-page, read-only dashboard — one concern per page,
+shared sidebar/header, no build step:
+
+| Route | Page |
+|-------|------|
+| `/` | Overview (stage stats + pipeline kanban, live stream) |
+| `/flow` | Pipeline Flow (candidate kanban) |
+| `/glass` | Machine Glass (every tool call + per-candidate trace drawer) |
+| `/pools` | Pool Health (provider × model buckets) |
+| `/boards` | Boards (8 tabs of admitted opportunities) |
+| `/audit` | Audit & Rejection (verdicts, tombstones) |
+| `/sources` | Sources (adapter health) |
+| `/system` | System (runtime, GC, scheduler jobs) |
+
+`/glass` is backed by the append-only `machine_events` collection: one row per
+scheduler tick, dedup verdict, fetch, sanitize, LLM attempt, 429 baton-pass,
+orchestrator verdict, tombstone, Discord post, and GC run. It is never seeded —
+the feed only ever shows real pipeline activity. See
+[docs/local-dev.md](docs/local-dev.md).
+
 ### Verification
 
 ```bash

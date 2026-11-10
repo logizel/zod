@@ -21,6 +21,8 @@ import {
   AgentTelemetry,
   HOT_COLLECTIONS,
   INDEX_NOTES,
+  MACHINE_EVENT_STATUSES,
+  MACHINE_EVENT_TYPES,
   OPPORTUNITY_STATUSES,
   Opportunity,
   PIPELINES,
@@ -192,6 +194,27 @@ const AGENT_TELEMETRY_FIELDS: FieldSpec[] = [
   autodateField('updated'),
 ];
 
+const MACHINE_EVENTS_FIELDS: FieldSpec[] = [
+  text('trace_id'),
+  text('agent', true),
+  selectField('pipeline', PIPELINES),
+  selectField('event_type', MACHINE_EVENT_TYPES, true),
+  text('tool', true),
+  text('provider'),
+  text('model'),
+  text('step'),
+  selectField('status', MACHINE_EVENT_STATUSES, true),
+  numberField('duration_ms'),
+  text('url'),
+  text('input_summary', false, 2000),
+  text('output_summary', false, 2000),
+  text('detail', false, 8000),
+  text('baton_to'),
+  jsonField('meta'),
+  autodateField('created'),
+  autodateField('updated'),
+];
+
 const TASK_SCRATCHPAD_FIELDS: FieldSpec[] = [
   urlField('candidate_url', true),
   text('step_position', true),
@@ -227,6 +250,7 @@ const TASTE_RULES_FIELDS: FieldSpec[] = [
 const COLLECTION_SPECS: Record<HotCollection, CollectionSpec> = {
   opportunities: { name: 'opportunities', fields: OPPORTUNITY_FIELDS },
   agent_telemetry: { name: 'agent_telemetry', fields: AGENT_TELEMETRY_FIELDS },
+  machine_events: { name: 'machine_events', fields: MACHINE_EVENTS_FIELDS },
   task_scratchpad: { name: 'task_scratchpad', fields: TASK_SCRATCHPAD_FIELDS },
   tombstone_ledger: { name: 'tombstone_ledger', fields: TOMBSTONE_LEDGER_FIELDS },
   taste_rules: { name: 'taste_rules', fields: TASTE_RULES_FIELDS },
@@ -256,6 +280,21 @@ const INDEX_SPECS: Record<HotCollection, Record<string, IndexSpec>> = {
     'slot + created': {
       name: 'idx_agent_telemetry_slot_created',
       columns: '`slot`, `created`',
+    },
+  },
+  machine_events: {
+    'created': { name: 'idx_machine_events_created', columns: '`created`' },
+    'agent + created': {
+      name: 'idx_machine_events_agent_created',
+      columns: '`agent`, `created`',
+    },
+    'event_type + created': {
+      name: 'idx_machine_events_event_type_created',
+      columns: '`event_type`, `created`',
+    },
+    'trace_id + created': {
+      name: 'idx_machine_events_trace_id_created',
+      columns: '`trace_id`, `created`',
     },
   },
   task_scratchpad: {
@@ -544,6 +583,9 @@ export const SEED_TELEMETRY: unknown[] = [
   },
 ];
 
+// NOTE: machine_events is intentionally NOT seeded. The Glass feed must show
+// real pipeline activity only — synthetic rows would fake a working machine.
+
 // ---------------------------------------------------------------------------
 // Upserts (filter lookup, never getFirstListItem)
 // ---------------------------------------------------------------------------
@@ -602,6 +644,7 @@ async function seedDevData(pb: PbClient): Promise<{
     telemetry[outcome] += 1;
   }
 
+  // machine_events is never seeded (real activity only).
   return { opportunities, telemetry };
 }
 

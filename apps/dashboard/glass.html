@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Machine Glass · Zod</title>
+  <link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body data-page="glass" data-mode="stream">
+  <div class="app">
+    <aside class="sidebar" id="sidebar"></aside>
+    <div class="main">
+      <header class="topbar" id="topbar"></header>
+      <main class="page">
+        <section class="card panel">
+          <div class="card-head">
+            <div>
+              <h2 class="card-title">Agent reel</h2>
+              <p class="card-sub">What each model is doing right now — tool, step, elapsed time.</p>
+            </div>
+            <span class="pill" id="reel-count">0 slots</span>
+          </div>
+          <div class="reel" id="reel"></div>
+        </section>
+
+        <div class="toolbar">
+          <div class="filters">
+            <div class="field">
+              <label for="f-tool">Tool</label>
+              <select class="select" id="f-tool"><option value="">All tools</option></select>
+            </div>
+            <div class="field">
+              <label for="f-status">Status</label>
+              <select class="select" id="f-status">
+                <option value="">All statuses</option>
+                <option value="start">start</option>
+                <option value="ok">ok</option>
+                <option value="error">error</option>
+                <option value="skip">skip</option>
+                <option value="cooldown">cooldown</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="f-provider">Provider</label>
+              <select class="select" id="f-provider"><option value="">All providers</option></select>
+            </div>
+            <div class="field">
+              <label for="f-pipeline">Pipeline</label>
+              <select class="select" id="f-pipeline">
+                <option value="">All pipelines</option>
+                <option value="events">events</option>
+                <option value="jobs">jobs</option>
+                <option value="loot">loot</option>
+                <option value="local">local</option>
+                <option value="social">social</option>
+              </select>
+            </div>
+          </div>
+          <div class="inline-actions">
+            <button class="btn ghost" id="btn-pause" type="button"></button>
+            <button class="btn subtle" id="btn-refresh" type="button"></button>
+          </div>
+        </div>
+
+        <section class="card panel feed-panel">
+          <div class="card-head">
+            <div>
+              <h2 class="card-title">Tool calls</h2>
+              <p class="card-sub" id="feed-summary">Loading the machine event ring…</p>
+            </div>
+            <span class="pill" id="feed-state">live</span>
+          </div>
+          <div class="feed" id="feed"></div>
+          <div class="feed-foot">
+            <span class="hint">Click a row to open its trace waterfall.</span>
+            <button class="btn ghost" id="btn-older" type="button">Load older</button>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <div class="drawer-overlay" id="drawer-overlay"></div>
+  <aside class="drawer" id="drawer" aria-hidden="true" aria-label="Trace waterfall">
+    <div class="drawer-head">
+      <div style="min-width:0">
+        <div class="drawer-eyebrow">Trace</div>
+        <h2 class="drawer-title" id="drawer-title">—</h2>
+        <div class="drawer-sub" id="drawer-sub"></div>
+      </div>
+      <button class="icon-btn" id="drawer-close" type="button" aria-label="Close trace"></button>
+    </div>
+    <div class="drawer-body" id="drawer-body"></div>
+  </aside>
+
+  <script src="/assets/icons.js"></script>
+  <script src="/assets/shell.js"></script>
+  <script src="/assets/api.js"></script>
+  <script src="/assets/sse.js"></script>
+  <script>
+    (function () {
+      'use strict';
+      const UI = window.ZodUI;
+      const Api = window.ZodApi;
+      const icon = UI.icon;
+
+      const reelEl = document.getElementById('reel');
+      const reelCountEl = document.getElementById('reel-count');
+      const feedEl = document.getElementById('feed');
+      const feedSummaryEl = document.getElementById('feed-summary');
+      const feedStateEl = document.getElementById('feed-state');
+      const pauseBtn = document.getElementById('btn-pause');
+      const refreshBtn = document.getElementById('btn-refresh');
+      const olderBtn = document.getElementById('btn-older');
+      const toolSelect = document.getElementById('f-tool');
+      const statusSelect = document.getElementById('f-status');
+      const providerSelect = document.getElementById('f-provider');
+      const pipelineSelect = document.getElementById('f-pipeline');
+
+      const drawer = document.getElementById('drawer');
+      const overlay = document.getElementById('drawer-overlay');
+      const drawerTitle = document.getElementById('drawer-title');
+      const drawerSub = document.getElementById('drawer-sub');
+      const drawerBody = document.getElementById('drawer-body');
+      const drawerClose = document.getElementById('drawer-close');
+
+      const WF_COLORS = {
+        llm: '#7c65e8',
+        fetch: '#3f78c4',
+        sanitize: '#2d9770',
+        dedup: '#d1783a',
+        orchestrator: '#6349d6',
+        discord: '#c4557f',
+        scheduler: '#8c86a3',
+        scout: '#2f9d6b',
+        scratchpad: '#b87818',
+        gc: '#b87818',
+        db: '#8c86a3',
+        system: '#8c86a3',
+      };
+
+      const TINTS = {
+        groq: ['#efeaff', '#5b44c9'],
+        cerebras: ['#fff0e6', '#d1783a'],
+        'github-models': ['#eaf2ff', '#3f78c4'],
+        sambanova: ['#e8f8f1', '#2d9770'],
+        mistral: ['#fdeaf2', '#c4557f'],
+        openrouter: ['#fff4e2', '#b87818'],
+        local: ['#f2eff8', '#8c86a3'],
+      };
+
+      let slots = [];
+      let events = [];
+      let cursor = null;
+      let paused = false;
+      let newWhilePaused = 0;
+      let loading = true;
+      let loadError = '';
+      let activeTrace = null;
+      let lastFocus = null;
+      let knownTools = new Set();
+      let knownProviders = new Set();
+
+      function tintFor(provider) {
+        return TINTS[String(provider || '').toLowerCase()] || ['#efeaff', '#5b44c9'];
+      }
+
+      function initials(value) {
+        const parts = String(value || 'zod').split(/[^a-zA-Z0-9]+/).filter(Boolean);
+        return (parts[0] || 'z')[0].toUpperCase() + ((parts[1] || '')[0] || '').toUpperCase();
+      }
+
+      function currentFilters() {
+        return {
+          tool: toolSelect.value,
+          status: statusSelect.value,
+          provider: providerSelect.value,
+          pipeline: pipelineSelect.value,
+        };
+      }
+
+      function hasFilters() {
+        const filters = currentFilters();
+        return Boolean(filters.tool || filters.status || filters.provider || filters.pipeline);
+      }
+
+      function matchesFilters(event) {
+        const filters = currentFilters();
+        if (filters.tool && event.tool !== filters.tool) return false;
+        if (filters.status && event.status !== filters.status) return false;
+        if (filters.provider && event.provider !== filters.provider) return false;
+        if (filters.pipeline && event.pipeline !== filters.pipeline) return false;
+        return true;
+      }
+
+      function mergeOptions(select, values, allLabel) {
+        const current = select.value;
+        const merged = new Set([...select.options].slice(1).map((option) => option.value));
+        for (const value of values) {
+          if (value) merged.add(value);
+        }
+        select.innerHTML =
+          '<option value="">' +
+          allLabel +
+          '</option>' +
+          [...merged]
+            .sort((a, b) => a.localeCompare(b))
+            .map((value) => '<option value="' + UI.esc(value) + '">' + UI.esc(value) + '</option>')
+            .join('');
+        select.value = merged.has(current) ? current : '';
+      }
+
+      function collectOptions(rows) {
+        for (const event of rows) {
+          if (event.tool) knownTools.add(event.tool);
+          if (event.provider) knownProviders.add(event.provider);
+        }
+        mergeOptions(toolSelect, knownTools, 'All tools');
+        mergeOptions(providerSelect, knownProviders, 'All providers');
+      }
+
+      function renderReel() {
+        reelCountEl.textContent = slots.length + (slots.length === 1 ? ' slot' : ' slots');
+        if (!slots.length) {
+          reelEl.innerHTML = UI.emptyState(
+            'Waiting for an active worker',
+            'The reel fills as scout, auditor, and router slots report in.',
+            'activity',
+          );
+          return;
+        }
+        reelEl.innerHTML = slots
+          .map((slot) => {
+            const tint = tintFor(slot.provider);
+            const status = String(slot.status || '');
+            const pulseClass =
+              status === 'active'
+                ? ''
+                : status === 'cooldown'
+                  ? ' is-cooling'
+                  : status === 'error'
+                    ? ' is-error'
+                    : status === 'done'
+                      ? ' is-done'
+                      : ' is-static';
+            const since = slot.status === 'active' ? slot.startedAt : slot.lastEventAt;
+            return (
+              '<article class="slot-card" style="--slot-tint:' +
+              tint[0] +
+              ';--slot-color:' +
+              tint[1] +
+              '">' +
+              '<div class="slot-head">' +
+              '<span class="slot-avatar">' +
+              UI.esc(initials(slot.agent || slot.provider)) +
+              '</span>' +
+              '<div class="slot-id">' +
+              '<div class="slot-agent">' +
+              UI.esc(slot.agent || slot.provider || 'worker') +
+              '</div>' +
+              '<div class="slot-model">' +
+              UI.esc([slot.provider, slot.model].filter(Boolean).join(' · ') || 'unassigned bucket') +
+              '</div>' +
+              '</div>' +
+              '</div>' +
+              '<div class="slot-statusline">' +
+              '<span class="slot-tool">' +
+              icon(UI.eventIcon(slot.currentTool && slot.currentTool.includes('fetch') ? 'fetch' : 'spark'), 13) +
+              UI.esc(slot.currentTool || slot.step || 'idle') +
+              '</span>' +
+              '<span class="slot-pulse' +
+              pulseClass +
+              '">' +
+              (status === 'active' ? 'running' : UI.esc(UI.statusLabel(status))) +
+              '</span>' +
+              '</div>' +
+              '<div class="slot-meta"><span>' +
+              UI.esc(slot.step || 'no step') +
+              '</span><span class="slot-elapsed" data-elapsed="' +
+              UI.esc(since || '') +
+              '">' +
+              (since ? UI.elapsed(since) : '—') +
+              '</span></div>' +
+              '<div class="slot-detail">' +
+              UI.esc(slot.detail || 'No detail reported yet.') +
+              '</div>' +
+              '</article>'
+            );
+          })
+          .join('');
+      }
+
+      function renderFeed() {
+        if (loading) {
+          feedEl.innerHTML = UI.loadingState('Loading the event ring…');
+          return;
+        }
+        if (loadError) {
+          feedEl.innerHTML = UI.errorState('Machine events unavailable', loadError);
+          return;
+        }
+        if (!events.length) {
+          feedEl.innerHTML = hasFilters()
+            ? UI.emptyState('No matching calls', 'Loosen a filter or resume live.', 'filter')
+            : UI.emptyState('The ring is empty', 'No machine events in the last 24 hours.', 'terminal');
+          return;
+        }
+        feedEl.innerHTML = events
+          .map((event) => UI.eventRow(event, { interactive: true }))
+          .join('');
+        if (!paused) feedEl.scrollTop = 0;
+      }
+
+      function renderSummary() {
+        const bits = [events.length + (events.length === 1 ? ' event' : ' events')];
+        const filters = currentFilters();
+        const active = Object.entries(filters)
+          .filter((entry) => entry[1])
+          .map((entry) => entry[0] + ': ' + entry[1]);
+        if (active.length) bits.push(active.join(' · '));
+        if (paused) {
+          bits.push('paused' + (newWhilePaused ? ' · ' + newWhilePaused + ' new' : ''));
+        }
+        feedSummaryEl.textContent = bits.join(' — ');
+        feedStateEl.className = 'pill ' + (paused ? 'skip' : 'ok');
+        feedStateEl.textContent = paused ? 'paused' : 'live';
+      }
+
+      function renderAll() {
+        renderReel();
+        renderFeed();
+        renderSummary();
+      }
+
+      function buildParams(extra) {
+        const filters = currentFilters();
+        const params = { limit: 150 };
+        if (filters.tool) params.tool = filters.tool;
+        if (filters.status) params.status = filters.status;
+        if (filters.provider) params.provider = filters.provider;
+        if (filters.pipeline) params.pipeline = filters.pipeline;
+        Object.assign(params, extra || {});
+        return params;
+      }
+
+      async function loadEvents(reset) {
+        if (reset) {
+          loading = true;
+          loadError = '';
+          renderFeed();
+        }
+        try {
+          const data = await Api.events(buildParams(reset ? {} : { cursor }));
+          const rows = Array.isArray(data.events) ? data.events : [];
+          collectOptions(rows);
+          if (reset) {
+            events = rows;
+            cursor = data.nextCursor || null;
+            newWhilePaused = 0;
+          } else {
+            const byId = new Map();
+            for (const event of events) byId.set(event.id, event);
+            for (const event of rows) byId.set(event.id, event);
+            events = [...byId.values()].sort(
+              (a, b) => Date.parse(b.created) - Date.parse(a.created),
+            );
+            cursor = data.nextCursor || null;
+          }
+          loading = false;
+          loadError = '';
+          olderBtn.disabled = !cursor;
+          renderAll();
+        } catch (error) {
+          loading = false;
+          loadError = error.message || String(error);
+          olderBtn.disabled = true;
+          renderFeed();
+          renderSummary();
+        }
+      }
+
+      function prependLive(rows) {
+        const incoming = rows.filter(matchesFilters);
+        if (!incoming.length) return;
+        if (paused) {
+          newWhilePaused += incoming.length;
+          renderSummary();
+          return;
+        }
+        const byId = new Map();
+        for (const event of incoming) byId.set(event.id, event);
+        for (const event of events) byId.set(event.id, event);
+        events = [...byId.values()]
+          .sort((a, b) => Date.parse(b.created) - Date.parse(a.created))
+          .slice(0, 300);
+        renderFeed();
+        renderSummary();
+      }
+
+      // -----------------------------------------------------------------
+      // Trace drawer
+      // -----------------------------------------------------------------
+
+      function drawerStat(value, label) {
+        return (
+          '<div class="drawer-stat"><strong>' +
+          UI.esc(value) +
+          '</strong><span>' +
+          UI.esc(label) +
+          '</span></div>'
+        );
+      }
+
+      function renderTrace(traceEvents, fallbackEvent) {
+        const rows = traceEvents.length ? traceEvents : fallbackEvent ? [fallbackEvent] : [];
+        if (!rows.length) {
+          drawerBody.innerHTML = UI.emptyState('No events in this trace', 'The ring may have aged it out.', 'inbox');
+          return;
+        }
+        const sorted = [...rows].sort((a, b) => Date.parse(a.created) - Date.parse(b.created));
+        const start = Math.min(...sorted.map((event) => Date.parse(event.created)).filter(Number.isFinite));
+        const ends = sorted.map((event) => {
+          const created = Date.parse(event.created);
+          return Number.isFinite(created)
+            ? created + (event.duration_ms ? Number(event.duration_ms) : 0)
+            : start;
+        });
+        const end = Math.max(...ends, start + 1);
+        const span = Math.max(end - start, 1);
+        const errors = sorted.filter((event) => event.status === 'error').length;
+        const totalDuration = sorted.reduce((sum, event) => sum + (Number(event.duration_ms) || 0), 0);
+
+        drawerBody.innerHTML =
+          '<div class="drawer-stats">' +
+          drawerStat(String(sorted.length), 'calls') +
+          drawerStat(UI.fmtDuration(span), 'wall time') +
+          drawerStat(String(errors), 'errors') +
+          '</div>' +
+          '<div class="wf">' +
+          sorted
+            .map((event) => {
+              const created = Date.parse(event.created);
+              const left = Number.isFinite(created) ? ((created - start) / span) * 100 : 0;
+              const width =
+                event.duration_ms !== null && event.duration_ms !== undefined
+                  ? Math.max((Number(event.duration_ms) / span) * 100, 1.5)
+                  : 0;
+              const color =
+                event.status === 'error'
+                  ? '#c4557f'
+                  : event.status === 'cooldown'
+                    ? '#b87818'
+                    : WF_COLORS[event.event_type] || '#7c65e8';
+              const detail = event.detail || event.output_summary || event.input_summary || '';
+              return (
+                '<div class="wf-item">' +
+                '<div class="wf-time">' +
+                UI.esc(UI.fmtTime(event.created)) +
+                '</div>' +
+                '<div class="wf-main">' +
+                '<div class="wf-top"><span class="wf-tool">' +
+                UI.esc(event.tool || event.event_type) +
+                '</span><span class="wf-dur">' +
+                (event.duration_ms !== null && event.duration_ms !== undefined
+                  ? UI.fmtDuration(event.duration_ms)
+                  : 'instant') +
+                '</span></div>' +
+                '<div class="wf-lane"><span class="wf-bar' +
+                (width ? '' : ' is-dot') +
+                '" style="left:' +
+                Math.min(left, 99).toFixed(2) +
+                '%;width:' +
+                Math.min(width, 100 - left).toFixed(2) +
+                '%;--wf-color:' +
+                color +
+                '"></span></div>' +
+                '<div class="wf-meta"><span class="pill ' +
+                UI.pillClass(event.status) +
+                '">' +
+                UI.esc(UI.statusLabel(event.status)) +
+                '</span>' +
+                (event.provider || event.model
+                  ? '<span class="mono">' +
+                    UI.esc([event.provider, event.model].filter(Boolean).join(' · ')) +
+                    '</span>'
+                  : '') +
+                (event.step ? '<span class="chip chip-xs">' + UI.esc(event.step) + '</span>' : '') +
+                (detail ? '<span class="wf-detail" title="' + UI.esc(detail) + '">' + UI.esc(detail) + '</span>' : '') +
+                '</div>' +
+                '</div>' +
+                '</div>'
+              );
+            })
+            .join('') +
+          '</div>' +
+          (totalDuration
+            ? '<p class="hint" style="margin-top:16px">Sum of reported call durations: ' +
+              UI.fmtDuration(totalDuration) +
+              '</p>'
+            : '');
+      }
+
+      async function openTrace(traceId, fallbackEvent) {
+        activeTrace = traceId || null;
+        lastFocus = document.activeElement;
+        drawer.classList.add('open');
+        overlay.classList.add('open');
+        drawer.setAttribute('aria-hidden', 'false');
+        drawerTitle.textContent = traceId || (fallbackEvent && fallbackEvent.tool) || 'Single event';
+        drawerSub.textContent = fallbackEvent
+          ? [fallbackEvent.agent, UI.fmtDateTime(fallbackEvent.created)].filter(Boolean).join(' · ')
+          : 'Reconstructing tool calls for this trace…';
+        drawerBody.innerHTML = UI.loadingState('Loading trace…');
+        drawerClose.focus();
+
+        if (!traceId) {
+          renderTrace(fallbackEvent ? [fallbackEvent] : []);
+          return;
+        }
+        try {
+          const data = await Api.events({ trace_id: traceId, limit: 200 });
+          const rows = Array.isArray(data.events) ? data.events : [];
+          if (!drawer.classList.contains('open') || activeTrace !== traceId) return;
+          const first = rows[rows.length - 1] || fallbackEvent;
+          if (first) {
+            drawerSub.textContent = [first.agent, UI.fmtDateTime(first.created)]
+              .filter(Boolean)
+              .join(' · ');
+          }
+          renderTrace(rows, fallbackEvent);
+        } catch (error) {
+          drawerBody.innerHTML = UI.errorState('Trace unavailable', error.message || String(error));
+        }
+      }
+
+      function closeDrawer() {
+        drawer.classList.remove('open');
+        overlay.classList.remove('open');
+        drawer.setAttribute('aria-hidden', 'true');
+        activeTrace = null;
+        if (lastFocus && typeof lastFocus.focus === 'function') lastFocus.focus();
+      }
+
+      // -----------------------------------------------------------------
+      // Wiring
+      // -----------------------------------------------------------------
+
+      pauseBtn.innerHTML = icon('pause', 13) + '<span>Pause</span>';
+      refreshBtn.innerHTML = icon('refresh', 14) + '<span>Refresh</span>';
+      drawerClose.innerHTML = icon('x', 16);
+
+      pauseBtn.addEventListener('click', function () {
+        paused = !paused;
+        pauseBtn.classList.toggle('is-active', paused);
+        pauseBtn.innerHTML = paused
+          ? icon('play', 13) + '<span>Resume</span>'
+          : icon('pause', 13) + '<span>Pause</span>';
+        UI.setLive(paused ? 'paused' : 'connected', paused ? 'Paused' : 'Live stream');
+        if (!paused) loadEvents(true);
+        else renderSummary();
+      });
+
+      refreshBtn.addEventListener('click', function () {
+        loadEvents(true);
+      });
+
+      olderBtn.addEventListener('click', function () {
+        if (cursor) loadEvents(false);
+      });
+
+      const onFilterChange = function () {
+        cursor = null;
+        loadEvents(true);
+      };
+      for (const select of [toolSelect, statusSelect, providerSelect, pipelineSelect]) {
+        select.addEventListener('change', onFilterChange);
+      }
+
+      feedEl.addEventListener('click', function (event) {
+        if (event.target.closest('a')) return;
+        const row = event.target.closest('.ev');
+        if (!row) return;
+        const id = row.getAttribute('data-id');
+        const traceId = row.getAttribute('data-trace') || '';
+        const fallback = events.find((item) => item.id === id) || null;
+        openTrace(traceId, fallback);
+      });
+
+      feedEl.addEventListener('keydown', function (event) {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        if (event.target.closest('a')) return;
+        const row = event.target.closest('.ev');
+        if (!row) return;
+        event.preventDefault();
+        const id = row.getAttribute('data-id');
+        const traceId = row.getAttribute('data-trace') || '';
+        openTrace(traceId, events.find((item) => item.id === id) || null);
+      });
+
+      drawerClose.addEventListener('click', closeDrawer);
+      overlay.addEventListener('click', closeDrawer);
+      document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape' && drawer.classList.contains('open')) closeDrawer();
+      });
+
+      setInterval(function () {
+        document.querySelectorAll('[data-elapsed]').forEach(function (node) {
+          const value = node.getAttribute('data-elapsed');
+          if (value) node.textContent = UI.elapsed(value);
+        });
+      }, 1000);
+
+      function onStatus(state) {
+        if (paused) return;
+        if (state.state === 'connected') {
+          UI.setLive('connected', 'Live stream');
+          UI.setStale(false);
+        } else if (state.state === 'stale') {
+          UI.setLive('stale', 'Stream stale');
+          UI.setStale(true);
+        } else if (state.state === 'reconnecting') {
+          UI.setLive('reconnecting', 'Reconnecting…');
+        } else if (state.state === 'connecting') {
+          UI.setLive('connecting', 'Connecting…');
+        }
+      }
+
+      refreshBtn.addEventListener('click', function () {
+        if (paused) UI.setLive('paused', 'Paused');
+      });
+
+      reelEl.innerHTML = UI.loadingState('Waiting for telemetry…');
+      feedEl.innerHTML = UI.loadingState('Loading the event ring…');
+
+      loadEvents(true);
+      window.ZodSSE.connect({
+        onDelta: function (data) {
+          if (Array.isArray(data.slots)) {
+            slots = data.slots;
+            renderReel();
+          }
+          if (Array.isArray(data.events) && data.events.length) prependLive(data.events);
+        },
+        onStatus,
+      });
+
+      const params = new URLSearchParams(window.location.search);
+      const traceParam = params.get('trace');
+      if (traceParam) {
+        window.setTimeout(function () {
+          openTrace(traceParam, events.find((event) => event.trace_id === traceParam) || null);
+        }, 700);
+      }
+    })();
+  </script>
+</body>
+</html>

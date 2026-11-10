@@ -63,7 +63,10 @@ export class GatewayScheduler {
       }
     };
 
-    this.handle = registerGatewayTimerJobs(log, mod, { tickHandler });
+    this.handle = registerGatewayTimerJobs(log, mod, {
+      tickHandler,
+      pb,
+    });
   }
 
   /** Recover every COOLDOWN bucket whose cooldownUntil has elapsed (60s → READY).

@@ -11,6 +11,7 @@ import { hashUrl, normalizeUrl } from '@zod/dedup';
 import { attemptMerge, createMergeStore } from '@zod/dedup/merger';
 import type { TaskScratchpadRow } from '@zod/db-hot/schema';
 import { createTombstoneIfAbsent } from '@zod/db-hot/tombstone';
+import { recordMachineEvent, type MachineEventInput } from '@zod/db-hot/machine-events';
 import { LlmRouter } from '@zod/llm';
 import { createLogger, type Logger } from '@zod/logger';
 import { buildJobsMessages, parseJobsVerdict, type JobsVerdict } from './rule-packs/jobs.js';
@@ -193,27 +194,140 @@ function firstNonEmpty(...values: Array<string | null | undefined>): string {
   return 'Unknown';
 }
 
+/** Stable machine-trace key for a candidate URL. */
+function traceForUrl(url: string): string {
+  if (!url) return '';
+  try {
+    return hashUrl(normalizeUrl(url));
+  } catch {
+    return '';
+  }
+}
+
+type OrchestratorEvent = Omit<MachineEventInput, 'event_type'>;
+
+/** Coerce an arbitrary pipeline label to the machine-event pipeline union. */
+function machinePipeline(value: unknown): '' | 'local' | 'events' | 'jobs' | 'loot' | 'social' {
+  const label = String(value ?? '');
+  return (['local', 'events', 'jobs', 'loot', 'social'] as const).includes(label as never)
+    ? (label as 'local' | 'events' | 'jobs' | 'loot' | 'social')
+    : '';
+}
+
+/** Best-effort orchestrator machine event (never breaks the audit). */
+function emitOrchestratorEvent(pb: PbLike, event: OrchestratorEvent): void {
+  try {
+    recordMachineEvent(pb as never, { event_type: 'orchestrator', ...event });
+  } catch {
+    // Observability must never interfere with auditing.
+  }
+}
+
+/** Record that a row produced no LLM verdict (UNVERIFIED / POOL_SATURATED). */
+function emitNoVerdict(
+  pb: PbLike,
+  candidateUrl: string,
+  pipeline: string,
+  result: { verdict: unknown; reason?: string },
+): void {
+  const verdict = String(result.verdict);
+  emitOrchestratorEvent(pb, {
+    trace_id: traceForUrl(candidateUrl),
+    agent: `orchestrator:${pipeline || 'unknown'}`,
+    pipeline: machinePipeline(pipeline),
+    tool: 'orchestrator.verdict',
+    step: 'STEP_2',
+    status: 'skip',
+    url: candidateUrl,
+    detail: `no verdict: ${verdict}${result.reason ? ` — ${result.reason}` : ''}`,
+    meta: { verdict, reason: result.reason ?? '' },
+  });
+}
+
+/** Human-readable error text including PocketBase validation details. */
+function describeError(err: unknown): string {
+  const e = err as { message?: unknown; response?: { data?: unknown } } | null;
+  const base = e?.message ? String(e.message) : String(err);
+  const data = e?.response?.data;
+  if (data && typeof data === 'object') {
+    try {
+      return `${base} | ${JSON.stringify(data).slice(0, 500)}`;
+    } catch {
+      return base;
+    }
+  }
+  return base;
+}
+
 async function processRow(
   pb: PbLike,
   router: LlmRouter,
   rowLog: Logger,
   row: TaskScratchpadRow,
 ): Promise<void> {
+  const traceId = traceForUrl(row.candidate_url);
+  const agent = `orchestrator:${row.pipeline || 'unknown'}`;
+  const startedAt = Date.now();
+  emitOrchestratorEvent(pb, {
+    trace_id: traceId,
+    agent,
+    pipeline: row.pipeline,
+    tool: 'orchestrator.process',
+    step: 'STEP_2',
+    status: 'start',
+    url: row.candidate_url,
+    input_summary: row.candidate_title ?? '',
+    detail: `dispatch ${row.pipeline}`,
+  });
+
   // Dispatch by pipeline. The scratchpad row's pipeline field is authoritative
   // (never candidate data) — T-05-06.
-  switch (row.pipeline) {
-    case 'loot':
-      return await drainLootRow(pb, router, rowLog, row);
-    case 'events':
-      return await processEventsRow(pb, router, rowLog, row);
-    case 'local':
-      return await drainLocalRow(pb, router, rowLog, row);
-    case 'social':
-      return await processSocialRow(pb, router, rowLog, row);
-    case 'jobs':
-    default:
-      return await processJobsRow(pb, router, rowLog, row);
+  try {
+    switch (row.pipeline) {
+      case 'loot':
+        await drainLootRow(pb, router, rowLog, row);
+        break;
+      case 'events':
+        await processEventsRow(pb, router, rowLog, row);
+        break;
+      case 'local':
+        await drainLocalRow(pb, router, rowLog, row);
+        break;
+      case 'social':
+        await processSocialRow(pb, router, rowLog, row);
+        break;
+      case 'jobs':
+      default:
+        await processJobsRow(pb, router, rowLog, row);
+        break;
+    }
+  } catch (err) {
+    const detail = describeError(err);
+    emitOrchestratorEvent(pb, {
+      trace_id: traceId,
+      agent,
+      pipeline: row.pipeline,
+      tool: 'orchestrator.process',
+      step: 'STEP_2',
+      status: 'error',
+      url: row.candidate_url,
+      duration_ms: Date.now() - startedAt,
+      detail,
+    });
+    throw err;
   }
+
+  emitOrchestratorEvent(pb, {
+    trace_id: traceId,
+    agent,
+    pipeline: row.pipeline,
+    tool: 'orchestrator.process',
+    step: 'STEP_2',
+    status: 'ok',
+    url: row.candidate_url,
+    duration_ms: Date.now() - startedAt,
+    detail: `audit finished for ${row.pipeline}`,
+  });
 }
 
 /** Jobs audit flow: rule pack → router → jobs gates → write/tombstone. */
@@ -269,10 +383,13 @@ async function processJobsRow(
     pipeline,
     url: candidateUrl,
     priority: 2,
+    trace_id: traceForUrl(candidateUrl),
+    agent: 'orchestrator:jobs',
   });
 
   // UNVERIFIED / POOL_SATURATED: leave at STEP_2, never write, never crash.
   if (result.verdict === 'UNVERIFIED' || result.verdict === 'POOL_SATURATED') {
+    emitNoVerdict(pb, candidateUrl, row.pipeline, result);
     rowLog.info({ verdict: result.verdict, reason: result.reason }, 'no verdict; leaving at STEP_2');
     return;
   }
@@ -424,10 +541,13 @@ export async function drainLootRow(
     pipeline: 'loot',
     url: candidateUrl,
     priority: 2,
+    trace_id: traceForUrl(candidateUrl),
+    agent: 'orchestrator:loot',
   });
 
   // UNVERIFIED / POOL_SATURATED: leave at STEP_2, never write, never crash.
   if (result.verdict === 'UNVERIFIED' || result.verdict === 'POOL_SATURATED') {
+    emitNoVerdict(pb, candidateUrl, row.pipeline, result);
     rowLog.info({ verdict: result.verdict, reason: result.reason }, 'no verdict; leaving at STEP_2');
     return;
   }
@@ -495,6 +615,15 @@ async function createOpportunityIfAbsent(
       });
       if ((page.items ?? []).length > 0) {
         // Already written — idempotent skip.
+        emitOrchestratorEvent(pb, {
+          trace_id: urlHash,
+          agent: 'orchestrator',
+          pipeline: machinePipeline(data.pipeline),
+          tool: 'orchestrator.opportunity',
+          step: 'STEP_3',
+          status: 'skip',
+          detail: 'already exists (url_hash)',
+        });
         return;
       }
     } catch {
@@ -502,7 +631,39 @@ async function createOpportunityIfAbsent(
     }
   }
 
-  await coll.create(data);
+  try {
+    await coll.create(data);
+  } catch (err) {
+    // Surface the rejected payload (identity fields only — never the fetched
+    // body) so the machine glass shows exactly what the store refused.
+    const safe = {
+      pipeline: data.pipeline,
+      bucket_channel: data.bucket_channel,
+      status: data.status,
+      title: data.title,
+      organizer: data.organizer,
+      links: data.links,
+      deadlines: data.deadlines,
+      fingerprint_hash: data.fingerprint_hash,
+      url_hash: data.url_hash,
+    };
+    throw new Error(`${describeError(err)} | payload=${JSON.stringify(safe).slice(0, 600)}`, {
+      cause: err,
+    });
+  }
+  emitOrchestratorEvent(pb, {
+    trace_id: urlHash,
+    agent: 'orchestrator',
+    pipeline: machinePipeline(data.pipeline),
+    tool: 'orchestrator.opportunity',
+    step: 'STEP_3',
+    status: 'ok',
+    detail: `created ${String(data.pipeline ?? 'unknown')} opportunity`,
+    meta: {
+      bucket_channel: String(data.bucket_channel ?? ''),
+      prize_cash_inr: data.prize_cash_inr ?? null,
+    },
+  });
 }
 
 async function writeTombstone(
@@ -518,6 +679,17 @@ async function writeTombstone(
     terminal_status: terminalStatus,
     source,
     decided_at: new Date().toISOString(),
+  });
+  emitOrchestratorEvent(pb, {
+    trace_id: urlHash,
+    agent: 'orchestrator',
+    pipeline: '',
+    tool: 'orchestrator.tombstone',
+    step: 'STEP_3',
+    status: 'skip',
+    url: candidateUrl,
+    detail: `${terminalStatus} (${source})`,
+    meta: { terminal_status: terminalStatus, source },
   });
 }
 
@@ -585,10 +757,13 @@ async function processEventsRow(
     pipeline: 'events',
     url: candidateUrl,
     priority: 2,
+    trace_id: traceForUrl(candidateUrl),
+    agent: 'orchestrator:events',
   });
 
   // UNVERIFIED / POOL_SATURATED: leave at STEP_2, never write, never crash.
   if (result.verdict === 'UNVERIFIED' || result.verdict === 'POOL_SATURATED') {
+    emitNoVerdict(pb, candidateUrl, row.pipeline, result);
     rowLog.info({ verdict: result.verdict, reason: result.reason }, 'no verdict; leaving at STEP_2');
     return;
   }
@@ -796,9 +971,12 @@ async function processSocialRow(
     pipeline: 'social',
     url: candidateUrl,
     priority: 2,
+    trace_id: traceForUrl(candidateUrl),
+    agent: 'orchestrator:social',
   });
 
   if (result.verdict === 'UNVERIFIED' || result.verdict === 'POOL_SATURATED') {
+    emitNoVerdict(pb, candidateUrl, row.pipeline, result);
     rowLog.info({ verdict: result.verdict, reason: result.reason }, 'no verdict; leaving at STEP_2');
     return;
   }
@@ -999,10 +1177,13 @@ async function drainLocalRow(
     pipeline: 'local',
     url: candidateUrl,
     priority: 2,
+    trace_id: traceForUrl(candidateUrl),
+    agent: 'orchestrator:local',
   });
 
   // UNVERIFIED / POOL_SATURATED: leave at STEP_2, never write, never crash.
   if (result.verdict === 'UNVERIFIED' || result.verdict === 'POOL_SATURATED') {
+    emitNoVerdict(pb, candidateUrl, row.pipeline, result);
     rowLog.info({ verdict: result.verdict, reason: result.reason }, 'no verdict; leaving at STEP_2');
     return;
   }
