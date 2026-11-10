@@ -82,6 +82,23 @@
     .health-cell .bucket { font-size: 0.75rem; color: #aeb6c6; margin-bottom: 0.25rem; }
     .health-cell .state { font-size: 0.8rem; font-weight: 600; }
 
+    /* Glass panel: raw telemetry ticker */
+    #glass-panel { padding: 0.75rem 1rem; border-bottom: 1px solid #2a3342; background: #11151d; flex: 0 0 auto; overflow-y: auto; min-height: 6rem; }
+    #glass-panel h2 { margin: 0 0 0.5rem; font-size: 0.95rem; }
+    #glass-ticker { display: flex; flex-direction: column; gap: 0.25rem; max-height: 6rem; overflow-y: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.75rem; }
+    .glass-row { padding: 0.2rem 0.4rem; border: 1px solid #2a3342; border-radius: 0.3rem; background: #161a22; display: flex; gap: 0.4rem; align-items: center; }
+    .glass-row .slot { color: #aeb6c6; font-size: 0.7rem; min-width: 9rem; }
+    .glass-row .provider { color: #8b93a0; font-size: 0.7rem; min-width: 7rem; }
+    .glass-row .model { color: #aeb6c6; font-size: 0.7rem; min-width: 14rem; }
+    .glass-row .step { color: #9fd1cf; font-size: 0.7rem; min-width: 9rem; }
+    .glass-row .status { font-size: 0.7rem; font-weight: 600; text-transform: uppercase; min-width: 6rem; }
+    .glass-row .dur { color: #8b93a0; font-size: 0.7rem; min-width: 5rem; }
+    .glass-row .detail { color: #e6e9f0; font-size: 0.7rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+    .status-done { color: #8fd18f; }
+    .status-active { color: #8fd1d1; }
+    .status-cooldown { color: #d1a84f; }
+    .status-error { color: #d18f8f; }
+
     /* Bottom panel: tabbed boards */
     #bottom-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; background: #11151d; }
     .board-tabs { display: flex; gap: 0.25rem; padding: 0.5rem 1rem; border-bottom: 1px solid #2a3342; overflow-x: auto; }
@@ -151,6 +168,12 @@
     <section id="middle-panel">
       <h2>Pool Health Grid &middot; <span id="health-count">0</span> buckets</h2>
       <div id="health-grid" class="health-grid"></div>
+    </section>
+
+    <!-- Glass panel: raw telemetry ticker -->
+    <section id="glass-panel">
+      <h2>Machine Glass &middot; <span id="glass-count">0</span> calls</h2>
+      <div id="glass-ticker">connecting&hellip;</div>
     </section>
 
     <!-- Bottom panel: tabbed boards -->
@@ -255,6 +278,8 @@
     const healthGrid = document.getElementById('health-grid');
     const slotCountEl = document.getElementById('slot-count');
     const healthCountEl = document.getElementById('health-count');
+    const glassContainer = document.getElementById('glass-ticker');
+    const glassCountEl = document.getElementById('glass-count');
     const stalenessBanner = document.getElementById('staleness-banner');
     const boardTabsEl = document.getElementById('board-tabs');
     const boardsScroll = document.getElementById('boards-scroll');
@@ -470,10 +495,49 @@
     setupLoadOlder('load-older-btn', 'tbody-events-local', 'older-results');
     setupLoadOlder('load-older-audit-btn', 'tbody-audit-log', 'older-results-audit');
 
+    /* ---------------- glass panel: raw telemetry ticker ---------------- */
+    async function fetchGlass() {
+      try {
+        const r = await fetch('/api/telemetry');
+        if (!r.ok) throw new Error('telemetry ' + r.status);
+        const data = await r.json();
+        const rows = Array.isArray(data.rows) ? data.rows : [];
+        renderGlass(rows);
+        if (glassCountEl) glassCountEl.textContent = String(rows.length);
+      } catch (err) {
+        if (glassContainer) glassContainer.textContent = 'glass failed: ' + (err?.message ?? String(err));
+      }
+    }
+
+    function renderGlass(rows) {
+      if (!glassContainer) return;
+      if (rows.length === 0) {
+        glassContainer.textContent = 'no telemetry yet';
+        return;
+      }
+      glassContainer.innerHTML = '';
+      for (const row of rows) {
+        const div = document.createElement('div');
+        div.className = 'glass-row';
+        const statusCls = 'status-' + esc(String(row.status ?? '').toLowerCase());
+        div.innerHTML =
+          '<span class="slot">' + esc(row.slot ?? '-') + '</span>' +
+          '<span class="provider">' + esc(row.provider ?? '-') + '</span>' +
+          '<span class="model">' + esc(row.model ?? '-') + '</span>' +
+          '<span class="step">' + esc(row.step ?? '-') + '</span>' +
+          '<span class="status ' + statusCls + '">' + esc(row.status ?? '-') + '</span>' +
+          '<span class="dur">' + (row.duration_ms != null ? esc(String(row.duration_ms)) + 'ms' : '-') + '</span>' +
+          '<span class="detail" title="' + esc(row.detail ?? '') + '">' + esc((row.detail ?? '').slice(0, 60)) + '</span>';
+        glassContainer.appendChild(div);
+      }
+    }
+
     /* Boot */
     renderTabs();
     loadBoards();
     connect();
+    fetchGlass();
+    setInterval(fetchGlass, 5000);
   </script>
 </body>
 </html>

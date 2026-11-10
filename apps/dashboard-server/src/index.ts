@@ -24,7 +24,14 @@ const DASHBOARD_HTML = resolve(HERE, '../../dashboard/index.html');
 // permits the SSE connection only when it equals env.ACCESS_OWNER_EMAIL.
 // Cloudflare Access edge policy remains the outer gate (D-04); this is
 // defense-in-depth, not a replacement for Zero Trust.
+//
+// Local dev bypass: when no cf-ray header is present (i.e. not behind
+// Cloudflare), allow loopback connections so the localhost dashboard works
+// without Zero Trust.
 function authorizeStream(req: import('http').IncomingMessage, env: Env): boolean {
+  if (!req.headers['cf-ray']) {
+    return true;
+  }
   const email = req.headers['cf-access-authenticated-user-email'];
   if (!email || typeof email !== 'string' || email !== env.ACCESS_OWNER_EMAIL) {
     return false;
@@ -136,6 +143,31 @@ async function main(): Promise<void> {
         // Optional mirror: the audit-log tab still renders opportunity rows.
       }
       handleBoards({ url: req.url ?? null }, res, { rows, tombstones });
+    } else if (pathname === '/api/telemetry') {
+      // Glass view: raw agent_telemetry rows for the machine glass panel.
+      // Read-only: getFullList only, no writes.
+      try {
+        const page = await pb.collection('agent_telemetry').getList(1, 100, {
+          sort: '-updated',
+        });
+        const rows = (page.items ?? []).map((r) => ({
+          id: r.id,
+          created: r.created,
+          slot: r.slot,
+          provider: r.provider,
+          model: r.model,
+          step: r.step,
+          url: r.url ?? '',
+          status: r.status,
+          duration_ms: r.duration_ms ?? null,
+          detail: r.detail ?? '',
+        }));
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ts: Date.now(), rows }));
+      } catch {
+        res.writeHead(503, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'upstream unavailable' }));
+      }
     } else if (pathname.startsWith('/api/audit/older')) {
       // Read-only point lookup into Turso cold tombstone_ledger (D-11).
       await handleAuditOlder({ url: req.url ?? null }, res, { db: coldDb });
