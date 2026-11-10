@@ -43,16 +43,16 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
-// G-07-WR-01: application-layer auth check on /api/stream before hub.addClient.
+// G-07-WR-01: application-layer auth check on every /api/* route.
 // Reads the Cloudflare Access identity header injected on tunneled requests;
-// permits the SSE connection only when it equals env.ACCESS_OWNER_EMAIL.
+// permits the request only when it equals env.ACCESS_OWNER_EMAIL.
 // Cloudflare Access edge policy remains the outer gate (D-04); this is
 // defense-in-depth, not a replacement for Zero Trust.
 //
 // Local dev bypass: when no cf-ray header is present (i.e. not behind
 // Cloudflare), allow loopback connections so the localhost dashboard works
 // without Zero Trust.
-function authorizeStream(req: import('http').IncomingMessage, env: Env): boolean {
+function authorizeApi(req: import('http').IncomingMessage, env: Env): boolean {
   if (!req.headers['cf-ray']) {
     return true;
   }
@@ -110,13 +110,16 @@ async function main(): Promise<void> {
     // Filter queries must still route: compare the pathname, not the full URL.
     const pathname = url.split('?')[0] ?? '';
 
+    // Application-layer defense-in-depth (G-07-WR-01): reject unauth on every
+    // /api/* route before dispatching, so no endpoint is reachable without
+    // authorization (edge Zero Trust + loopback bind remain compensating controls).
+    if (pathname.startsWith('/api/') && !authorizeApi(req, env)) {
+      res.writeHead(401, { 'WWW-Authenticate': 'Bearer realm="dashboard"' });
+      res.end('unauthorized');
+      return;
+    }
+
     if (pathname === '/api/stream') {
-      // Application-layer defense-in-depth (G-07-WR-01): reject unauth before hub.addClient.
-      if (!authorizeStream(req, env)) {
-        res.writeHead(401, { 'WWW-Authenticate': 'Bearer realm="dashboard"' });
-        res.end('unauthorized');
-        return;
-      }
       // Server-side viewer cap (D-08): reject before any stream headers render.
       if (!hub.hasCapacity()) {
         sendJson(res, 503, { error: 'viewer capacity reached' });

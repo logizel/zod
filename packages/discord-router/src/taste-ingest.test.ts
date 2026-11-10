@@ -175,7 +175,7 @@ describe('taste ingestion handler (D-11, T-6-10, Pitfall 9)', () => {
         reply: vi.fn().mockResolvedValue(undefined),
       },
     };
-    const user = { bot: false };
+    const user = { bot: false, id: 'op-123' };
 
     await handlerFn(reaction, user);
 
@@ -187,6 +187,42 @@ describe('taste ingestion handler (D-11, T-6-10, Pitfall 9)', () => {
     });
     expect(reaction.message.reply).toHaveBeenCalledWith(
       '✅ Taste rule created: BOOST — Prefer: NITK Tech Fest 2026 — https://nitk.edu.in/fest',
+    );
+  });
+
+  it('rejects 👍 reaction from unauthorized user (fail-closed)', async () => {
+    const pb = makePbMock();
+    hoisted.mockCreatePbClient.mockReturnValue(pb);
+
+    const client = { on: vi.fn() } as any;
+    hoisted.mockGetClient.mockReturnValue(client);
+    hoisted.mockCreateLogger.mockReturnValue(mockLogger);
+
+    createTasteIngestionHandler({
+      env: testEnv,
+      log: mockLogger as any,
+      pb: pb as any,
+      client,
+    });
+
+    const handlerFn = client.on.mock.calls.find((c: any[]) => c[0] === 'messageReactionAdd')?.[1];
+
+    const reaction = {
+      emoji: { name: '👍' },
+      message: {
+        id: 'msg-1',
+        partial: false,
+        embeds: [{ title: 'NITK Tech Fest 2026', url: 'https://nitk.edu.in/fest' }],
+        reply: vi.fn().mockResolvedValue(undefined),
+      },
+    };
+    const user = { bot: false, id: 'user-456' };
+
+    await handlerFn(reaction, user);
+
+    expect(pb.collection('taste_rules').create).not.toHaveBeenCalled();
+    expect(reaction.message.reply).toHaveBeenCalledWith(
+      '❌ You are not authorized to create taste rules.',
     );
   });
 
@@ -222,7 +258,7 @@ describe('taste ingestion handler (D-11, T-6-10, Pitfall 9)', () => {
         reply: vi.fn().mockResolvedValue(undefined),
       },
     };
-    const user = { bot: false };
+    const user = { bot: false, id: 'op-123' };
 
     await handlerFn(reaction, user);
 
@@ -291,7 +327,7 @@ describe('taste ingestion handler (D-11, T-6-10, Pitfall 9)', () => {
         reply: vi.fn().mockResolvedValue(undefined),
       },
     };
-    const user = { bot: false };
+    const user = { bot: false, id: 'op-123' };
 
     await handlerFn(reaction, user);
 

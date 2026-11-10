@@ -267,7 +267,7 @@ export type TombstoneMirrorRow = z.infer<typeof TombstoneMirrorRow>;
 export const TasteRule = z.object({
   kind: z.string().min(1),
   rule: z.string().min(1),
-  weight: z.number().default(1.0),
+  weight: z.number().min(0).default(1.0),
   source: z.string().default(''), // 'reaction' | 'keyword' | 'dm' — tracks rule origin (D-11)
   created_at: z.iso.datetime().default(() => new Date().toISOString()),
 });

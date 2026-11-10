@@ -1,6 +1,7 @@
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright-core';
 import pLimit from 'p-limit';
 import { readFileSync } from 'node:fs';
+import { validateUrl } from '@zod/sanitize/fetch';
 
 const MAX_CONCURRENT = 2;
 const limit = pLimit(MAX_CONCURRENT);
@@ -41,6 +42,16 @@ export async function fetchViaBrowser(
   url: string,
   options?: FetchViaBrowserOptions,
 ): Promise<string> {
+  // SSRF guard: refuse private/loopback/link-local hosts and non-default ports
+  // before navigation, regardless of caller.
+  try {
+    validateUrl(url);
+  } catch {
+    throw new Error(
+      'fetchViaBrowser: private/loopback host or non-default port refused (SSRF guard)',
+    );
+  }
+
   const resolveBrowser =
     options?.getBrowser ?? (options?.browser ? async () => options.browser as Browser : getBrowser);
 

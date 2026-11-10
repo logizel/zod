@@ -23,6 +23,14 @@ export async function resolveOfficialDomain(
   let current = url;
   let hops = 0;
 
+  // SSRF guard: validate the initial URL before any network request,
+  // mirroring the redirect-target guard applied below (line 55).
+  try {
+    validateUrl(current);
+  } catch {
+    return { finalUrl: current, hops, ok: false };
+  }
+
   for (;;) {
     let res: Response;
     try {

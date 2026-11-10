@@ -96,7 +96,7 @@ export function parseRuleCommand(
   if (
     kind === 'WEIGHT' &&
     tokens[1] &&
-    /^-?\d+(\.\d+)?$/.test(tokens[1])
+    /^\d+(\.\d+)?$/.test(tokens[1])
   ) {
     weight = Number(tokens[1]);
     ruleTokens = tokens.slice(2);
@@ -171,6 +171,17 @@ export function createTasteIngestionHandler(deps: TasteIngestionDeps): TasteInge
     try {
       // T-6-10: only non-bot users create taste rules
       if (user.bot) return;
+
+      // CR-02 / G-06-1: reaction-based rule creation is gated on the operator
+      // allowlist, failing closed when OPERATOR_USER_IDS is empty.
+      if (!OPERATOR_USER_IDS.has(user.id)) {
+        try {
+          await reaction.message.reply('❌ You are not authorized to create taste rules.');
+        } catch {
+          // best effort: a failed reply must not block the handler
+        }
+        return;
+      }
 
       // Handle partial messages (reaction on uncached message)
       if (reaction.message?.partial) {
