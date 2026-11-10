@@ -84,7 +84,7 @@ describe('processOpportunity', () => {
     const client = {
       channels: {
         fetch: async (id: string) => ({
-          send: async (data: any) => { sent.push(data); return { id: 'msg-1' }; },
+          send: async (data: any) => { sent.push(data); return { id: 'msg-1', react: async () => undefined }; },
           isTextBased: () => true,
           isDMBased: () => false,
         }),

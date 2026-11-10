@@ -38,6 +38,13 @@ export async function processOpportunity(
   }
   try {
     const sentMessage = await channel.send({ embeds: [embed] });
+    // Add feedback reactions so operators can create taste rules via 👍/👎
+    try {
+      await sentMessage.react('👍');
+      await sentMessage.react('👎');
+    } catch (reactErr) {
+      log.warn({ id: opportunity.id, error: String(reactErr) }, 'failed to add feedback reactions');
+    }
     await pb.collection('opportunities').update(opportunity.id, {
       status: 'routed',
       discord_message_id: sentMessage.id,
