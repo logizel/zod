@@ -170,9 +170,9 @@ export function createTasteIngestionHandler(deps: TasteIngestionDeps): TasteInge
       }
 
       const emojiName = reaction.emoji?.name;
-      if (emojiName !== '👍' && emojiName !== '👎') return;
+      if (!emojiName?.startsWith('👍') && !emojiName?.startsWith('👎')) return;
 
-      const kind = emojiName === '👍' ? 'BOOST' : 'BLOCK';
+      const kind = emojiName.startsWith('👍') ? 'BOOST' : 'BLOCK';
       const context = extractRuleContext(reaction.message);
       const rule = kind === 'BOOST' ? `Prefer: ${context}` : `Reject: ${context}`;
 
