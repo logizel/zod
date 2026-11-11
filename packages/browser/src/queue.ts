@@ -7,6 +7,13 @@ const MAX_CONCURRENT = 2;
 const limit = pLimit(MAX_CONCURRENT);
 const RSS_THRESHOLD_MB = 512;
 
+/**
+ * Non-headless UA: X/LinkedIn gate the default `HeadlessChrome` UA far more
+ * aggressively than a normal desktop Chrome string.
+ */
+const DEFAULT_USER_AGENT =
+  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+
 let browserPromise: Promise<Browser> | null = null;
 
 function getBrowser(): Promise<Browser> {
@@ -33,15 +40,51 @@ function browserRssMb(browser: Browser): number | null {
   }
 }
 
+/** Exported session-cookie shape (matches the browser-export JSON format). */
+export interface BrowserCookie {
+  name: string;
+  value: string;
+  domain: string;
+  path?: string;
+}
+
 export interface FetchViaBrowserOptions {
   browser?: Browser;
   getBrowser?: () => Promise<Browser>;
+  /** Session cookies attached to the context before navigation. */
+  cookies?: BrowserCookie[];
+  /** CSS selector to wait for after navigation (miss = proceed with current HTML). */
+  waitForSelector?: string;
+  /** Extra hydration time after navigation/selector (ms). Default 0. */
+  settleMs?: number;
+  /** Navigation timeout (ms). Default 30000. */
+  timeoutMs?: number;
+  /** Optional UA override (defaults to a desktop Chrome UA). */
+  userAgent?: string;
+  /**
+   * When the final URL after redirects matches, stop immediately (skip the
+   * selector wait) and flag `loginWall`. Used for expired-session redirects.
+   */
+  loginWallUrl?: RegExp;
 }
 
-export async function fetchViaBrowser(
+/** Detailed result so callers can distinguish a login wall from a real render. */
+export interface BrowserFetchResult {
+  html: string;
+  /** HTTP status of the main document navigation (0 when unavailable). */
+  status: number;
+  /** Final URL after redirects. */
+  finalUrl: string;
+  /** True when no selector was requested or the selector appeared. */
+  selectorFound: boolean;
+  /** True when `loginWallUrl` matched the final URL (session rejected). */
+  loginWall: boolean;
+}
+
+export async function fetchViaBrowserResult(
   url: string,
   options?: FetchViaBrowserOptions,
-): Promise<string> {
+): Promise<BrowserFetchResult> {
   // SSRF guard: refuse private/loopback/link-local hosts and non-default ports
   // before navigation, regardless of caller.
   try {
@@ -71,14 +114,54 @@ export async function fetchViaBrowser(
         browserPromise = null;
         browser = await getBrowser();
       }
-      ctx = await browser.newContext({ javaScriptEnabled: true });
+      ctx = await browser.newContext({
+        javaScriptEnabled: true,
+        userAgent: options?.userAgent ?? DEFAULT_USER_AGENT,
+        viewport: { width: 1280, height: 900 },
+      });
+      if (options?.cookies?.length) {
+        await ctx.addCookies(
+          options.cookies.map((cookie) => ({
+            name: cookie.name,
+            value: cookie.value,
+            domain: cookie.domain,
+            path: cookie.path ?? '/',
+            secure: true,
+            httpOnly: true,
+            sameSite: 'Lax' as const,
+          })),
+        );
+      }
       await ctx.route(
         '**/*.{png,jpg,jpeg,webp,gif,svg,woff,woff2,ttf,mp4,webm}',
         (route) => route.abort(),
       );
       const page: Page = await ctx.newPage();
-      await page.goto(url, { timeout: 30_000, waitUntil: 'domcontentloaded' });
-      return await page.content();
+      const timeoutMs = options?.timeoutMs ?? 30_000;
+      const response = await page.goto(url, { timeout: timeoutMs, waitUntil: 'domcontentloaded' });
+      const finalUrl = page.url();
+      // Expired sessions redirect to /login (or /authwall); waiting for feed
+      // selectors there only burns 10s and yields no posts.
+      const loginWall = options?.loginWallUrl ? options.loginWallUrl.test(finalUrl) : false;
+      let selectorFound = !options?.waitForSelector;
+      if (!loginWall && options?.waitForSelector) {
+        selectorFound = await page
+          .waitForSelector(options.waitForSelector, {
+            timeout: Math.min(timeoutMs, 10_000),
+          })
+          .then(() => true)
+          .catch(() => false);
+      }
+      if (!loginWall && options?.settleMs && options.settleMs > 0) {
+        await page.waitForTimeout(options.settleMs);
+      }
+      return {
+        html: await page.content(),
+        status: response?.status() ?? 0,
+        finalUrl,
+        selectorFound,
+        loginWall,
+      };
     } finally {
       if (ctx) {
         try {
@@ -89,6 +172,14 @@ export async function fetchViaBrowser(
       }
     }
   });
+}
+
+/** Backwards-compatible HTML-only entrypoint used by the sanitize facade. */
+export async function fetchViaBrowser(
+  url: string,
+  options?: FetchViaBrowserOptions,
+): Promise<string> {
+  return (await fetchViaBrowserResult(url, options)).html;
 }
 
 export async function shutdown(): Promise<void> {

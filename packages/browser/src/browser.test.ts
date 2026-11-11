@@ -4,6 +4,7 @@ vi.mock('playwright-core', () => {
   const page = {
     goto: vi.fn(async () => undefined),
     content: vi.fn(async () => '<html><body>ok</body></html>'),
+    url: vi.fn(() => 'https://example.com/'),
   };
   const ctx = {
     route: vi.fn(async () => undefined),

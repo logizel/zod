@@ -61,6 +61,7 @@
                   <th>Source</th>
                   <th>Kind</th>
                   <th>Last poll</th>
+                  <th>Last target</th>
                   <th>Status</th>
                   <th class="num">Duration</th>
                   <th class="num">Candidates</th>
@@ -202,23 +203,29 @@
           .join('');
       }
 
+      function shortUrl(value) {
+        const text = String(value || '');
+        if (text.length <= 52) return text;
+        return text.slice(0, 24) + '…' + text.slice(-24);
+      }
+
       function renderRows() {
         const visible = visibleSources();
         countEl.textContent = visible.length + (visible.length === 1 ? ' source' : ' sources');
         if (!hasData) {
-          rowsEl.innerHTML = '<tr><td colspan="8" class="table-empty">Reading adapter health…</td></tr>';
+          rowsEl.innerHTML = '<tr><td colspan="9" class="table-empty">Reading adapter health…</td></tr>';
           return;
         }
         if (!visible.length) {
           rowsEl.innerHTML =
-            '<tr><td colspan="8" class="table-empty">No adapters match this filter.</td></tr>';
+            '<tr><td colspan="9" class="table-empty">No adapters match this filter.</td></tr>';
           return;
         }
         subEl.textContent =
           visible.length +
           ' of ' +
           sources.length +
-          ' adapters · latest scheduler tick per source';
+          ' adapters · latest scheduler tick + last fetch target per source';
         rowsEl.innerHTML = visible
           .map((source) => {
             const health = healthOf(source);
@@ -254,6 +261,15 @@
                   UI.esc(UI.timeAgo(source.lastAt)) +
                   '</span>'
                 : '<span class="muted">never</span>') +
+              '</td>' +
+              '<td>' +
+              (source.lastTarget
+                ? '<span class="ev-detail mono" title="' +
+                  UI.esc(source.lastTarget) +
+                  '" style="max-width:280px;display:inline-block">' +
+                  UI.esc(shortUrl(source.lastTarget)) +
+                  '</span>'
+                : '<span class="muted">—</span>') +
               '</td>' +
               '<td><span class="pill ' +
               (health === 'ok' ? 'ok' : health === 'error' ? 'error' : 'neutral') +
@@ -301,7 +317,7 @@
               error.message || String(error),
             );
             rowsEl.innerHTML =
-              '<tr><td colspan="8" class="table-empty">Could not load adapters: ' +
+              '<tr><td colspan="9" class="table-empty">Could not load adapters: ' +
               UI.esc(error.message || String(error)) +
               '</td></tr>';
           }
@@ -315,7 +331,7 @@
       healthSelect.addEventListener('change', renderRows);
 
       statsEl.innerHTML = UI.loadingState('Reading adapter health…');
-      rowsEl.innerHTML = '<tr><td colspan="8" class="table-empty">Reading adapter health…</td></tr>';
+      rowsEl.innerHTML = '<tr><td colspan="9" class="table-empty">Reading adapter health…</td></tr>';
       UI.poll(refresh, 30_000);
     })();
   </script>

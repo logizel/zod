@@ -2,6 +2,12 @@
 //
 // Derives adapter health from scheduler machine_events. Known scheduler jobs
 // are always listed so an idle source is visibly idle rather than missing.
+//
+// Lookback: the gateway timers write several machine_events per minute, so a
+// single "latest N rows" query window shrinks to a couple of hours and makes
+// hourly/daily sources look like they never ran. Each known source is queried
+// on its own job tool over a 200-row window (>24h even for the 15-minute
+// portals), and discovered jobs get their own recent window.
 
 import {
   type MachineEventDto,
@@ -21,6 +27,8 @@ export type SourceCard = {
   error: string;
   runsToday: number;
   failuresToday: number;
+  /** Last URL the source fetched (social: the X/LinkedIn listing target). */
+  lastTarget: string;
 };
 
 export type SourcesResponse = {
@@ -52,6 +60,11 @@ const KNOWN_SOURCES: Array<{ name: string; label: string; kind: SourceKind }> = 
   { name: 'social-stub', label: 'X / LinkedIn', kind: 'social' },
 ];
 
+/** Escape a value for a PocketBase filter expression. */
+function quote(value: string): string {
+  return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+}
+
 function isToday(iso: string, nowMs: number): boolean {
   const ms = Date.parse(iso);
   if (!Number.isFinite(ms)) return false;
@@ -67,8 +80,13 @@ function isToday(iso: string, nowMs: number): boolean {
 export function sourceNameFromEvent(event: MachineEventDto): string {
   const job = event.meta?.['job'];
   if (typeof job === 'string' && job) return job;
-  if (event.trace_id.startsWith('job-')) return event.trace_id.slice(4);
-  return event.agent || 'scheduler';
+  // runStubTick emits tool "job.<name>" + trace "job:<name>" (no meta.job);
+  // older scheduler.tick rows used the "job-<name>" trace prefix.
+  if (event.tool.startsWith('job.')) return event.tool.slice('job.'.length);
+  if (event.trace_id.startsWith('job-')) return event.trace_id.slice('job-'.length);
+  if (event.trace_id.startsWith('job:')) return event.trace_id.slice('job:'.length);
+  const agent = event.agent || 'scheduler';
+  return agent.startsWith('scheduler:') ? agent.slice('scheduler:'.length) : agent;
 }
 
 export function buildSources(input: {
@@ -87,6 +105,7 @@ export function buildSources(input: {
       error: '',
       runsToday: 0,
       failuresToday: 0,
+      lastTarget: '',
     });
   }
 
@@ -110,6 +129,7 @@ export function buildSources(input: {
         error: '',
         runsToday: 0,
         failuresToday: 0,
+        lastTarget: '',
       };
       cards.set(name, card);
     }
@@ -136,6 +156,60 @@ export function buildSources(input: {
   };
 }
 
+/** Query each known source's own scheduler events (24h+ lookback). */
+async function loadPerSource(
+  pb: SourcesPb,
+): Promise<Array<Record<string, unknown>>> {
+  const pages = await Promise.all(
+    KNOWN_SOURCES.map((known) =>
+      pb.collection('machine_events').getList(1, 200, {
+        sort: '-created',
+        filter: `event_type = "scheduler" && tool = ${quote(`job.${known.name}`)}`,
+      }),
+    ),
+  );
+  return pages.flatMap((page) => page.items ?? []);
+}
+
+/** Latest social fetch event → target URL + result for the X/LinkedIn card. */
+async function loadSocialFetch(pb: SourcesPb): Promise<{
+  url: string;
+  status: string;
+  detail: string;
+}> {
+  try {
+    const page = await pb.collection('machine_events').getList(1, 1, {
+      sort: '-created',
+      filter: 'event_type = "fetch" && tool = "fetch.social"',
+    });
+    const row = page.items?.[0];
+    return {
+      url: String(row?.['url'] ?? ''),
+      status: String(row?.['status'] ?? ''),
+      detail: String(row?.['output_summary'] || row?.['detail'] || ''),
+    };
+  } catch {
+    // Optional enrichment: a missing event never fails the snapshot.
+    return { url: '', status: '', detail: '' };
+  }
+}
+
+/** Recent scheduler events for discovered jobs (audit-drain, gc, relay...). */
+async function loadOtherJobs(pb: SourcesPb): Promise<Array<Record<string, unknown>>> {
+  const exclusions = KNOWN_SOURCES.map(
+    (known) => `tool != ${quote(`job.${known.name}`)}`,
+  ).join(' && ');
+  const page = await pb.collection('machine_events').getList(1, 100, {
+    sort: '-created',
+    filter:
+      `event_type = "scheduler" && ${exclusions} && ` +
+      'tool !~ "job.gateway-warmup" && ' +
+      'tool !~ "job.gateway-bucket-cooldown" && ' +
+      'tool !~ "job.gateway-daily-cap-reset"',
+  });
+  return page.items ?? [];
+}
+
 export async function handleSources(
   res: {
     writeHead: (status: number, headers: Record<string, string>) => void;
@@ -144,13 +218,27 @@ export async function handleSources(
   opts: { pb: SourcesPb; nowMs?: number },
 ): Promise<void> {
   try {
-    const page = await opts.pb.collection('machine_events').getList(1, 500, {
-      sort: '-created',
-    });
+    const [perSource, socialFetch, otherJobs] = await Promise.all([
+      loadPerSource(opts.pb),
+      loadSocialFetch(opts.pb),
+      loadOtherJobs(opts.pb),
+    ]);
     const body = buildSources({
-      eventRows: page.items ?? [],
+      eventRows: [...perSource, ...otherJobs],
       nowMs: opts.nowMs,
     });
+    const socialCard = body.sources.find((source) => source.name === 'social-stub');
+    if (socialCard) {
+      if (socialFetch.url) socialCard.lastTarget = socialFetch.url;
+      // A skipped/errored fetch is credential- or wall-related and actionable
+      // (e.g. expired burner cookies); surface it in the card's error column.
+      if (
+        socialFetch.detail &&
+        (socialFetch.status === 'skip' || socialFetch.status === 'error')
+      ) {
+        socialCard.error = socialFetch.detail;
+      }
+    }
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(body));
   } catch {

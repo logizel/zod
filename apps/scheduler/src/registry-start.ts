@@ -35,7 +35,7 @@ import { getJobCandidates } from '@zod/discord-router/portals/jobs/index';
 import { fetchDetailText } from '@zod/discord-router/portals/jobs/greenhouse';
 import { getLootCandidates } from '@zod/discord-router/portals/loot/vendors';
 import { localSource } from '@zod/discord-router/portals/local';
-import { socialSource } from '@zod/discord-router/portals/social';
+import { createSocialSource } from '@zod/discord-router/portals/social';
 import { OrchestratorScheduler } from '@zod/orchestrator';
 import { createColdStore, createHotStore } from './live-stores.js';
 
@@ -81,6 +81,37 @@ export async function startSchedulerRegistry(log: TickLogger): Promise<RegistryH
       { pipeline: 'events', list } satisfies CandidateSource,
     ]),
   );
+  // Social listener-to-glass wiring: every cookie read + listing fetch is
+  // recorded as a machine_event so the dashboard can show the exact X/LinkedIn
+  // URL being polled, the renderer, HTTP status, bytes, and post count.
+  const social = createSocialSource({
+    onEvent: (event) => {
+      try {
+        recordMachineEvent(pb, {
+          trace_id: `social:${event.source}`,
+          agent: 'scheduler:social-stub',
+          pipeline: 'social',
+          event_type: event.tool === 'social.cookies' ? 'system' : 'fetch',
+          tool: event.tool,
+          status: event.status,
+          duration_ms: event.duration_ms,
+          url: event.url,
+          input_summary: event.input_summary ?? '',
+          output_summary: event.output_summary ?? '',
+          detail: event.detail ?? '',
+          meta: {
+            source: event.source,
+            httpStatus: event.httpStatus ?? 0,
+            bytes: event.bytes ?? 0,
+            candidates: event.candidates ?? 0,
+            renderer: event.renderer ?? '',
+          },
+        });
+      } catch {
+        // Telemetry must never break the poll.
+      }
+    },
+  });
   const candidateSources: Record<string, CandidateSource> = {
     events: { pipeline: 'events', list: getPortalCandidates },
     ...portalSources,
@@ -92,7 +123,7 @@ export async function startSchedulerRegistry(log: TickLogger): Promise<RegistryH
     },
     loot: { pipeline: 'loot', list: getLootCandidates },
     local: { pipeline: 'local', list: localSource.list },
-    social: { pipeline: 'social', list: socialSource.list },
+    social: { pipeline: 'social', list: social.list },
   };
 
   // --- Register jobs through the single registry ---
