@@ -28,7 +28,7 @@ vi.mock('@zod/logger', () => ({
 import {
   createRelayService,
   startRelayService,
-  RELAY_CURSOR_SLOT,
+  cursorSlotFor,
 } from './relay.js';
 
 beforeEach(() => {
@@ -120,9 +120,9 @@ describe('relay service (ING-04, D-04)', () => {
     expect(targetChannel.send).toHaveBeenCalledTimes(2);
     expect(targetChannel.send).toHaveBeenCalledWith({ content: 'Hello from announcements' });
     expect(targetChannel.send).toHaveBeenCalledWith({ content: 'Second announcement' });
-    // Cursor persisted with highest message ID
+    // Cursor persisted with highest message ID, keyed per source channel
     expect(pb.collection('agent_telemetry').create).toHaveBeenCalledWith(
-      expect.objectContaining({ slot: RELAY_CURSOR_SLOT, detail: 'msg2' }),
+      expect.objectContaining({ slot: cursorSlotFor('source-123'), detail: 'msg2' }),
     );
   });
 

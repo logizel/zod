@@ -20,9 +20,14 @@ import { resolveChannel } from './router-service.js';
 import { createPbClient } from '@zod/db-hot';
 import { recordMachineEvent } from '@zod/db-hot/machine-events';
 
-const RELAY_CURSOR_SLOT = 'relay-cursor';
+const RELAY_CURSOR_SLOT_PREFIX = 'relay-cursor:';
 
-export { RELAY_CURSOR_SLOT };
+export { RELAY_CURSOR_SLOT_PREFIX, cursorSlotFor };
+
+/** Build the agent_telemetry slot used to persist a source channel's cursor. */
+function cursorSlotFor(sourceChannelId: string): string {
+  return `${RELAY_CURSOR_SLOT_PREFIX}${sourceChannelId}`;
+}
 
 export interface RelayService {
   tick(): Promise<void>;
@@ -51,12 +56,12 @@ export function createRelayService(deps: RelayDeps): RelayService {
     return pbPromise;
   };
 
-  /** Read the last relayed message ID from agent_telemetry (crash recovery). */
-  async function getLastRelayedId(): Promise<string | null> {
+  /** Read the last relayed message ID for a source channel (crash recovery). */
+  async function getLastRelayedId(slot: string): Promise<string | null> {
     try {
       const pb = await getPb();
       const row = await pb.collection('agent_telemetry').getFirstListItem(
-        `slot = '${RELAY_CURSOR_SLOT}'`,
+        `slot = '${slot}'`,
       );
       return row?.detail ?? null;
     } catch {
@@ -64,12 +69,12 @@ export function createRelayService(deps: RelayDeps): RelayService {
     }
   }
 
-  /** Persist the last relayed message ID in agent_telemetry. */
-  async function setLastRelayedId(messageId: string): Promise<void> {
+  /** Persist the last relayed message ID for a source channel. */
+  async function setLastRelayedId(messageId: string, slot: string): Promise<void> {
     try {
       const pb = await getPb();
       const existing = await pb.collection('agent_telemetry').getFirstListItem(
-        `slot = '${RELAY_CURSOR_SLOT}'`,
+        `slot = '${slot}'`,
       );
       if (existing) {
         await pb.collection('agent_telemetry').update(existing.id, {
@@ -78,14 +83,14 @@ export function createRelayService(deps: RelayDeps): RelayService {
         });
       } else {
         await pb.collection('agent_telemetry').create({
-          slot: RELAY_CURSOR_SLOT,
+          slot,
           detail: messageId,
           created: new Date().toISOString(),
           updated: new Date().toISOString(),
         });
       }
     } catch (err) {
-      pbLog.warn({ err: String(err) }, 'failed to persist relay cursor');
+      pbLog.warn({ err: String(err), slot }, 'failed to persist relay cursor');
     }
   }
 
@@ -97,21 +102,18 @@ export function createRelayService(deps: RelayDeps): RelayService {
       return;
     }
 
-    const sourceChannelId = env.DISCORD_RELAY_SOURCE_CHANNEL_ID;
-    if (!sourceChannelId) {
-      pbLog.warn('DISCORD_RELAY_SOURCE_CHANNEL_ID not set; skipping relay tick');
-      return;
-    }
+    const sourceChannelIds = [
+      env.DISCORD_RELAY_SOURCE_CHANNEL_ID,
+      env.DISCORD_RELAY_SOURCE_CHANNEL_ID_1,
+      env.DISCORD_RELAY_SOURCE_CHANNEL_ID_2,
+      env.DISCORD_RELAY_SOURCE_CHANNEL_ID_3,
+    ];
+    const uniqueSourceChannelIds = [...new Set(sourceChannelIds.filter(Boolean))];
 
-    let sourceChannel: any;
-    try {
-      sourceChannel = await client.channels.fetch(sourceChannelId);
-      if (!sourceChannel || typeof sourceChannel.isTextBased !== 'function' || !sourceChannel.isTextBased()) {
-        pbLog.warn({ channel: sourceChannelId }, 'source channel is not text-based');
-        return;
-      }
-    } catch (err) {
-      pbLog.warn({ err: String(err), channel: sourceChannelId }, 'failed to fetch source channel');
+    if (uniqueSourceChannelIds.length === 0) {
+      pbLog.warn(
+        'No DISCORD_RELAY_SOURCE_CHANNEL_ID_* set; skipping relay tick',
+      );
       return;
     }
 
@@ -134,25 +136,6 @@ export function createRelayService(deps: RelayDeps): RelayService {
       return;
     }
 
-    const lastId = await getLastRelayedId();
-
-    let messages: any;
-    try {
-      messages = await sourceChannel.messages.fetch({
-        limit: 20,
-        after: lastId ?? undefined,
-      });
-    } catch (err) {
-      pbLog.warn({ err: String(err) }, 'failed to fetch messages from source channel');
-      return;
-    }
-
-    const msgArray = Array.from(messages.values()) as Array<{
-      id: string;
-      content: string;
-    }>; // oldest first as returned by discord.js
-    let newLastId = lastId;
-
     // Best-effort machine log for each relayed message.
     const pb = await getPb().catch(() => null);
     const emitRelay = (
@@ -172,33 +155,79 @@ export function createRelayService(deps: RelayDeps): RelayService {
           step: 'STEP_4-delivery',
           status,
           detail,
-          meta: { sourceChannel: sourceChannelId, targetChannel: targetChannelId, ...extra },
+          meta: { targetChannel: targetChannelId, ...extra },
         });
       } catch {
         // Observability must never break the relay.
       }
     };
 
-    for (const msg of msgArray) {
+    // Poll every configured source announcement channel independently, each
+    // with its own message cursor so no source's updates are skipped.
+    for (const sourceChannelId of uniqueSourceChannelIds) {
+      let sourceChannel: any;
       try {
-        await targetChannel.send({ content: msg.content });
-        // Track the highest message ID seen (snowflake IDs are time-ordered)
-        if (!newLastId || msg.id > newLastId) {
-          newLastId = msg.id;
+        sourceChannel = await client.channels.fetch(sourceChannelId);
+        if (
+          !sourceChannel ||
+          typeof sourceChannel.isTextBased !== 'function' ||
+          !sourceChannel.isTextBased()
+        ) {
+          pbLog.warn({ channel: sourceChannelId }, 'source channel is not text-based');
+          continue;
         }
-        emitRelay(msg.id, 'ok', 'relayed message to #raw-incoming-feeds', {
-          chars: msg.content.length,
+      } catch (err) {
+        pbLog.warn({ err: String(err), channel: sourceChannelId }, 'failed to fetch source channel');
+        continue;
+      }
+
+      const slot = cursorSlotFor(sourceChannelId);
+      const lastId = await getLastRelayedId(slot);
+
+      let messages: any;
+      try {
+        messages = await sourceChannel.messages.fetch({
+          limit: 20,
+          after: lastId ?? undefined,
         });
       } catch (err) {
-        // Per-message error isolation — never abort the batch on one failure
-        pbLog.warn({ err: String(err), messageId: msg.id }, 'failed to relay message');
-        emitRelay(msg.id, 'error', `relay failed: ${String(err)}`);
+        pbLog.warn({ err: String(err), channel: sourceChannelId }, 'failed to fetch messages from source channel');
+        continue;
       }
-    }
 
-    if (newLastId && newLastId !== lastId) {
-      await setLastRelayedId(newLastId);
-      pbLog.info({ lastId: newLastId, count: msgArray.length }, 'relay tick done');
+      const msgArray = Array.from(messages.values()) as Array<{
+        id: string;
+        content: string;
+      }>; // oldest first as returned by discord.js
+      let newLastId = lastId;
+
+      for (const msg of msgArray) {
+        try {
+          await targetChannel.send({ content: msg.content });
+          // Track the highest message ID seen (snowflake IDs are time-ordered)
+          if (!newLastId || msg.id > newLastId) {
+            newLastId = msg.id;
+          }
+          emitRelay(msg.id, 'ok', 'relayed message to #raw-incoming-feeds', {
+            sourceChannel: sourceChannelId,
+            targetChannel: targetChannelId,
+            chars: msg.content.length,
+          });
+        } catch (err) {
+          // Per-message error isolation — never abort the batch on one failure
+          pbLog.warn({ err: String(err), messageId: msg.id }, 'failed to relay message');
+          emitRelay(msg.id, 'error', `relay failed: ${String(err)}`);
+        }
+      }
+
+      if (newLastId && newLastId !== lastId) {
+        await setLastRelayedId(newLastId, slot);
+        pbLog.info({
+          lastId: newLastId,
+          count: msgArray.length,
+          channel: sourceChannelId,
+        }, 'relay tick done');
+      }
     }
   }
 

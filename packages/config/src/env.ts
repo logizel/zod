@@ -44,6 +44,12 @@ export const EnvSchema = z.object({
   SOCIAL_COOKIES_PATH: z.string().default(''),
   // Phase 6: external #announcements source channel for the relay (D-04).
   DISCORD_RELAY_SOURCE_CHANNEL_ID: z.string().default(''),
+  // Phase 6: additional external #announcements source channels for the relay
+  // (D-04). Up to three source announcement channels can be configured; the
+  // relay polls each one independently with its own message cursor.
+  DISCORD_RELAY_SOURCE_CHANNEL_ID_1: z.string().default(''),
+  DISCORD_RELAY_SOURCE_CHANNEL_ID_2: z.string().default(''),
+  DISCORD_RELAY_SOURCE_CHANNEL_ID_3: z.string().default(''),
   // Phase 6: bucket channel IDs (env-ID-first resolution in router-service).
   BOOKMARK_EMOJI_ID: z.string().default(''),
   DISCORD_CHANNEL_LOCAL: z.string().default(''),
