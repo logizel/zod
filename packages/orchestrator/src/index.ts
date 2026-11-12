@@ -10,3 +10,14 @@ export { pickJobsBucket, evaluateJobsGates, type JobsGateResult } from './gates/
 export { evaluateLootGates, BUCKET_LOOT, type LootGateResult } from './gates/loot.js';
 export { readLootRules } from './loot-faq.js';
 export { buildEventsMessages, type EventsCtx, parseEventsVerdict, type EventsVerdict } from './rule-packs/events.js';
+export {
+  triageDiscordInbox,
+  mapTargetChannel,
+  classifyByKeywords,
+  prefilterReason,
+  parseTriageVerdict,
+  TRIAGE_CHANNELS,
+  type TriageResult,
+  type TriageDecision,
+  type TriageOpts,
+} from './discord-triage.js';

@@ -19,6 +19,7 @@ import {
   JOB_POLL_JOBS,
   AUDIT_JOBS,
   GC_JOBS,
+  TRIAGE_JOBS,
   computeBufferHoldMiB,
   runStubTick,
   runGatewayTick,
@@ -39,6 +40,7 @@ export {
   JOB_POLL_JOBS,
   AUDIT_JOBS,
   GC_JOBS,
+  TRIAGE_JOBS,
   computeBufferHoldMiB,
   runStubTick,
   runGatewayTick,
@@ -116,6 +118,7 @@ export function assertSchedulerGuards(mod: SchedulerModule = cron): void {
     ...JOB_POLL_JOBS,
     ...AUDIT_JOBS,
     ...GC_JOBS,
+    ...TRIAGE_JOBS,
   ]) {
     if (!mod.validate(def.expression)) {
       throw new Error(
@@ -385,6 +388,50 @@ export function registerGcJob(
   assertSchedulerGuards(mod);
   const heartbeatDir = opts.heartbeatDir ?? process.env['SCHEDULER_HEARTBEAT_DIR'];
   const tasks = GC_JOBS.map((def) => {
+    const task = mod.schedule(
+      def.expression,
+      () => runGatewayTick(def, log, { sink: opts.sink, heartbeatDir, tickHandler: opts.tickHandler, pb: opts.pb }),
+      {
+        name: def.name,
+        timezone: SCHEDULER_TIMEZONE,
+        noOverlap: true,
+        maxRandomDelay: def.maxRandomDelayMs,
+      },
+    );
+    task.on('execution:overlap', () => {
+      log.child({ job: def.name }).warn('tick skipped: previous run pending');
+      opts.sink?.record({ job: def.name, phase: 'skip', at: new Date().toISOString() });
+      recordOverlapSkip(opts.pb, def.name);
+    });
+    void task.start();
+    return task;
+  });
+  return {
+    tasks,
+    stop: () => {
+      for (const task of tasks) {
+        void task.stop();
+      }
+    },
+  };
+}
+
+/** Register the Discord inbox triage job via an injected tickHandler.
+ *
+ * The handler (provided by apps/scheduler) calls triageDiscordInbox in
+ * @zod/orchestrator with the shared LlmRouter. Scheduler stays agnostic of
+ * classifier internals — cycle-free, same pattern as registerAuditDrain.
+ */
+export function registerTriageJob(
+  log: TickLogger,
+  mod: SchedulerModule = cron,
+  opts: RegisterOptions & {
+    tickHandler?: (def: StubJobDef, log: TickLogger) => Promise<void> | void;
+  } = {},
+): RegistryHandle {
+  assertSchedulerGuards(mod);
+  const heartbeatDir = opts.heartbeatDir ?? process.env['SCHEDULER_HEARTBEAT_DIR'];
+  const tasks = TRIAGE_JOBS.map((def) => {
     const task = mod.schedule(
       def.expression,
       () => runGatewayTick(def, log, { sink: opts.sink, heartbeatDir, tickHandler: opts.tickHandler, pb: opts.pb }),

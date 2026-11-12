@@ -31,6 +31,9 @@ const DEFAULT_GC_ALERT_HOURS = 25;
 /** 48h heavy-text retention for rejected/tombstoned opportunities (MEM-05). */
 const REJECTION_RETENTION_MS = 48 * 60 * 60 * 1000;
 
+/** 30-day retention for terminal discord_inbox rows (posted/skipped). */
+const DISCORD_INBOX_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+
 /** Persisted GC last-success marker lives in the agent_telemetry ring. */
 export const GC_LAST_SUCCESS_SLOT = 'gc-last-success';
 
@@ -58,6 +61,8 @@ export interface PersistentGcResult extends GcRunResult {
   machineEventsDeleted: number;
   /** opportunity heavy-text cells cleared (24h end_date / 48h rejection). */
   opportunityTextPurged: number;
+  /** terminal discord_inbox rows deleted after 30 days (posted/skipped). */
+  discordInboxDeleted: number;
   /** True when the last-success marker was updated in PocketBase. */
   persisted: boolean;
 }
@@ -257,6 +262,15 @@ export async function runPersistentGc(opts: PersistentGcOpts): Promise<Persisten
   } catch (err) {
     log.warn({ err: String(err) }, 'GC could not read machine_events (collection missing?)');
   }
+
+  // discord_inbox is terminal history for the repost router: posted/skipped
+  // rows older than 30 days are deleted. error rows stay for inspection.
+  let discordInboxRaw: Array<Record<string, unknown>> = [];
+  try {
+    discordInboxRaw = await pb.collection('discord_inbox').getFullList();
+  } catch (err) {
+    log.warn({ err: String(err) }, 'GC could not read discord_inbox (collection missing?)');
+  }
   const telemetryRows = telemetryRaw as unknown as TelemetryRow[];
   const opportunityRows = opportunitiesRaw as unknown as OpportunityRow[];
   const originalText = new Map(
@@ -338,6 +352,21 @@ export async function runPersistentGc(opts: PersistentGcOpts): Promise<Persisten
     }
   }
 
+  let discordInboxDeleted = 0;
+  for (const row of discordInboxRaw) {
+    const status = String(row['status'] ?? '');
+    if (status !== 'posted' && status !== 'skipped') continue;
+    const createdMs = Date.parse(String(row['created'] ?? ''));
+    if (!Number.isFinite(createdMs) || nowMs - createdMs < DISCORD_INBOX_RETENTION_MS) continue;
+    try {
+      await pb.collection('discord_inbox').delete(String(row['id']));
+      discordInboxDeleted += 1;
+    } catch (err) {
+      persistenceErrors += 1;
+      log.warn({ err: String(err), id: row['id'] }, 'GC failed to delete expired discord inbox row');
+    }
+  }
+
   const errors = pure.errors + persistenceErrors;
   let persisted = false;
   if (errors === 0) {
@@ -359,6 +388,7 @@ export async function runPersistentGc(opts: PersistentGcOpts): Promise<Persisten
     telemetryDeleted,
     machineEventsDeleted,
     opportunityTextPurged,
+    discordInboxDeleted,
     persisted,
   };
 
@@ -366,7 +396,7 @@ export async function runPersistentGc(opts: PersistentGcOpts): Promise<Persisten
     const summary =
       `GC midnight summary: purged=${result.purged} compacted=${result.compacted} ` +
       `telemetryDeleted=${result.telemetryDeleted} machineEventsDeleted=${result.machineEventsDeleted} ` +
-      `opportunityText=${result.opportunityTextPurged} ` +
+      `opportunityText=${result.opportunityTextPurged} discordInboxDeleted=${result.discordInboxDeleted} ` +
       `errors=${result.errors} lastSuccess=${result.lastSuccessMs || 'never'}`;
     await sendAlert(result.errors > 0 ? `${summary} — FAILED` : summary);
   }

@@ -41,6 +41,17 @@ export const TELEMETRY_STATUSES = ['active', 'done', 'cooldown', 'error'] as con
 export const TelemetryStatus = z.enum(TELEMETRY_STATUSES);
 export type TelemetryStatus = z.infer<typeof TelemetryStatus>;
 
+/** Discord inbox row lifecycle (capture -> triage -> repost). */
+export const DISCORD_INBOX_STATUSES = [
+  'pending',
+  'classified',
+  'posted',
+  'skipped',
+  'error',
+] as const;
+export const DiscordInboxStatus = z.enum(DISCORD_INBOX_STATUSES);
+export type DiscordInboxStatus = z.infer<typeof DiscordInboxStatus>;
+
 /** Fine-grained machine event classes for the local glass feed. */
 export const MACHINE_EVENT_TYPES = [
   'scheduler',
@@ -169,6 +180,69 @@ export const AgentTelemetryRow = AgentTelemetry.extend({
 export type AgentTelemetryRow = z.infer<typeof AgentTelemetryRow>;
 
 // ---------------------------------------------------------------------------
+// discord_inbox — raw announcement capture queue (D-04 repost router)
+// ---------------------------------------------------------------------------
+//
+// The bot owns capture (gateway) and the scheduler owns triage (LlmRouter).
+// This collection is the durable handoff between them. Nothing here is an
+// opportunity row: these messages are reposted without verification.
+
+export const DiscordInboxImage = z.object({
+  url: z.url(),
+  name: z.string().default(''),
+  contentType: z.string().default(''),
+  size: z.number().min(0).default(0),
+  width: z.number().min(0).nullable().default(null),
+  height: z.number().min(0).nullable().default(null),
+});
+export type DiscordInboxImage = z.infer<typeof DiscordInboxImage>;
+
+export const DiscordInbox = z.object({
+  /** Discord message ID in the source channel. Unique index. */
+  message_id: z.string().min(1),
+  /** One of the configured DISCORD_RELAY_SOURCE_CHANNEL_ID_* values. */
+  source_channel_id: z.string().min(1),
+  /** Original server name resolved from the follower webhook. */
+  source_server: z.string().default(''),
+  /** Original channel name resolved from the follower webhook. */
+  source_channel_name: z.string().default(''),
+  /** Local guild ID, used to build the message URL. */
+  guild_id: z.string().default(''),
+  /** https://discord.com/channels/<guild>/<channel>/<message> (trace only). */
+  message_url: z.string().default(''),
+  /** Sanitized text: mentions stripped, length capped. */
+  content: z.string().default(''),
+  /** Normalized original embeds (title/description/url/fields/image). */
+  embed_json: z.array(z.record(z.string(), z.unknown())).default([]),
+  /** External URLs extracted from content/embeds/buttons. */
+  links: z.array(z.string()).default([]),
+  /** Flyer/image attachments. */
+  images: z.array(DiscordInboxImage).default([]),
+  /** sha256(normalized first link) or sha256(content|title) for cross-source dedup. */
+  dedup_key: z.string().default(''),
+  status: DiscordInboxStatus.default('pending'),
+  /** Classified pipeline; empty while pending or skipped. */
+  pipeline: Pipeline.or(z.literal('')).default(''),
+  /** Bucket-channel name, e.g. "#💼-jobs-general-swe". */
+  target_channel: z.string().default(''),
+  /** { method, confidence, reason, event_kind, job_kind } */
+  classification: z.record(z.string(), z.unknown()).default({}),
+  /** ID of the reposted message in the destination channel. */
+  posted_message_id: z.string().default(''),
+  /** Triage + repost retry counter. */
+  attempts: z.number().int().min(0).default(0),
+  last_error: z.string().default(''),
+});
+export type DiscordInbox = z.infer<typeof DiscordInbox>;
+
+export const DiscordInboxRow = DiscordInbox.extend({
+  id: z.string().min(1),
+  created: z.iso.datetime(),
+  updated: z.iso.datetime(),
+}).catchall(z.unknown());
+export type DiscordInboxRow = z.infer<typeof DiscordInboxRow>;
+
+// ---------------------------------------------------------------------------
 // machine_events — append-only fine-grained machinery log (24h ring)
 // ---------------------------------------------------------------------------
 //
@@ -291,6 +365,7 @@ export const HOT_COLLECTIONS = [
   'task_scratchpad',
   'tombstone_ledger',
   'taste_rules',
+  'discord_inbox',
 ] as const;
 export type HotCollection = (typeof HOT_COLLECTIONS)[number];
 
@@ -309,6 +384,9 @@ export const INDEX_NOTES: Record<HotCollection, readonly string[]> = {
   tombstone_ledger: ['url_hash (unique)', 'fingerprint'],
   // Training-chat weight tuning reads by kind.
   taste_rules: ['kind'],
+  // Capture is idempotent by message ID; triage scans pending oldest-first;
+  // dedup catches the same announcement followed into multiple source channels.
+  discord_inbox: ['message_id (unique)', 'status + created', 'dedup_key'],
 };
 
 // D-14 coordination note: the PocketBase collection update (adding the new

@@ -1,6 +1,6 @@
 // Client-construction tests (D-13): auth-store wiring proven with a mocked
 // fetch layer — no live PocketBase server required for unit green.
-// Plus the five-collection schema contract assertions (D-09/D-15).
+// Plus the seven-collection schema contract assertions (D-09/D-15).
 import { describe, expect, it } from 'vitest';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -13,6 +13,7 @@ import {
 } from './client.js';
 import {
   AgentTelemetry,
+  DiscordInbox,
   HOT_COLLECTIONS,
   INDEX_NOTES,
   Opportunity,
@@ -102,7 +103,7 @@ describe('createPbClient (mocked transport)', () => {
   });
 });
 
-describe('collection schemas (five-collection lock)', () => {
+describe('collection schemas (seven-collection lock)', () => {
   const OPPORTUNITY_FIXTURE = {
     fingerprint_hash: 'abc123',
     url_hash: 'def456',
@@ -122,7 +123,7 @@ describe('collection schemas (five-collection lock)', () => {
     description_raw: '<heavy text, first GC purge target>',
   };
 
-  it('exports validators for all six locked collections', () => {
+  it('exports validators for all seven locked collections', () => {
     expect(HOT_COLLECTIONS).toEqual([
       'opportunities',
       'agent_telemetry',
@@ -130,6 +131,7 @@ describe('collection schemas (five-collection lock)', () => {
       'task_scratchpad',
       'tombstone_ledger',
       'taste_rules',
+      'discord_inbox',
     ]);
     expect(Opportunity.parse(OPPORTUNITY_FIXTURE).fingerprint_hash).toBe('abc123');
     expect(
@@ -157,6 +159,13 @@ describe('collection schemas (five-collection lock)', () => {
       }).url_hash,
     ).toBe('def456');
     expect(TasteRule.parse({ kind: 'boost', rule: 'sys-cp-sec' }).weight).toBe(1.0);
+    expect(
+      DiscordInbox.parse({
+        message_id: '1234567890',
+        source_channel_id: 'source-1',
+        status: 'pending',
+      }).status,
+    ).toBe('pending');
   });
 
   it('carries the GC-ready fields on opportunities', () => {

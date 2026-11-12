@@ -16,6 +16,7 @@ import {
   startRegistry,
   registerPollJobs,
   registerGcJob,
+  registerTriageJob,
   type RegistryHandle,
   type TickLogger,
 } from '@zod/scheduler-registry';
@@ -36,7 +37,7 @@ import { fetchDetailText } from '@zod/discord-router/portals/jobs/greenhouse';
 import { getLootCandidates } from '@zod/discord-router/portals/loot/vendors';
 import { localSource } from '@zod/discord-router/portals/local';
 import { createSocialSource } from '@zod/discord-router/portals/social';
-import { OrchestratorScheduler } from '@zod/orchestrator';
+import { OrchestratorScheduler, triageDiscordInbox } from '@zod/orchestrator';
 import { createColdStore, createHotStore } from './live-stores.js';
 
 export async function startSchedulerRegistry(log: TickLogger): Promise<RegistryHandle> {
@@ -180,6 +181,21 @@ export async function startSchedulerRegistry(log: TickLogger): Promise<RegistryH
     },
   });
 
+  // Discord inbox triage (D-04 repost router): reuse the scheduler's single
+  // LlmRouter. Capture/posting live in the bot; this job only classifies and
+  // maps target channels so no second LLM router is created.
+  const triageHandle = registerTriageJob(log, undefined, {
+    pb,
+    tickHandler: async (_def, jobLog) => {
+      const result = await triageDiscordInbox({
+        pb: pb as any,
+        router,
+        log: jobLog,
+      });
+      jobLog.info({ job: 'discord-triage', ...result }, 'discord-triage tick');
+    },
+  });
+
   orchestrator.start(log);
 
   // Headless bucket timers (cooldown recovery, daily-cap reset, warmup) live
@@ -194,7 +210,7 @@ export async function startSchedulerRegistry(log: TickLogger): Promise<RegistryH
 
   log.info({ component: 'scheduler/registry-start' }, 'scheduler registry started with live deps');
 
-  const handles = [stubHandle, pollHandle, gcHandle];
+  const handles = [stubHandle, pollHandle, gcHandle, triageHandle];
   return {
     tasks: handles.flatMap((handle) => handle.tasks),
     stop: () => {

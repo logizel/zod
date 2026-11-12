@@ -19,7 +19,7 @@ These items were knowingly deferred at v1 close. None block the release; each ha
 |----|------|----------|--------|-------------|
 | D-03 | Bookmark re-reaction resets reminder `sent` flags | `packages/discord-router/src/bookmark.ts:106-111`; WR-03 | Duplicate 48h/24h reminders | Preserve sent flags when recomputing reminders |
 | D-04 | `formatReminder` hardcodes hours by anchor type | `packages/discord-router/src/reminder.ts:42`; WR-04 | Reminder text can say "48h" for a 24h reminder | Use the reminder's `hoursBefore` value |
-| D-05 | Relay forwards raw content without sanitization or size cap | `packages/discord-router/src/relay.ts:154`; WR-05 | `@everyone`/oversize content can leak into private feed | Strip mentions, cap length, escape content |
+| D-05 | ~~Relay forwards raw content without sanitization or size cap~~ **Resolved** — `relay-extract.ts` strips mentions/zero-width characters and caps content at 8000 before any store or repost | WR-05 | No `@everyone`/oversize leak; all announcement ingress uses the sanitizer | Keep extraction as the single intake path |
 | D-06 | Unvalidated `JSON.parse` at social-cookie boundary | `06-REVIEW-DISPOSITION.md` WR-04 | Malformed cookie file can throw at fetch time | Parse with zod; fail closed with a named error |
 | D-07 | Local pipeline does not inject BOOST/WEIGHT taste rules into prompts | `packages/orchestrator/src/orchestrator.ts` `drainLocalRow`; `06-VERIFICATION.md` partial gap | Local events ignore non-BLOCK taste rules | Wire `buildTastePromptInjection` into local messages |
 

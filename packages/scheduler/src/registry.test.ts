@@ -9,10 +9,13 @@ import {
   AUDIT_JOBS,
   STUB_JOBS,
   GC_JOBS,
+  TRIAGE_JOBS,
+  DELIVERY_JOBS,
   registerGatewayJobs,
   registerPollJobs,
   registerAuditDrain,
   registerGcJob,
+  registerTriageJob,
   registerStubJobs,
   runGatewayTick,
   SCHEDULER_TIMEZONE,
@@ -306,6 +309,41 @@ describe('job poll jobs registered via single registry', () => {
     expect(GC_JOBS[0].expression).toBe('0 0 * * *');
   });
 
+  it('schedules TRIAGE_JOBS via registerTriageJob with injected tickHandler', () => {
+    const { log } = makeFakeLogger();
+    const { mod, calls } = makeFakeScheduler();
+
+    const handle = registerTriageJob(log, mod, {
+      tickHandler: () => undefined,
+    });
+
+    const jobCalls = calls.filter((c) => c.options['name'] !== 'guard-probe');
+    expect(handle.tasks).toHaveLength(TRIAGE_JOBS.length);
+    expect(jobCalls.map((c) => c.options['name'])).toEqual(['discord-triage']);
+    expect(jobCalls[0]?.expression).toBe('*/5 * * * *');
+    expect(jobCalls[0]?.options['timezone']).toBe('Asia/Kolkata');
+    expect(jobCalls[0]?.options['noOverlap']).toBe(true);
+    expect(jobCalls[0]?.options['maxRandomDelay']).toBe(30 * 1000);
+  });
+
+  it('TRIAGE_JOBS exact contents: discord-triage every 5m + 30s jitter', () => {
+    expect(TRIAGE_JOBS).toHaveLength(1);
+    expect(TRIAGE_JOBS[0]).toMatchObject({
+      name: 'discord-triage',
+      expression: '*/5 * * * *',
+      maxRandomDelayMs: 30 * 1000,
+      description: expect.stringContaining('discord_inbox triage'),
+    });
+  });
+
+  it('DELIVERY_JOBS relay cadence is 5m + 60s jitter', () => {
+    const relay = DELIVERY_JOBS.find((job) => job.name === 'gateway-relay-poll');
+    expect(relay).toMatchObject({
+      expression: '*/5 * * * *',
+      maxRandomDelayMs: 60 * 1000,
+    });
+  });
+
   it('JOB_POLL_JOBS exact contents: name, expression, maxRandomDelayMs, candidateSource', () => {
     expect(JOB_POLL_JOBS).toHaveLength(2);
     expect(JOB_POLL_JOBS[0]).toMatchObject({
@@ -358,15 +396,22 @@ describe('job poll jobs registered via single registry', () => {
   });
 });
 
-describe('assertSchedulerGuards covers all five job tables', () => {
-  it('assertSchedulerGuards passes against real cron for all five tables', () => {
+describe('assertSchedulerGuards covers all six job tables', () => {
+  it('assertSchedulerGuards passes against real cron for all six tables', () => {
     expect(() => assertSchedulerGuards(cron)).not.toThrow();
-    for (const def of [...STUB_JOBS, ...GATEWAY_JOBS, ...JOB_POLL_JOBS, ...AUDIT_JOBS, ...GC_JOBS]) {
+    for (const def of [
+      ...STUB_JOBS,
+      ...GATEWAY_JOBS,
+      ...JOB_POLL_JOBS,
+      ...AUDIT_JOBS,
+      ...GC_JOBS,
+      ...TRIAGE_JOBS,
+    ]) {
       expect(cron.validate(def.expression)).toBe(true);
     }
   });
 
-  it('assertSchedulerGuards iterates all five tables — rejecting one fails loudly', () => {
+  it('assertSchedulerGuards iterates all six tables — rejecting one fails loudly', () => {
     const { mod } = makeFakeScheduler();
     const rejecting = { ...mod, validate: () => false };
     expect(() => assertSchedulerGuards(rejecting)).toThrow(/scheduler-guard/);

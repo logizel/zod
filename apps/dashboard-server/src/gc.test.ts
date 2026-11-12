@@ -358,6 +358,55 @@ describe('runPersistentGc', () => {
     expect(data.get('machine_events')!.has('me-fresh')).toBe(true);
   });
 
+  it('deletes terminal discord_inbox rows older than 30 days but keeps error rows', async () => {
+    const seed = {
+      ...persistentSeed(),
+      discord_inbox: [
+        {
+          id: 'inbox-posted-old',
+          status: 'posted',
+          created: at(-31 * 24 * HOUR_MS),
+        },
+        {
+          id: 'inbox-skipped-old',
+          status: 'skipped',
+          created: at(-31 * 24 * HOUR_MS),
+        },
+        {
+          id: 'inbox-posted-fresh',
+          status: 'posted',
+          created: at(-10 * 24 * HOUR_MS),
+        },
+        {
+          id: 'inbox-error-old',
+          status: 'error',
+          created: at(-60 * 24 * HOUR_MS),
+        },
+        {
+          id: 'inbox-classified-old',
+          status: 'classified',
+          created: at(-60 * 24 * HOUR_MS),
+        },
+      ],
+    };
+    const { pb, data } = makeFakePb(seed);
+
+    const result = await runPersistentGc({
+      pb,
+      nowMs: NOW,
+      sendAlert: vi.fn().mockResolvedValue(true),
+      summaryAlert: false,
+      env: { ...requiredEnv } as any,
+    });
+
+    expect(result.discordInboxDeleted).toBe(2);
+    expect(data.get('discord_inbox')!.has('inbox-posted-old')).toBe(false);
+    expect(data.get('discord_inbox')!.has('inbox-skipped-old')).toBe(false);
+    expect(data.get('discord_inbox')!.has('inbox-posted-fresh')).toBe(true);
+    expect(data.get('discord_inbox')!.has('inbox-error-old')).toBe(true);
+    expect(data.get('discord_inbox')!.has('inbox-classified-old')).toBe(true);
+  });
+
   it('never touches tombstone_ledger or taste_rules', async () => {
     const seed = persistentSeed();
     const { pb, data } = makeFakePb(seed);

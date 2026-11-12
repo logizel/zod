@@ -187,9 +187,9 @@ export const GATEWAY_TIMER_JOBS: readonly StubJobDef[] = [
 export const DELIVERY_JOBS: readonly StubJobDef[] = [
   {
     name: 'gateway-relay-poll',
-    expression: '*/15 * * * *',
-    maxRandomDelayMs: 5 * 60_000,
-    description: 'Discord #announcements relay poll (ING-04)',
+    expression: '*/5 * * * *',
+    maxRandomDelayMs: 60 * 1000,
+    description: 'Discord #announcements capture + classified repost tick (ING-04)',
   },
   {
     name: 'gateway-reminder-tick',
@@ -234,6 +234,21 @@ export const AUDIT_JOBS: readonly StubJobDef[] = [
     expression: '*/5 * * * *',
     maxRandomDelayMs: 60 * 1000,
     description: 'orchestrator STEP_2 audit drain — registered via tickHandler (registerAuditDrain)',
+  },
+];
+
+/** Discord repost-router triage jobs (D-04, hybrid keyword + LLM classifier).
+ *
+ * Runs in the scheduler process because it owns the single LlmRouter.
+ * The bot captures source announcements into `discord_inbox`; this job turns
+ * pending rows into classified rows with a code-owned target channel.
+ */
+export const TRIAGE_JOBS: readonly StubJobDef[] = [
+  {
+    name: 'discord-triage',
+    expression: '*/5 * * * *',
+    maxRandomDelayMs: 30 * 1000,
+    description: 'discord_inbox triage — relevance + topic channel mapping, 5m + 30s jitter',
   },
 ];
 

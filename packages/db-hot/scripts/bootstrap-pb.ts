@@ -19,6 +19,7 @@ import { parseEnv } from '@zod/config';
 import { createPbClient } from '../src/client.js';
 import {
   AgentTelemetry,
+  DISCORD_INBOX_STATUSES,
   HOT_COLLECTIONS,
   INDEX_NOTES,
   MACHINE_EVENT_STATUSES,
@@ -215,6 +216,29 @@ const MACHINE_EVENTS_FIELDS: FieldSpec[] = [
   autodateField('updated'),
 ];
 
+const DISCORD_INBOX_FIELDS: FieldSpec[] = [
+  text('message_id', true),
+  text('source_channel_id', true),
+  text('source_server'),
+  text('source_channel_name'),
+  text('guild_id'),
+  text('message_url'),
+  text('content', false, 8000),
+  jsonField('embed_json'),
+  jsonField('links'),
+  jsonField('images'),
+  text('dedup_key'),
+  selectField('status', DISCORD_INBOX_STATUSES, true),
+  selectField('pipeline', PIPELINES),
+  text('target_channel'),
+  jsonField('classification'),
+  text('posted_message_id'),
+  numberField('attempts', false, true),
+  text('last_error', false, 8000),
+  autodateField('created'),
+  autodateField('updated'),
+];
+
 const TASK_SCRATCHPAD_FIELDS: FieldSpec[] = [
   urlField('candidate_url', true),
   text('step_position', true),
@@ -254,6 +278,7 @@ const COLLECTION_SPECS: Record<HotCollection, CollectionSpec> = {
   task_scratchpad: { name: 'task_scratchpad', fields: TASK_SCRATCHPAD_FIELDS },
   tombstone_ledger: { name: 'tombstone_ledger', fields: TOMBSTONE_LEDGER_FIELDS },
   taste_rules: { name: 'taste_rules', fields: TASTE_RULES_FIELDS },
+  discord_inbox: { name: 'discord_inbox', fields: DISCORD_INBOX_FIELDS },
 };
 
 // ---------------------------------------------------------------------------
@@ -321,6 +346,18 @@ const INDEX_SPECS: Record<HotCollection, Record<string, IndexSpec>> = {
   },
   taste_rules: {
     'kind': { name: 'idx_taste_rules_kind', columns: '`kind`' },
+  },
+  discord_inbox: {
+    'message_id (unique)': {
+      name: 'idx_discord_inbox_message_id',
+      columns: '`message_id`',
+      unique: true,
+    },
+    'status + created': {
+      name: 'idx_discord_inbox_status_created',
+      columns: '`status`, `created`',
+    },
+    'dedup_key': { name: 'idx_discord_inbox_dedup_key', columns: '`dedup_key`' },
   },
 };
 

@@ -12,6 +12,7 @@
     { "path": "../config" },
     { "path": "../db-cold" },
     { "path": "../db-hot" },
+    { "path": "../dedup" },
     { "path": "../logger" },
     { "path": "../sanitize" }
   ]

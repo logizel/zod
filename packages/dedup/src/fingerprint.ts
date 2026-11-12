@@ -78,6 +78,11 @@ export function hashUrl(normalizedUrl: string): string {
   return createHash('sha256').update(normalizedUrl).digest('hex');
 }
 
+/** SHA-256 hex of arbitrary text (used for content-based dedup keys). */
+export function hashText(text: string): string {
+  return createHash('sha256').update(text).digest('hex');
+}
+
 /** Stable hex digest over normalized URL + title + date + organizer. */
 export function fingerprint(input: FingerprintInput): string {
   const parsed = FingerprintInput.parse(input);

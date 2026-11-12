@@ -50,6 +50,10 @@ export const EnvSchema = z.object({
   DISCORD_RELAY_SOURCE_CHANNEL_ID_1: z.string().default(''),
   DISCORD_RELAY_SOURCE_CHANNEL_ID_2: z.string().default(''),
   DISCORD_RELAY_SOURCE_CHANNEL_ID_3: z.string().default(''),
+  // Optional debug mirror: also copy raw (sanitized) source text into
+  // #raw-incoming-feeds while the repost router sends the rich version to the
+  // topic channels. Default false to avoid double posting.
+  DISCORD_RELAY_MIRROR_RAW: z.string().default('false'),
   // Phase 6: bucket channel IDs (env-ID-first resolution in router-service).
   BOOKMARK_EMOJI_ID: z.string().default(''),
   DISCORD_CHANNEL_LOCAL: z.string().default(''),

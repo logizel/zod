@@ -86,6 +86,48 @@ step, status, duration, and URL.
 - Writers are best-effort: a failed telemetry write never fails the pipeline
   step it observes.
 
+### Discord announcement router
+
+The bot reads every configured source announcement channel and reposts
+on-topic messages into the existing topic channels. There is no audit step:
+the original text, link, flyer, and `from <source server>` attribution are
+forwarded, and a message with no link or flyer is still posted when it is
+on-topic.
+
+Flow:
+
+1. `gateway-relay-poll` (bot, every 5m + 60s jitter) extracts `content`,
+   embeds, link buttons, attachments, and images into `discord_inbox`
+   (`status=pending`). Message IDs and normalized external links dedupe
+   capture across sources.
+2. `discord-triage` (scheduler, every 5m + 30s jitter) applies the chatter
+   filter and weighted keyword classifier, then calls the shared `LlmRouter`
+   only for ambiguous rows. It maps the verdict to a code-owned target
+   channel and sets `status=classified`.
+3. The next bot tick posts classified rows, re-uploads flyers to avoid
+   expiring CDN URLs, and records `posted_message_id` /
+   `status=posted`.
+
+On first run for a source channel (no cursor row yet), the bot initializes
+the cursor at the newest existing message and does **not** replay channel
+history. Capture starts with the next new announcement. To re-capture recent
+history deliberately, delete the `relay-cursor:<channelId>` row from
+`agent_telemetry` and send a new announcement.
+
+Relevant env:
+
+```dotenv
+DISCORD_RELAY_SOURCE_CHANNEL_ID=
+DISCORD_RELAY_SOURCE_CHANNEL_ID_1=
+DISCORD_RELAY_SOURCE_CHANNEL_ID_2=
+DISCORD_RELAY_SOURCE_CHANNEL_ID_3=
+DISCORD_RELAY_MIRROR_RAW=false   # optional debug copy to #raw-incoming-feeds
+```
+
+Applying `Manage Webhooks` in the source guilds lets the bot resolve the
+original server/channel name from the follower webhook. Without it, posts
+fall back to `from external server`; capture and reposting still work.
+
 ## First run vs. existing data
 
 - **No `pb_data/data.db`:** the superuser is created from `PB_SERVICE_EMAIL` and
